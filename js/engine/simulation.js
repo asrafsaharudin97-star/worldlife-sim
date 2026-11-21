@@ -669,6 +669,12 @@ window.Sim = {
       if (bnEv) return bnEv;
     }
 
+    // 0A2. Krisis Mod Khas Mengejut pada Age-Up (15%–25% peluang setahun)
+    if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerYearlyCrisisEvent) {
+      const spCrisis = SpecialModesEngine.maybeTriggerYearlyCrisisEvent(s);
+      if (spCrisis) return spCrisis;
+    }
+
     // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Jodoh / Ta'aruf
     if (window.SocialMedia) {
       const rfEv = SocialMedia.checkPartnerHiddenTraitEvent(s);

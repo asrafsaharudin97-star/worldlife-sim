@@ -41,7 +41,9 @@ window.SpecialModeModals = {
 
     const actionsHtml = boardItems.map(act => {
       const done = Boolean(s.yearlyActions[`sp_${def.id}_${act.id}`]);
-      const disabled = done || aLeft <= 0 || Boolean(s.prison && s.prison.inPrison);
+      const cd = (am.cooldowns && am.cooldowns[act.id]) || 0;
+      const disabled = done || cd > 0 || aLeft <= 0 || Boolean(s.prison && s.prison.inPrison);
+      const risk = SpecialModesEngine.getActionRiskProfile(s, def, am, act);
       return `
         <button type="button" class="action-item sp-mode-act-btn ${act.isRare ? 'rare-activity' : ''} ${done ? 'act-done-card' : ''}" data-act-id="${act.id}" ${disabled ? 'disabled' : ''}>
           <span class="ai-icon">${act.icon}</span>
@@ -50,10 +52,14 @@ window.SpecialModeModals = {
               ${Utils.escapeHtml(act.title)}
               ${act.isRare ? '<span class="rare-gold-tag">🌟 PELUANG EMAS</span>' : ''}
             </span>
-            <span class="ai-desc">${Utils.escapeHtml(act.desc)}</span>
+            <span class="ai-desc">
+              <span class="cat-badge" style="background:${risk.badge.bg};color:${risk.badge.color};border:1px solid ${risk.badge.border};margin-right:4px;">${risk.badge.text} • ${risk.successPct}%</span>
+              ${cd > 0 ? `<span class="cat-badge" style="background:#f1f5f9;color:#475569;">⏳ Bertenang (${cd} thn)</span> ` : ''}
+              <br/>${Utils.escapeHtml(act.desc)}
+            </span>
           </span>
           <span class="ai-right">
-            <span class="act-status-pill ${done ? 'done' : 'free'}">${done ? '✓ Selesai' : 'Laksana →'}</span>
+            <span class="act-status-pill ${done || cd > 0 ? 'done' : 'free'}">${done ? '✓ Selesai' : cd > 0 ? '⏳ Rehat' : 'Laksana →'}</span>
           </span>
         </button>
       `;
@@ -100,7 +106,7 @@ window.SpecialModeModals = {
           <div class="aeh-top">
             <div>
               <div class="aeh-title">⚡ Agenda Mod Tahun ${s.year}</div>
-              <div class="aeh-sub">4–5 tindakan rawak anti-ulang + Dilema Interaktif</div>
+              <div class="aeh-sub">4–5 tindakan rawak anti-ulang + Risiko Nyata &amp; Dilema</div>
             </div>
             <button type="button" class="reroll-idea-btn" id="btn-sp-reroll" ${rLeft <= 0 ? 'disabled' : ''}>
               🎲 Cari Idea Lain (${rLeft}/1)
@@ -133,11 +139,17 @@ window.SpecialModeModals = {
       btn.addEventListener('click', () => {
         const res = SpecialModesEngine.performAction(btn.dataset.actId);
         App.renderAll();
+        if (res.died) {
+          Modals.close(true);
+          if (window.ModeModals && ModeModals.showLegacyObituary) ModeModals.showLegacyObituary();
+          return;
+        }
         if (res.dilemmaEvent) {
           Modals.showEvent(res.dilemmaEvent);
           return;
         }
-        App.toast(res.msg, res.ok ? 'success' : 'error');
+        const tType = res.outcomeTier === 'partial' ? 'culture' : (res.ok ? 'success' : 'error');
+        App.toast(res.msg, tType);
         this.showDashboard();
       });
     });

@@ -338,12 +338,79 @@ window.SpecialModesEngine = {
     return { ok: true, msg: '🎲 Senarai tindakan mod disegarkan!' };
   },
 
-  performAction(actId) {
+  // --------------------------------------------------------------------------
+  // 3B. PENGIRAAN RISIKO MISI (TIADA LAGI 100% AUTO-BERJAYA) & KRISIS MOD KHAS
+  // --------------------------------------------------------------------------
+  isHighDangerMode(modeId) {
+    return ['mafia', 'spy', 'military', 'crime', 'assassin', 'cartel'].includes(modeId);
+  },
+
+  getActionRiskProfile(s, def, am, act) {
+    const modeId = def.id;
+    const isDanger = this.isHighDangerMode(modeId);
+    const smarts = (s.stats && s.stats.smarts) ?? 60;
+    const health = (s.stats && s.stats.health) ?? 70;
+    const looks = (s.stats && s.stats.looks) ?? 65;
+    const stress = (s.alignment && s.alignment.stress) ?? 20;
+    const rankBonus = (am.rankIndex || 0) * 4;
+
+    // Tentukan tahap kesukaran misi
+    let diffScore = 0;
+    if (act.isRare) diffScore += 2;
+    if (act.foreignMission) diffScore += 1;
+    if ((act.notoriety || 0) >= 8 || (act.stress || 0) >= 10) diffScore += 1;
+    if (Math.abs(act.moneyUsd || 0) >= 20000 || (act.m1 || 0) >= 12) diffScore += 1;
+    if (isDanger) diffScore += 1;
+
+    let tier = 'low';
+    let baseSuccess = 76;
+    if (diffScore >= 3) {
+      tier = 'high';
+      baseSuccess = 44;
+    } else if (diffScore >= 1) {
+      tier = 'medium';
+      baseSuccess = 60;
+    }
+
+    // Skala mengikut statistik watak yang relevan + pangkat - penalti stres/keletihan
+    const primaryStat = isDanger
+      ? (health * 0.55 + smarts * 0.45)
+      : (['celebrity', 'royalty'].includes(modeId) ? (looks * 0.55 + smarts * 0.45) : (smarts * 0.65 + health * 0.35));
+
+    const statMod = Math.round(((primaryStat - 60) / 100) * 26);
+    const stressPenalty = stress >= 75 ? 18 : stress >= 55 ? 10 : stress >= 40 ? 4 : 0;
+
+    const successPct = Utils.clamp(baseSuccess + statMod + rankBonus - stressPenalty, 18, 86);
+    const partialPct = tier === 'high' ? 22 : (tier === 'medium' ? 20 : 15);
+    const failPct = Math.max(5, 100 - successPct - partialPct);
+
+    const badge = tier === 'high'
+      ? { text: '🔴 Risiko Tinggi', bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5' }
+      : tier === 'medium'
+        ? { text: '🟡 Risiko Sederhana', bg: '#fef3c7', color: '#92400e', border: '#fde68a' }
+        : { text: '🟢 Risiko Rendah', bg: '#dcfce7', color: '#166534', border: '#86efac' };
+
+    return {
+      tier,
+      isDanger,
+      successPct,
+      partialPct,
+      failPct,
+      badge
+    };
+  },
+
+  performAction(actId, opts = {}) {
     const s = GameState.current;
     const info = this.getActiveInfo(s);
     if (!info) return { ok: false, msg: 'Tiada mod khas aktif.' };
     const { def, state: am } = info;
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Anda berada di dalam penjara!' };
+
+    if (!am.cooldowns || typeof am.cooldowns !== 'object') am.cooldowns = {};
+    if ((am.cooldowns[actId] || 0) > 0) {
+      return { ok: false, msg: `⏳ Misi ini masih dalam tempoh bertenang (${am.cooldowns[actId]} tahun lagi) selepas kegagalan baru-baru ini.` };
+    }
 
     const doneKey = `sp_${def.id}_${actId}`;
     if (s.yearlyActions[doneKey]) return { ok: false, msg: 'Anda sudah melaksanakan tindakan ini tahun ini.' };
@@ -361,18 +428,265 @@ window.SpecialModesEngine = {
       if (am.recentActionIds.length > 10) am.recentActionIds.length = 10;
     }
 
-    // 35% peluang mencetuskan Dilema Bercabang Khusus Mod!
-    if (def.dilemmas && def.dilemmas.length > 0 && Utils.chance(0.35)) {
+    // 25% peluang mencetuskan Dilema Bercabang Khusus Mod (kecuali jika paksa uji outcome)
+    if (!opts.skipDilemma && def.dilemmas && def.dilemmas.length > 0 && Utils.chance(0.25)) {
       const dil = this.buildDilemmaEvent(s, def, Utils.pick(def.dilemmas));
       GameState.save();
       return { ok: true, dilemmaEvent: dil, msg: `⚡ Dilema ${def.shortLabel}!` };
     }
 
-    const summary = this._applyEffects(s, def, am, act);
-    GameState.addJournalEntry(`${act.icon} [${def.shortLabel}] ${act.title}: ${summary}`, act.isRare ? 'milestone' : 'culture');
-    this._checkRankUp(s);
+    const risk = this.getActionRiskProfile(s, def, am, act);
+    const roll = typeof opts.forceRoll === 'number' ? opts.forceRoll : (Math.random() * 100);
+
+    // 1) BERJAYA PENUH (Success)
+    if (roll < risk.successPct) {
+      am.consecutiveFailures = 0;
+      const summary = this._applyEffects(s, def, am, act);
+      GameState.addJournalEntry(
+        `✅ [${def.shortLabel}] ${act.title} BERJAYA! ${summary}`,
+        act.isRare ? 'milestone' : 'culture'
+      );
+      this._checkRankUp(s);
+      GameState.save();
+      return {
+        ok: true,
+        outcomeTier: 'success',
+        risk,
+        msg: `✅ ${act.title} BERJAYA! ${summary}`
+      };
+    }
+
+    // 2) BERJAYA SEPARA / KOS TINGGI (Partial Success, ~15%–25%)
+    if (roll < risk.successPct + risk.partialPct) {
+      am.consecutiveFailures = 0;
+      const scaledEff = {
+        ...act,
+        m1: act.m1 ? Math.max(1, Math.round(act.m1 * 0.65)) : 0,
+        moneyUsd: act.moneyUsd ? Math.round(act.moneyUsd * 0.65) : 0,
+        rep: act.rep ? Math.max(1, Math.round(act.rep * 0.5)) : 0
+      };
+      const baseSummary = this._applyEffects(s, def, am, scaledEff);
+      const extraStress = Utils.randInt(8, 15);
+      const extraCost = Utils.usdToLocal(Utils.randInt(450, 1800), s.countryId);
+      let setbackText = '';
+
+      if (risk.isDanger) {
+        const minorInjury = Utils.randInt(6, 12);
+        GameState.adjustStats({ health: -minorInjury, happiness: -4 });
+        if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + extraStress, 0, 100);
+        setbackText = `Kecederaan ringan (-${minorInjury}% Kesihatan) & Stres +${extraStress}%`;
+      } else {
+        s.money = Math.max(0, (s.money || 0) - extraCost);
+        if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + extraStress, 0, 100);
+        GameState.adjustStats({ happiness: -4 });
+        setbackText = `Kos tambahan -${Utils.formatMoney(extraCost, s.countryId)} & Stres +${extraStress}%`;
+      }
+
+      const logMsg = `⚠️ [${def.shortLabel}] ${act.title} — BERJAYA SEPARA (Kos Tinggi): Objektif tercapai (${baseSummary}), namun terpaksa menanggung ${setbackText}.`;
+      GameState.addJournalEntry(logMsg, 'dilemma');
+      this._checkRankUp(s);
+      GameState.save();
+      return {
+        ok: true,
+        outcomeTier: 'partial',
+        risk,
+        msg: `⚠️ Berjaya Separa (${act.title}): ${setbackText}.`
+      };
+    }
+
+    // 3) GAGAL / TERKANTOI (Failure / Backfire)
+    am.consecutiveFailures = (am.consecutiveFailures || 0) + 1;
+    am.cooldowns[act.id] = 1; // Cooldown 1 tahun selepas gagal
+
+    const hapDrop = -Utils.randInt(10, 25);
+    const stressSpike = Utils.randInt(10, 25);
+    GameState.adjustStats({ happiness: hapDrop });
+    if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + stressSpike, 0, 100);
+
+    const failNotes = [];
+    let diedFromMission = false;
+
+    if (risk.isDanger) {
+      // Mod Berbahaya (Mafia / Perisik / Ketenteraan): Kecederaan berat, rampasan tunai, pengkhianatan, turun pangkat, penjara, atau risiko maut nadir
+      const healthLoss = Utils.randInt(15, 40);
+      GameState.adjustStats({ health: -healthLoss });
+      failNotes.push(`Kesihatan -${healthLoss}%`);
+
+      const fineLoss = Math.min(Math.max(0, s.money || 0), Utils.usdToLocal(Utils.randInt(1200, 6500), s.countryId));
+      if (fineLoss > 0) {
+        s.money -= fineLoss;
+        failNotes.push(`Rampasan/Denda -${Utils.formatMoney(fineLoss, s.countryId)}`);
+      }
+      am.metric1 = Utils.clamp((am.metric1 || 50) - Utils.randInt(10, 20), 0, 100);
+      if (def.metric2.dangerHigh) {
+        am.metric2 = Utils.clamp((am.metric2 || 20) + Utils.randInt(12, 22), 0, 100);
+      }
+
+      if (am.rankIndex > 0 && (risk.tier === 'high' || am.consecutiveFailures >= 2) && Utils.chance(0.45)) {
+        am.rankIndex = Math.max(0, am.rankIndex - 1);
+        failNotes.push(`Diturunkan pangkat ke ${def.ranks[am.rankIndex].title}`);
+      }
+
+      if (risk.tier === 'high' && Utils.chance(0.22) && window.PrisonFugitive && PrisonFugitive.imprisonCharacter) {
+        PrisonFugitive.imprisonCharacter(s, Utils.randInt(2, 5), `Terkantoi dalam operasi ${def.title}: ${act.title}`);
+        failNotes.push('Ditangkap & Dipenjarakan!');
+      } else if (risk.tier === 'high' && s.stats.health <= 5 && Utils.chance(0.15)) {
+        s.alive = false;
+        s.causeOfDeath = `Terbunuh dalam operasi berbahaya (${act.title})`;
+        diedFromMission = true;
+        failNotes.push('Kecederaan kritikal membawa maut!');
+      }
+    } else {
+      // Mod Awam (Politik / CEO / Selebriti / Diraja / dll): Skandal awam, reputasi jatuh (-15 hingga -35), saman/kerugian, atau risiko dipecat
+      const repDrop = Utils.randInt(15, 35);
+      am.metric1 = Utils.clamp((am.metric1 || 50) - repDrop, 0, 100);
+      if (window.Dynasty) Dynasty.adjustReputation(-Math.min(12, Math.round(repDrop / 3)));
+      failNotes.push(`${def.metric1.label} -${repDrop}%`);
+
+      const legalLoss = Math.min(Math.max(0, s.money || 0), Utils.usdToLocal(Utils.randInt(1500, 9000), s.countryId));
+      if (legalLoss > 0) {
+        s.money -= legalLoss;
+        failNotes.push(`Saman/Kerugian -${Utils.formatMoney(legalLoss, s.countryId)}`);
+      }
+
+      if (am.consecutiveFailures >= 3 && am.rankIndex > 0) {
+        am.rankIndex = Math.max(0, am.rankIndex - 1);
+        am.consecutiveFailures = 0;
+        failNotes.push(`Skandal berulang: Dilucutkan/diturunkan ke ${def.ranks[am.rankIndex].title}`);
+      }
+    }
+
+    failNotes.push(`Gembira ${hapDrop}%`, `Stres +${stressSpike}%`);
+    const failLog = `❌ GAGAL / TERKANTOI [${def.shortLabel}] ${act.title}: Misi menemui kegagalan! (${failNotes.join(' • ')})`;
+    GameState.addJournalEntry(failLog, 'warning');
     GameState.save();
-    return { ok: true, msg: `${act.icon} ${act.title} selesai! ${summary}` };
+
+    return {
+      ok: false,
+      outcomeTier: 'failure',
+      risk,
+      died: diedFromMission,
+      msg: `❌ Misi Gagal (${act.title}): ${failNotes.slice(0, 3).join(' • ')}`
+    };
+  },
+
+  // --------------------------------------------------------------------------
+  // 3C. KRISIS MOD KHAS MENGEJUT PADA AGE-UP (15%–25% PELUANG SETAHUN)
+  // --------------------------------------------------------------------------
+  maybeTriggerYearlyCrisisEvent(s = GameState.current) {
+    const info = this.getActiveInfo(s);
+    if (!info || (s.prison && s.prison.inPrison)) return null;
+    const { def, state: am } = info;
+
+    // Turunkan cooldown misi setiap Age-Up
+    if (am.cooldowns && typeof am.cooldowns === 'object') {
+      for (const k of Object.keys(am.cooldowns)) {
+        if (am.cooldowns[k] > 0) am.cooldowns[k] -= 1;
+      }
+    }
+
+    const stress = (s.alignment && s.alignment.stress) || 0;
+    const crisisProb = stress >= 60 ? 0.25 : 0.19; // Dalam julat 15%–25%
+    if (!Utils.chance(crisisProb)) return null;
+
+    const isDanger = this.isHighDangerMode(def.id);
+    const fixCost = Utils.usdToLocal(isDanger ? 2800 : 3500, s.countryId);
+
+    const scenario = isDanger
+      ? Utils.pick([
+          {
+            icon: '🚨',
+            title: `Krisis ${def.shortLabel}: Operasi Bocor!`,
+            text: `Maklumat sulit operasi anda dalam ${def.title} telah bocor kepada pihak musuh dan agensi penguatkuasa! Masa semakin suntuk untuk bertindak sebelum lokasi anda diserbu.`
+          },
+          {
+            icon: '🩸',
+            title: `Krisis ${def.shortLabel}: Kecederaan & Serangan Hendap`,
+            text: `Ketika menjalankan tugas rahsia dalam ${def.title}, pasukan anda diserang hendap secara mengejut! Anda perlu membuat keputusan pantas di bawah tekanan hebat.`
+          }
+        ])
+      : Utils.pick([
+          {
+            icon: '📸',
+            title: `Krisis ${def.shortLabel}: Skandal Media Tular!`,
+            text: `Sebuah rakaman luar konteks mengenai anda dalam ${def.title} tular di media sosial dan mencetuskan kecaman hebat orang ramai serta tekanan penaja!`
+          },
+          {
+            icon: '📉',
+            title: `Krisis ${def.shortLabel}: Sabotaj Pesaing!`,
+            text: `Pesaing utama anda melancarkan kempen sabotaj terancang untuk menjatuhkan kedudukan dan reputasi anda dalam ${def.title}.`
+          }
+        ]);
+
+    return {
+      id: `sp_crisis_${def.id}_${s.age}_${Date.now()}`,
+      icon: scenario.icon,
+      title: scenario.title,
+      text: scenario.text,
+      choices: [
+        {
+          label: `🛡️ Kawal Kerosakan Dengan Dana Kecemasan (${Utils.formatMoney(fixCost, s.countryId)})`,
+          hint: 'Selamat • Bayar kos guaman/PR/keselamatan untuk meredakan krisis serta-merta',
+          customAction: (st) => {
+            const cur = this.getActiveInfo(st);
+            if ((st.money || 0) >= fixCost) {
+              st.money -= fixCost;
+              if (st.alignment) st.alignment.stress = Utils.clamp((st.alignment.stress || 0) + 5, 0, 100);
+              return {
+                outcome: `Anda bertindak pantas melabur ${Utils.formatMoney(fixCost, st.countryId)} bagi mengawal kerosakan. Krisis berjaya diredakan sebelum merebak!`,
+                toastType: 'culture'
+              };
+            }
+            if (cur) cur.state.metric1 = Utils.clamp((cur.state.metric1 || 50) - 15, 0, 100);
+            GameState.adjustStats({ happiness: -12 });
+            return {
+              outcome: `Dana tidak mencukupi! Krisis merebak dan menjatuhkan ${cur ? cur.def.metric1.label : 'reputasi'} sebanyak -15%.`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '🎲 Ambil Risiko Balas Serangan (Taruhan Tinggi)',
+          hint: '50/50 • Berjaya: Reputasi & Ganjaran ++ | Gagal: Kesan berganda!',
+          journalType: 'dilemma',
+          customAction: (st) => {
+            const cur = this.getActiveInfo(st);
+            const win = Utils.chance(0.48 + ((st.stats.smarts || 60) - 60) / 300);
+            if (win) {
+              if (cur) cur.state.metric1 = Utils.clamp((cur.state.metric1 || 50) + 14, 0, 100);
+              const bonus = Utils.usdToLocal(4500, st.countryId);
+              st.money += bonus;
+              GameState.adjustStats({ happiness: 10 });
+              return {
+                outcome: `Langkah berani anda membalikkan keadaan! Krisis bertukar menjadi kemenangan besar (+14% ${cur ? cur.def.metric1.label : 'Prestasi'} & +${Utils.formatMoney(bonus, st.countryId)})!`,
+                toastType: 'success'
+              };
+            }
+            if (cur) cur.state.metric1 = Utils.clamp((cur.state.metric1 || 50) - 24, 0, 100);
+            GameState.adjustStats({ happiness: -18, health: isDanger ? -20 : -4 });
+            if (st.alignment) st.alignment.stress = Utils.clamp((st.alignment.stress || 0) + 18, 0, 100);
+            return {
+              outcome: `Serangan balas anda gagal teruk! Anda menanggung kerugian reputasi besar (-24%) dan tekanan melampau.`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '🤝 Berundur Sementara & Mohon Maaf Secara Terbuka',
+          hint: 'Kesan sederhana • Reputasi turun sedikit, elak kehancuran total',
+          customAction: (st) => {
+            const cur = this.getActiveInfo(st);
+            if (cur) cur.state.metric1 = Utils.clamp((cur.state.metric1 || 50) - 10, 0, 100);
+            GameState.adjustStats({ happiness: -8 });
+            if (st.alignment) st.alignment.stress = Utils.clamp((st.alignment.stress || 0) + 8, 0, 100);
+            return {
+              outcome: `Anda merendahkan diri dan menangani krisis secara tenang. Reputasi tercalar sedikit (-10%), namun kedudukan anda masih terselamat.`,
+              toastType: 'culture'
+            };
+          }
+        }
+      ]
+    };
   },
 
   buildDilemmaEvent(s, def, d) {
