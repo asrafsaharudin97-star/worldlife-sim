@@ -51,10 +51,17 @@ window.Modals = {
       btn.addEventListener('click', () => {
         const idx = Number(btn.dataset.choiceIdx);
         const choice = event.choices[idx];
-        Sim.resolveEventChoice(event, choice);
+        const res = Sim.resolveEventChoice(event, choice) || {};
+        if (res.nextEvent) {
+          this.showEvent(res.nextEvent);
+          return;
+        }
         this.close(true);
         App.renderAll();
-        App.toast(choice.outcome.slice(0, 88) + (choice.outcome.length > 88 ? '...' : ''), 'culture');
+        const msg = res.outcome || choice.outcome || '';
+        if (msg) {
+          App.toast(msg.slice(0, 88) + (msg.length > 88 ? '...' : ''), res.toastType || 'culture');
+        }
       });
     });
   },
@@ -410,38 +417,79 @@ window.Modals = {
   },
 
   // --------------------------------------------------------------------------
-  // 4. MODAL HUBUNGAN
+  // --------------------------------------------------------------------------
+  // 4. MODAL HUBUNGAN (Keluarga, Rakan, Pasangan & Perkahwinan)
   // --------------------------------------------------------------------------
   showRelationships() {
     const s = GameState.current;
+    GameState.ensureUpgradedState();
+    const c = Utils.getCountry(s.countryId);
+    const muslim = Relationships.isMuslim(s);
     const living = s.relationships.filter(r => r.alive);
 
-    let html = '';
-    if (!s.partnerId && s.age >= 16) {
-      const c = Utils.getCountry(s.countryId);
+    const partnerList = living.filter(r => r.id === s.partnerId);
+    const friendsList = living.filter(r => r.category === 'friend' && r.id !== s.partnerId);
+    const familyList = living.filter(r => r.id !== s.partnerId && r.category !== 'friend' && r.category !== 'ex');
+
+    let html = '<div class="action-list">';
+    if (s.age >= 7) {
+      const friendSrc = s.age < 18 || s.education.stage === 'university' ? 'Sekolah / Kampus' : (s.job ? 'Tempat Kerja / Komuniti' : 'Komuniti');
       html += `
-        <button class="action-item" id="btn-find-love">
-          <span class="ai-icon">💘</span>
+        <button class="action-item" id="btn-meet-friend" ${s.yearlyActions.meetFriend ? 'disabled' : ''}>
+          <span class="ai-icon">🤝</span>
           <span class="ai-content">
-            <span class="ai-title">Cari Pasangan di ${s.city}, ${c.name} ${c.flag}</span>
-            <span class="ai-desc">Kenali pasangan tempatan melalui aplikasi janji temu</span>
+            <span class="ai-title">Kenali Rakan Baru (${friendSrc})</span>
+            <span class="ai-desc">Bina lingkaran sosial untuk sokongan emosi, rujukan kerja &amp; peluang</span>
           </span>
-          <span class="ai-right">Bercinta!</span>
+          <span class="ai-right">Rakan +</span>
         </button>
       `;
     }
 
-    html += `<div class="section-heading">❤️ Keluarga & Pasangan (${living.length})</div><div class="action-list">`;
-    living.forEach(r => {
+    const minLoveAge = muslim ? 18 : 16;
+    if (!s.partnerId && s.age >= minLoveAge) {
+      html += `
+        <button class="action-item" id="btn-find-love">
+          <span class="ai-icon">${muslim ? '🤲' : '💘'}</span>
+          <span class="ai-content">
+            <span class="ai-title">${muslim ? `Sesi Ta'aruf & Cadangan Keluarga (${c.flag})` : `Cari Pasangan di ${s.city}, ${c.name} ${c.flag}`}</span>
+            <span class="ai-desc">${muslim ? 'Kenali calon pasangan secara terhormat menuju bertunang & akad nikah' : 'Kenali pasangan tempatan melalui aktiviti sosial & janji temu'}</span>
+          </span>
+          <span class="ai-right">${muslim ? 'Ta\'aruf' : 'Bercinta!'}</span>
+        </button>
+      `;
+    }
+    if (s.age >= 21) {
+      const adoptCost = Utils.usdToLocal(900, s.countryId);
+      html += `
+        <button class="action-item" id="btn-adopt-child" ${s.yearlyActions.adoptedChild ? 'disabled' : ''}>
+          <span class="ai-icon">🏡</span>
+          <span class="ai-content">
+            <span class="ai-title">Ambil Anak Angkat</span>
+            <span class="ai-desc">${muslim ? 'Beri kasih sayang kepada anak angkat (berbinkan/berbintikan Abdullah)' : 'Beri rumah yang penyayang kepada anak angkat baru'}</span>
+          </span>
+          <span class="ai-right cost">${Utils.formatMoney(adoptCost, s.countryId)}</span>
+        </button>
+      `;
+    }
+    html += '</div>';
+
+    const renderList = (items) => items.map(r => {
       const rc = Utils.getCountry(r.countryId);
       const isPartner = r.id === s.partnerId;
-      const distLabel = r.countryId !== s.countryId ? ` • Di luar negara (${rc.flag} ${rc.name})` : ` • ${rc.flag} Tempatan`;
-      html += `
+      const bObj = GameState.getBeliefObj(r.belief);
+      const distLabel = r.countryId !== s.countryId ? ` • ${rc.flag} Luar Negara` : '';
+      const adoptTag = r.isAdopted ? ' • Anak Angkat' : '';
+      const icon = isPartner ? (s.married ? '💍' : '💑')
+        : r.category === 'friend' ? '🧑‍🤝‍🧑'
+        : ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) ? '👶'
+        : '👤';
+      return `
         <button class="action-item rel-open-btn" data-rel-id="${r.id}">
-          <span class="ai-icon">${isPartner ? '💑' : r.role === 'Anak Lelaki' || r.role === 'Anak Perempuan' || r.role === 'Son' || r.role === 'Daughter' ? '👶' : '👤'}</span>
+          <span class="ai-icon">${icon}</span>
           <span class="ai-content">
             <span class="ai-title">${Utils.escapeHtml(r.name)} <small style="font-weight:600;color:#64748b;">(${r.role}, ${r.age})</small></span>
-            <span class="ai-desc">${Utils.escapeHtml(r.job || '')}${distLabel}</span>
+            <span class="ai-desc">${bObj.icon} ${bObj.name} • Kepercayaan ${r.trust ?? 65}% • Serasi ${r.compatibility ?? 75}%${adoptTag}${distLabel}</span>
             <div class="rel-meter">
               <div class="rel-meter-fill" style="width:${r.closeness}%;background:${Utils.getStatColor(r.closeness)}"></div>
             </div>
@@ -449,20 +497,56 @@ window.Modals = {
           <span class="ai-right neutral">${r.closeness}%</span>
         </button>
       `;
-    });
-    html += `</div>`;
+    }).join('');
+
+    if (partnerList.length > 0) {
+      html += `<div class="section-heading">${s.married ? '💍 Pasangan Hidup (Suami / Isteri)' : (muslim ? '🤲 Calon Ta\'aruf / Tunang' : '💘 Pasangan')}</div><div class="action-list">${renderList(partnerList)}</div>`;
+    }
+
+    html += `<div class="section-heading">🤝 Rakan-Rakan (${friendsList.length})</div>`;
+    if (friendsList.length > 0) {
+      html += `<div class="action-list">${renderList(friendsList)}</div>`;
+    } else {
+      html += `<div class="info-banner">Belum ada rakan rapat. Tekan "Kenali Rakan Baru" untuk mula membina lingkaran sosial anda!</div>`;
+    }
+
+    html += `<div class="section-heading">❤️ Keluarga (${familyList.length})</div><div class="action-list">${renderList(familyList)}</div>`;
 
     this.open({
       icon: '❤️',
-      title: 'Hubungan',
-      subtitle: 'Keluarga, Cinta & Hubungan Jarak Jauh',
+      title: 'Hubungan & Sosial',
+      subtitle: muslim ? 'Keluarga, Rakan & Laluan Pernikahan Sah' : 'Keluarga, Rakan, Cinta & Perkahwinan',
       bodyHtml: html
     });
+
+    const friendBtn = document.getElementById('btn-meet-friend');
+    if (friendBtn) {
+      friendBtn.addEventListener('click', () => {
+        const res = Sim.meetFriend('auto');
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showRelationships();
+      });
+    }
 
     const loveBtn = document.getElementById('btn-find-love');
     if (loveBtn) {
       loveBtn.addEventListener('click', () => {
         const res = Sim.meetLocalDate();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        if (res.followUpEvent) {
+          this.showEvent(res.followUpEvent);
+        } else {
+          this.showRelationships();
+        }
+      });
+    }
+
+    const adoptBtn = document.getElementById('btn-adopt-child');
+    if (adoptBtn) {
+      adoptBtn.addEventListener('click', () => {
+        const res = Sim.adoptChild();
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showRelationships();
@@ -476,23 +560,40 @@ window.Modals = {
 
   showRelationDetail(relId) {
     const s = GameState.current;
+    GameState.ensureUpgradedState();
     const rel = s.relationships.find(r => r.id === relId);
     if (!rel) return;
+
     const isPartner = rel.id === s.partnerId;
+    const isFriend = rel.category === 'friend';
+    const muslim = Relationships.isMuslim(s);
+    const interfaithBlocked = isPartner && muslim && (rel.belief !== 'islam' || rel.gender === s.gender);
     const longDist = rel.countryId !== s.countryId;
     const rc = Utils.getCountry(rel.countryId);
+    const bObj = GameState.getBeliefObj(rel.belief);
+
+    const stageLabel = isPartner
+      ? (s.married ? 'Berkahwin' : rel.stage === 'engaged' ? 'Bertunang' : rel.stage === 'cohabiting' ? 'Tinggal Bersama' : rel.stage === 'taaruf' ? 'Ta\'aruf' : 'Bercinta')
+      : (rel.origin || rel.role);
 
     const html = `
       <div class="info-banner">
         <strong>${Utils.escapeHtml(rel.name)}</strong> (${rel.role}, Umur ${rel.age})<br/>
-        Menetap di ${rc.flag} ${rc.name} • Kemesraan: <strong>${rel.closeness}%</strong>
+        Agama / Pegangan: <strong>${bObj.icon} ${bObj.name}</strong> • Status: <strong>${stageLabel}</strong><br/>
+        Kemesraan: <strong>${rel.closeness}%</strong> • Kepercayaan: <strong>${rel.trust ?? 65}%</strong> • Keserasian: <strong>${rel.compatibility ?? 75}%</strong><br/>
+        Lokasi: ${rc.flag} ${rc.name}${rel.job ? ` • ${Utils.escapeHtml(rel.job)}` : ''}
       </div>
+      ${interfaithBlocked ? `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">
+          ☪️ <strong>Batas Agama:</strong> Sebagai watak beragama Islam, pernikahan hanya sah bersama pasangan seakidah. Bincangkan haluan hubungan secara jujur.
+        </div>
+      ` : ''}
       <div class="action-list">
         <button class="action-item rel-act-btn" data-act="spend_time">
           <span class="ai-icon">${longDist ? '📱' : '☕'}</span>
           <span class="ai-content">
-            <span class="ai-title">${longDist ? 'Panggilan Video & Tanya Khabar' : 'Luangkan Masa Bersama'}</span>
-            <span class="ai-desc">Eratkan silaturahim dan tingkatkan kegembiraan</span>
+            <span class="ai-title">${longDist ? 'Panggilan Video & Tanya Khabar' : (muslim && isPartner && !s.married ? 'Sesi Perkenalan Terhormat' : 'Luangkan Masa Bersama')}</span>
+            <span class="ai-desc">Eratkan kemesraan &amp; bina kepercayaan bersama</span>
           </span>
           <span class="ai-right">Percuma</span>
         </button>
@@ -500,21 +601,89 @@ window.Modals = {
           <span class="ai-icon">🎁</span>
           <span class="ai-content">
             <span class="ai-title">Beri Hadiah Istimewa</span>
-            <span class="ai-desc">Kemesraan meningkat dengan ketara</span>
+            <span class="ai-desc">Kemesraan &amp; kepercayaan meningkat ketara</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(45, s.countryId), s.countryId)}</span>
         </button>
-        ${isPartner && !s.married ? `
+
+        ${isFriend && s.age >= 18 ? `
+          <button class="action-item rel-act-btn" data-act="ask_referral">
+            <span class="ai-icon">💼</span>
+            <span class="ai-content">
+              <span class="ai-title">Minta Rujukan Kerja / Peluang Projek</span>
+              <span class="ai-desc">Perlukan Kemesraan 70%+ &amp; Kepercayaan 70%+</span>
+            </span>
+            <span class="ai-right">Peluang +</span>
+          </button>
+        ` : ''}
+
+        ${isFriend ? `
+          <button class="action-item rel-act-btn" data-act="cut_ties">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title">Jauhkan Diri Daripada Rakan</span>
+              <span class="ai-desc">Tamatkan persahabatan jika hubungan sudah toksik</span>
+            </span>
+            <span class="ai-right cost">Tamat</span>
+          </button>
+        ` : ''}
+
+        ${interfaithBlocked ? `
+          <button class="action-item rel-act-btn" data-act="interfaith_talk">
+            <span class="ai-icon">☪️</span>
+            <span class="ai-content">
+              <span class="ai-title">Bincang Batas Agama &amp; Masa Depan</span>
+              <span class="ai-desc">Tentukan sama ada pasangan terbuka memeluk Islam atau berpisah baik</span>
+            </span>
+            <span class="ai-right">Penting</span>
+          </button>
+        ` : ''}
+
+        ${isPartner && !s.married && !muslim && rel.stage !== 'cohabiting' ? `
+          <button class="action-item rel-act-btn" data-act="cohabit">
+            <span class="ai-icon">🏠</span>
+            <span class="ai-content">
+              <span class="ai-title">Tinggal Bersama</span>
+              <span class="ai-desc">Tinggal sebumbung bersama pasangan (perlu kemesraan 65%+)</span>
+            </span>
+            <span class="ai-right">Percuma</span>
+          </button>
+        ` : ''}
+
+        ${isPartner && !s.married && rel.stage !== 'engaged' && !interfaithBlocked ? `
+          <button class="action-item rel-act-btn" data-act="engage">
+            <span class="ai-icon">💐</span>
+            <span class="ai-content">
+              <span class="ai-title">${muslim ? 'Merisik &amp; Bertunang' : 'Bertunang'}</span>
+              <span class="ai-desc">Langkah rasmi menuju perkahwinan (perlu kemesraan 60%+)</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(350, s.countryId), s.countryId)}</span>
+          </button>
+        ` : ''}
+
+        ${isPartner && !s.married && !interfaithBlocked ? `
           <button class="action-item rel-act-btn" data-act="propose">
             <span class="ai-icon">💍</span>
             <span class="ai-content">
-              <span class="ai-title">Lamar &amp; Berkahwin</span>
-              <span class="ai-desc">Majlis perkahwinan tempatan (perlu kemesraan 70%+)</span>
+              <span class="ai-title">${muslim ? 'Akad Nikah &amp; Walimatulurus' : 'Lamar &amp; Berkahwin'}</span>
+              <span class="ai-desc">Sah bergelar suami isteri (perlu kemesraan 70%+)</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(1800, s.countryId), s.countryId)}</span>
           </button>
         ` : ''}
-        ${isPartner && s.age >= 18 ? `
+
+        ${isPartner && s.married ? `
+          <button class="action-item rel-act-btn" data-act="family_trip">
+            <span class="ai-icon">✈️</span>
+            <span class="ai-content">
+              <span class="ai-title">Percutian Harmoni Rumah Tangga</span>
+              <span class="ai-desc">Segarkan semula kasih sayang &amp; kepercayaan suami isteri</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(450, s.countryId), s.countryId)}</span>
+          </button>
+        ` : ''}
+
+        ${isPartner && s.age >= 18 && (!muslim || s.married) ? `
           <button class="action-item rel-act-btn" data-act="have_kid">
             <span class="ai-icon">👶</span>
             <span class="ai-content">
@@ -524,11 +693,12 @@ window.Modals = {
             <span class="ai-right">Keluarga +</span>
           </button>
         ` : ''}
+
         ${isPartner ? `
           <button class="action-item rel-act-btn" data-act="breakup">
             <span class="ai-icon">💔</span>
             <span class="ai-content">
-              <span class="ai-title">Putus / Bercerai</span>
+              <span class="ai-title">${s.married ? 'Bercerai' : 'Tamatkan Hubungan'}</span>
               <span class="ai-desc">Bawa haluan masing-masing</span>
             </span>
             <span class="ai-right cost">Tamat</span>
@@ -539,19 +709,25 @@ window.Modals = {
     `;
 
     this.open({
-      icon: isPartner ? '💑' : '👤',
+      icon: isPartner ? (s.married ? '💍' : '💑') : isFriend ? '🧑‍🤝‍🧑' : '👤',
       title: rel.name,
-      subtitle: `${rel.role} • ${rc.flag} ${rc.name}`,
+      subtitle: `${rel.role} • ${bObj.icon} ${bObj.name} • ${rc.flag} ${rc.name}`,
       bodyHtml: html
     });
 
     document.querySelectorAll('.rel-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const res = Sim.interactRelation(relId, btn.dataset.act);
+        const act = btn.dataset.act;
+        const res = Sim.interactRelation(relId, act);
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
-        if (btn.dataset.act === 'breakup') this.showRelationships();
-        else this.showRelationDetail(relId);
+        if (res.followUpEvent) {
+          this.showEvent(res.followUpEvent);
+        } else if (act === 'breakup' || act === 'cut_ties') {
+          this.showRelationships();
+        } else {
+          this.showRelationDetail(relId);
+        }
       });
     });
 
@@ -672,15 +848,32 @@ window.Modals = {
       const birthC = Utils.getCountry(s.birthCountryId);
       const adapt = GameState.getCurrentAdaptation();
       const isCitizen = s.citizenships.includes(s.countryId);
+      const beliefObj = GameState.getBeliefObj(s.belief);
+      const famBeliefObj = GameState.getBeliefObj(s.familyBelief);
 
       contentHtml += `
         <div class="info-banner highlight">
-          <strong>🛂 Pasport ${Utils.escapeHtml(s.name)}</strong><br/>
+          <strong>🛂 Pasport &amp; Profil ${Utils.escapeHtml(s.name)}</strong><br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
+          Kepercayaan / Pegangan: <strong>${beliefObj.icon} ${beliefObj.name}</strong> (Ketahanan Jiwa: ${s.devotion || 40}%)<br/>
+          Latar Keluarga: ${famBeliefObj.icon} ${famBeliefObj.name}<br/>
           Status Semasa: <strong>${c.flag} ${c.name} — ${App._residencyLabel(s.residencyStatus)}</strong> (${s.yearsInCurrentCountry} tahun)<br/>
           Kewarganegaraan: ${s.citizenships.map(id => `${Utils.getCountry(id).flag} ${Utils.getCountry(id).name}`).join(', ')}
         </div>
       `;
+
+      if (s.spiritualHistory && s.spiritualHistory.length > 0) {
+        contentHtml += `
+          <div class="info-banner" style="background:#f5f3ff;border-color:#ddd6fe;">
+            <strong>🌌 Perjalanan Rohani (${s.spiritualHistory.length} perubahan)</strong><br/>
+            ${s.spiritualHistory.map(h => {
+              const fb = GameState.getBeliefObj(h.fromBelief);
+              const tb = GameState.getBeliefObj(h.toBelief);
+              return `• Umur ${h.age} (${h.year}): ${fb.icon} ${fb.name} → <strong>${tb.icon} ${tb.name}</strong>`;
+            }).join('<br/>')}
+          </div>
+        `;
+      }
 
       if (!isCitizen) {
         const nextStep = s.residencyStatus === 'PR' ? `Warganegara ${c.name}` : `Penduduk Tetap (PR)`;
@@ -711,6 +904,8 @@ window.Modals = {
       contentHtml += `</div>`;
     } else if (activeSubTab === 'lifestyle') {
       const gymCost = Utils.usdToLocal(25, s.countryId);
+      const beliefObj = GameState.getBeliefObj(s.belief);
+      const charityCost = Utils.usdToLocal(35, s.countryId);
       contentHtml += `
         <div class="section-heading">🏥 Kesihatan di ${c.name} (${c.healthcare.type})</div>
         <div class="info-banner">${Utils.escapeHtml(c.healthcare.desc)}</div>
@@ -733,8 +928,16 @@ window.Modals = {
           </button>
         </div>
 
-        <div class="section-heading">💪 Minda &amp; Badan</div>
+        <div class="section-heading">💪 Minda, Jiwa &amp; Badan</div>
         <div class="action-list">
+          <button class="action-item" id="act-spiritual" ${s.yearlyActions.spiritualPractice ? 'disabled' : ''}>
+            <span class="ai-icon">${beliefObj.icon}</span>
+            <span class="ai-content">
+              <span class="ai-title">${Utils.escapeHtml(beliefObj.practiceTitle)} (${beliefObj.name})</span>
+              <span class="ai-desc">${Utils.escapeHtml(beliefObj.practiceDesc)}</span>
+            </span>
+            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(charityCost, s.countryId)}</span>
+          </button>
           <button class="action-item" id="act-gym" ${s.yearlyActions.gym ? 'disabled' : ''}>
             <span class="ai-icon">🏋️</span>
             <span class="ai-content">
@@ -880,6 +1083,14 @@ window.Modals = {
       const res = Sim.visitDoctor(true);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
+    });
+
+    const spiritualBtn = document.getElementById('act-spiritual');
+    if (spiritualBtn) spiritualBtn.addEventListener('click', () => {
+      const res = Sim.doSpiritualPractice();
+      App.toast(res.msg, res.ok ? 'culture' : 'error');
+      App.renderAll();
+      this.showActivities('lifestyle');
     });
 
     const gymBtn = document.getElementById('act-gym');
@@ -1043,6 +1254,10 @@ window.Modals = {
           <div class="summary-stat">
             <span class="lbl">Kewarganegaraan</span>
             <span class="val">${s.citizenships.map(id => Utils.getCountry(id).flag).join(' ')}</span>
+          </div>
+          <div class="summary-stat" style="grid-column: span 2;">
+            <span class="lbl">Pegangan / Kepercayaan Akhir</span>
+            <span class="val">${GameState.getBeliefObj(s.belief).icon} ${GameState.getBeliefObj(s.belief).name}</span>
           </div>
         </div>
         ${kidsHtml}

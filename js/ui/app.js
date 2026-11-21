@@ -215,9 +215,11 @@ window.App = {
     document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}`;
 
     const genPrefix = (s.generation && s.generation > 1) ? `Gen ${s.generation} • ` : '';
+    const beliefObj = GameState.getBeliefObj(s.belief);
+    const beliefSnippet = ` • ${beliefObj.icon} ${beliefObj.name}`;
     const cultureTag = s.countryId === s.birthCountryId
-      ? `${genPrefix}${birthC.flag} ${s.heritageLabel} • Anak Tempatan ${c.name}`
-      : `${genPrefix}Lahir ${birthC.flag} ${birthC.name} → Menetap di ${c.flag} ${c.name}`;
+      ? `${genPrefix}${birthC.flag} ${s.heritageLabel}${beliefSnippet}`
+      : `${genPrefix}Lahir ${birthC.flag} → ${c.flag} ${c.name}${beliefSnippet}`;
     document.getElementById('char-culture-tag').textContent = cultureTag;
 
     const moneyEl = document.getElementById('char-money');

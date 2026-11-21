@@ -73,6 +73,48 @@ window.Utils = {
     return `${first} ${last}`;
   },
 
+  extractGivenName(fullName) {
+    if (!fullName || typeof fullName !== 'string') return '';
+    const trimmed = fullName.trim();
+    const patronymicSplit = trimmed.split(/\s+(?:bin|binti|binte|a\/l|a\/p)\s+/i);
+    if (patronymicSplit.length > 1) {
+      return patronymicSplit[0].trim();
+    }
+    return trimmed.split(/\s+/)[0].trim();
+  },
+
+  generateGivenName(countryId, gender, heritageId = null) {
+    const c = this.getCountry(countryId);
+    const hKey = heritageId && c.names[heritageId] ? heritageId : Object.keys(c.names)[0];
+    const pool = c.names[hKey];
+    return this.pick(gender === 'female' ? pool.female : pool.male);
+  },
+
+  formatIslamicName(givenName, gender, fatherFullName, { isAdopted = false, isOutOfWedlock = false } = {}) {
+    const connector = gender === 'female' ? 'binti' : 'bin';
+    const cleanGiven = this.extractGivenName(givenName) || 'Ahmad';
+    if (isAdopted || isOutOfWedlock || !fatherFullName) {
+      return `${cleanGiven} ${connector} Abdullah`;
+    }
+    const fatherGiven = this.extractGivenName(fatherFullName) || 'Abdullah';
+    return `${cleanGiven} ${connector} ${fatherGiven}`;
+  },
+
+  generateChildName({ countryId, gender, heritageId = null, belief = 'unassigned', fatherFullName = null, isAdopted = false, isOutOfWedlock = false, customGivenName = null }) {
+    if (belief === 'islam') {
+      const trimmedCustom = customGivenName && customGivenName.trim();
+      if (trimmedCustom && /\s+(?:bin|binti|binte)\s+/i.test(trimmedCustom)) {
+        return trimmedCustom;
+      }
+      const given = trimmedCustom || this.generateGivenName(countryId, gender, heritageId);
+      return this.formatIslamicName(given, gender, fatherFullName, { isAdopted, isOutOfWedlock });
+    }
+    if (customGivenName && customGivenName.trim()) {
+      return customGivenName.trim();
+    }
+    return this.generateName(countryId, gender, heritageId);
+  },
+
   getAvatar(age, gender) {
     if (age <= 2) return '👶';
     if (age <= 12) return gender === 'female' ? '👧' : '👦';

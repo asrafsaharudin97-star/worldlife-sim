@@ -7,21 +7,40 @@ window.GameState = {
   HISTORY_KEY: 'worldlife_graveyard_v1',
   current: null,
 
-  createNewLife({ countryId, gender, heritageId, customName }) {
+  createNewLife({ countryId, gender, heritageId, customName, isAdopted = false, isOutOfWedlock = false }) {
     const country = Utils.getCountry(countryId);
     const validHeritage = heritageId && country.names[heritageId]
       ? heritageId
       : country.heritages[0].id;
     const heritageObj = country.heritages.find(h => h.id === validHeritage) || country.heritages[0];
     const city = Utils.pick(country.cities);
-    const name = (customName && customName.trim())
-      ? customName.trim()
-      : Utils.generateName(countryId, gender, validHeritage);
-
     const startYear = 2004 + Utils.randInt(0, 20);
 
-    const fatherName = Utils.generateName(countryId, 'male', validHeritage);
-    const motherName = Utils.generateName(countryId, 'female', validHeritage);
+    const familyBelief = window.LIFE_EVENTS
+      ? window.LIFE_EVENTS.pickFamilyBelief(countryId, validHeritage)
+      : 'unassigned';
+    const beliefObj = (window.BELIEFS && window.BELIEFS[familyBelief]) || { icon: '❔', name: 'Belum Ditentukan' };
+
+    const rawFatherName = Utils.generateName(countryId, 'male', validHeritage);
+    const rawMotherName = Utils.generateName(countryId, 'female', validHeritage);
+    const fatherName = (familyBelief === 'islam' && !/\s+bin\s+/i.test(rawFatherName))
+      ? Utils.formatIslamicName(Utils.extractGivenName(rawFatherName), 'male', Utils.generateGivenName(countryId, 'male', validHeritage))
+      : rawFatherName;
+    const motherName = (familyBelief === 'islam' && !/\s+(?:binti|binte)\s+/i.test(rawMotherName))
+      ? Utils.formatIslamicName(Utils.extractGivenName(rawMotherName), 'female', Utils.generateGivenName(countryId, 'male', validHeritage))
+      : rawMotherName;
+
+    const name = Utils.generateChildName({
+      countryId,
+      gender,
+      heritageId: validHeritage,
+      belief: familyBelief,
+      fatherFullName: fatherName,
+      isAdopted,
+      isOutOfWedlock,
+      customGivenName: customName
+    });
+
     const fatherJob = Utils.pick(country.jobs).title;
     const motherJob = Utils.pick(country.jobs).title;
 
@@ -30,10 +49,14 @@ window.GameState = {
         id: 'rel_mom',
         name: motherName,
         role: 'Ibu',
+        category: 'family',
         gender: 'female',
         age: Utils.randInt(25, 36),
         countryId,
         closeness: Utils.randInt(75, 95),
+        trust: Utils.randInt(78, 96),
+        compatibility: Utils.randInt(70, 95),
+        belief: familyBelief,
         alive: true,
         job: motherJob
       },
@@ -41,10 +64,14 @@ window.GameState = {
         id: 'rel_dad',
         name: fatherName,
         role: 'Ayah',
+        category: 'family',
         gender: 'male',
         age: Utils.randInt(26, 39),
         countryId,
         closeness: Utils.randInt(72, 94),
+        trust: Utils.randInt(75, 95),
+        compatibility: Utils.randInt(68, 94),
+        belief: familyBelief,
         alive: true,
         job: fatherJob
       }
@@ -52,14 +79,29 @@ window.GameState = {
 
     if (Utils.chance(0.55)) {
       const sibGender = Utils.chance(0.5) ? 'male' : 'female';
+      const sibName = Utils.generateChildName({
+        countryId,
+        gender: sibGender,
+        heritageId: validHeritage,
+        belief: familyBelief,
+        fatherFullName: fatherName,
+        isAdopted: false,
+        isOutOfWedlock: false
+      });
       relationships.push({
         id: 'rel_sib_1',
-        name: Utils.generateName(countryId, sibGender, validHeritage),
+        name: sibName,
         role: sibGender === 'male' ? 'Abang' : 'Kakak',
+        category: 'family',
         gender: sibGender,
         age: Utils.randInt(2, 6),
         countryId,
         closeness: Utils.randInt(65, 90),
+        trust: Utils.randInt(68, 92),
+        compatibility: Utils.randInt(65, 92),
+        belief: familyBelief,
+        isAdopted: false,
+        isOutOfWedlock: false,
         alive: true,
         job: 'Pelajar'
       });
@@ -71,10 +113,20 @@ window.GameState = {
       gender,
       heritageId: validHeritage,
       heritageLabel: heritageObj.label,
+      isAdopted: Boolean(isAdopted),
+      isOutOfWedlock: Boolean(isOutOfWedlock),
       age: 0,
       year: startYear,
       alive: true,
       causeOfDeath: null,
+
+      belief: familyBelief,
+      familyBelief,
+      devotion: familyBelief === 'unassigned' ? 20 : Utils.randInt(35, 65),
+      lastSpiritualAge: -99,
+      spiritualHistory: [],
+      hiddenFlags: {},
+      recentCrises: [],
 
       birthCountryId: countryId,
       birthCity: city,
@@ -148,7 +200,7 @@ window.GameState = {
             },
             {
               type: 'culture',
-              text: `Membesar sebagai ${heritageObj.label} di ${country.name}: ${country.tagline}`
+              text: `Membesar sebagai ${heritageObj.label} (latar keluarga: ${beliefObj.icon} ${beliefObj.name}) di ${country.name}: ${country.tagline}`
             }
           ]
         }
@@ -156,6 +208,7 @@ window.GameState = {
     };
 
     this.current = state;
+    this.ensureUpgradedState();
     this.save();
     return state;
   },
@@ -191,10 +244,74 @@ window.GameState = {
     s.culturalAdaptation[s.countryId] = Utils.clamp(cur + delta, 0, 100);
   },
 
+  getBeliefObj(beliefId) {
+    const id = beliefId || (this.current && this.current.belief) || 'unassigned';
+    return (window.BELIEFS && window.BELIEFS[id]) || {
+      id: 'unassigned',
+      name: 'Belum Ditentukan',
+      icon: '❔',
+      isReligious: false,
+      resilienceBonus: 0.05,
+      practiceTitle: 'Merenung Makna Hidup',
+      practiceDesc: 'Ambil masa mengenali nilai diri dan bantu komuniti',
+      charityLabel: 'Kebajikan',
+      desc: 'Masih mencari pegangan hidup.'
+    };
+  },
+
+  ensureUpgradedState() {
+    const s = this.current;
+    if (!s) return;
+    if (!s.familyBelief) {
+      s.familyBelief = window.LIFE_EVENTS
+        ? window.LIFE_EVENTS.pickFamilyBelief(s.birthCountryId || s.countryId, s.heritageId)
+        : 'unassigned';
+    }
+    if (!s.belief) s.belief = s.familyBelief;
+    if (typeof s.devotion !== 'number') s.devotion = 45;
+    if (typeof s.lastSpiritualAge !== 'number') s.lastSpiritualAge = -99;
+    if (!Array.isArray(s.spiritualHistory)) s.spiritualHistory = [];
+    if (!s.hiddenFlags || typeof s.hiddenFlags !== 'object') s.hiddenFlags = {};
+    if (!Array.isArray(s.recentCrises)) s.recentCrises = [];
+    if (window.Relationships && Relationships.ensureRelationshipFields) {
+      Relationships.ensureRelationshipFields(s);
+    }
+  },
+
+  setHiddenFlag(key, data = {}) {
+    const s = this.current;
+    if (!s || !key) return;
+    if (!s.hiddenFlags) s.hiddenFlags = {};
+    s.hiddenFlags[key] = {
+      setAge: s.age,
+      setYear: s.year,
+      data,
+      resolved: false
+    };
+  },
+
+  recordCrisis(type) {
+    const s = this.current;
+    if (!s || !type) return;
+    if (!Array.isArray(s.recentCrises)) s.recentCrises = [];
+    s.recentCrises.push({ type, age: s.age });
+    if (s.recentCrises.length > 8) s.recentCrises = s.recentCrises.slice(-8);
+  },
+
   adjustStats(effects = {}) {
     const s = this.current;
     if (!s) return;
-    if (effects.happiness) s.stats.happiness = Utils.clamp(s.stats.happiness + effects.happiness);
+    if (effects.happiness) {
+      let delta = effects.happiness;
+      // Ketahanan mental hasil pegangan hidup & kekuatan jiwa melembutkan kejutan negatif
+      if (delta <= -6 && s.belief && s.belief !== 'unassigned') {
+        const b = this.getBeliefObj(s.belief);
+        const devotionFactor = Utils.clamp(s.devotion || 40, 0, 100) / 100;
+        const mitigation = Math.min(0.28, (b.resilienceBonus || 0.1) * (0.5 + devotionFactor * 0.7));
+        delta = Math.round(delta * (1 - mitigation));
+      }
+      s.stats.happiness = Utils.clamp(s.stats.happiness + delta);
+    }
     if (effects.health) s.stats.health = Utils.clamp(s.stats.health + effects.health);
     if (effects.smarts) s.stats.smarts = Utils.clamp(s.stats.smarts + effects.smarts);
     if (effects.looks) s.stats.looks = Utils.clamp(s.stats.looks + effects.looks);
@@ -270,10 +387,20 @@ window.GameState = {
       gender: child.gender,
       heritageId: country.heritages[0].id,
       heritageLabel: `${parent.heritageLabel} (${country.name})`,
+      isAdopted: Boolean(child.isAdopted),
+      isOutOfWedlock: Boolean(child.isOutOfWedlock),
       age: childAge,
       year: parent.year,
       alive: true,
       causeOfDeath: null,
+
+      belief: parent.belief || 'unassigned',
+      familyBelief: parent.belief || 'unassigned',
+      devotion: Utils.randInt(35, 65),
+      lastSpiritualAge: -99,
+      spiritualHistory: [],
+      hiddenFlags: {},
+      recentCrises: [],
 
       birthCountryId: cId,
       birthCity: city,
@@ -376,6 +503,9 @@ window.GameState = {
     if (s.criminalRecord >= 2) {
       return { name: 'Pemberontak Licik', icon: '🕶️', desc: 'Hidup penuh risiko di pinggir undang-undang.' };
     }
+    if ((s.spiritualHistory && s.spiritualHistory.length >= 2) || (s.devotion >= 85 && s.belief && s.belief !== 'unassigned')) {
+      return { name: 'Pencari Makna', icon: '🌌', desc: 'Menghayati perjalanan jiwa dan pegangan hidup dengan penuh kesedaran.' };
+    }
     return { name: 'Jiwa Seimbang', icon: '✨', desc: 'Melalui perjalanan hidup yang bermakna dengan budaya, pilihan dan pengalaman.' };
   },
 
@@ -421,6 +551,7 @@ window.GameState = {
       const raw = localStorage.getItem(this.SAVE_KEY);
       if (raw) {
         this.current = JSON.parse(raw);
+        this.ensureUpgradedState();
         return this.current;
       }
     } catch (e) {}

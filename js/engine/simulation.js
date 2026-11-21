@@ -7,6 +7,7 @@ window.Sim = {
   ageUp() {
     const s = GameState.current;
     if (!s || !s.alive) return { event: null, died: false };
+    GameState.ensureUpgradedState();
 
     s.age += 1;
     s.year += 1;
@@ -23,22 +24,28 @@ window.Sim = {
       entries: []
     });
 
-    // 1. Umur ahli keluarga & rakan
+    // 1. Umur ahli keluarga, pasangan & rakan
     for (const rel of s.relationships) {
       if (!rel.alive) continue;
       rel.age += 1;
       if (rel.age > 74 && Utils.chance((rel.age - 72) * 0.025)) {
         rel.alive = false;
+        const wasSpouse = s.partnerId === rel.id && s.married;
         GameState.addJournalEntry(
-          `💔 ${rel.role} anda, ${rel.name}, telah meninggal dunia dengan tenang pada usia ${rel.age} tahun.`,
+          wasSpouse
+            ? `🕊️💔 Pasangan hidup anda, ${rel.name} (${rel.role}), telah menghembuskan nafas terakhir pada usia ${rel.age} tahun. Anda kini hidup sebagai ${s.gender === 'male' ? 'duda' : 'balu'}.`
+            : `💔 ${rel.role} anda, ${rel.name}, telah meninggal dunia dengan tenang pada usia ${rel.age} tahun.`,
           'warning'
         );
-        GameState.adjustStats({ happiness: -18 });
+        GameState.adjustStats({ happiness: wasSpouse ? -26 : -18 });
+        GameState.recordCrisis('grief');
         if (s.partnerId === rel.id) {
           s.partnerId = null;
           s.married = false;
         }
       } else if (rel.countryId !== s.countryId) {
+        rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
+      } else if (rel.category === 'friend') {
         rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
       }
     }
@@ -48,17 +55,37 @@ window.Sim = {
 
     // 3. Gaji, pelaburan, cukai & kos sara hidup
     this._processFinances(s, c);
+    if (s.age >= 18 && s.money < 0) {
+      GameState.recordCrisis('bankruptcy');
+    }
 
     // 4. Perayaan & penyesuaian budaya tempatan
     this._processCultureAndFestivals(s, c);
 
-    // 5. Perubahan statistik semula jadi
+    // 5. Perubahan statistik semula jadi & ketahanan rohani
     if (s.age > 55) {
       const healthDrop = Utils.randInt(1, Math.min(8, Math.floor((s.age - 50) / 5) + 1));
       s.stats.health = Utils.clamp(s.stats.health - healthDrop);
       s.stats.looks = Utils.clamp(s.stats.looks - Utils.randInt(0, 2));
     } else if (s.age >= 13 && s.age <= 24) {
       s.stats.looks = Utils.clamp(s.stats.looks + Utils.randInt(-2, 3));
+    }
+
+    if (s.stats.health <= 30) {
+      GameState.recordCrisis('illness');
+    }
+
+    // Pemulihan emosi hasil pegangan hidup / ketenangan batin
+    if (s.age >= 15 && s.belief && s.belief !== 'unassigned' && s.devotion >= 55 && s.stats.happiness < 55) {
+      const b = GameState.getBeliefObj(s.belief);
+      const recovery = Utils.randInt(2, 5);
+      s.stats.happiness = Utils.clamp(s.stats.happiness + recovery);
+      if (Utils.chance(0.35)) {
+        GameState.addJournalEntry(
+          `${b.icon} Pegangan ${b.name} membantu menenangkan jiwa anda di tengah tekanan hidup (+${recovery}% Gembira).`,
+          'spiritual'
+        );
+      }
     }
 
     // 6. Semak kematian
@@ -284,11 +311,77 @@ window.Sim = {
     return null;
   },
 
+  _pickWeighted(pool) {
+    if (!pool || !pool.length) return null;
+    const total = pool.reduce((acc, item) => acc + (item.weight || 10), 0);
+    let r = Math.random() * total;
+    for (const item of pool) {
+      r -= (item.weight || 10);
+      if (r <= 0) return item;
+    }
+    return pool[pool.length - 1];
+  },
+
   _pickYearlyEvent(s, c) {
     if (s.age < 5) return null;
 
+    // 1. KESAN RAMA-RAMA (Akibat Tersembunyi 3–15 tahun kemudian)
+    if (window.LIFE_EVENTS && window.LIFE_EVENTS.butterflyEffects && s.hiddenFlags) {
+      const dueFlags = Object.entries(s.hiddenFlags).filter(([key, flag]) => {
+        if (!flag || flag.resolved) return false;
+        const diff = s.age - flag.setAge;
+        if (diff < 3 || diff > 15) return false;
+        const def = window.LIFE_EVENTS.butterflyEffects[key];
+        if (!def) return false;
+        if (def.condition && !def.condition(s, flag)) return false;
+        return true;
+      });
+
+      if (dueFlags.length > 0) {
+        const [flagKey, flagData] = Utils.pick(dueFlags);
+        const ageDiff = s.age - flagData.setAge;
+        const triggerProb = ageDiff >= 13 ? 0.85 : 0.34;
+        if (Utils.chance(triggerProb)) {
+          const def = window.LIFE_EVENTS.butterflyEffects[flagKey];
+          return {
+            id: `bf_${flagKey}_${s.age}`,
+            icon: def.icon,
+            title: def.title,
+            text: def.textFn ? def.textFn(s, flagData) : def.text,
+            choices: def.choices
+          };
+        }
+      }
+    }
+
+    // 2. PERSIMPANGAN ROHANI & KEPERCAYAAN (KETAT: hanya umur >= 15, dengan tempoh bertenang)
+    if (s.age >= 15 && window.LIFE_EVENTS && window.LIFE_EVENTS.buildSpiritualCrossroadsEvent) {
+      const sinceLast = s.age - (s.lastSpiritualAge ?? -99);
+      const cooldownOk = sinceLast >= 7;
+      if (cooldownOk) {
+        const recentCrisis = (s.recentCrises || []).find(cr => (s.age - cr.age) <= 2);
+        const isOldAgeReflection = s.age >= 60 && sinceLast >= 10;
+        let spiritualProb = 0.09; // peluang asas rawak sepanjang hidup (umur 15+)
+        let crisisType = null;
+
+        if (recentCrisis) {
+          spiritualProb = 0.32;
+          crisisType = recentCrisis.type;
+        } else if (isOldAgeReflection) {
+          spiritualProb = 0.24;
+          crisisType = 'old_age';
+        }
+
+        if (Utils.chance(spiritualProb)) {
+          s.lastSpiritualAge = s.age;
+          return window.LIFE_EVENTS.buildSpiritualCrossroadsEvent(s, c, crisisType);
+        }
+      }
+    }
+
+    // 3. Peristiwa Hijrah (bila baru tinggal di luar negara)
     const isAbroad = s.countryId !== s.birthCountryId;
-    if (isAbroad && s.yearsInCurrentCountry <= 5 && Utils.chance(0.55)) {
+    if (isAbroad && s.yearsInCurrentCountry <= 5 && Utils.chance(0.42)) {
       const migPool = GAME_EVENTS.migration.filter(e => !s.seenEventIds.includes(e.id + '_' + s.countryId));
       if (migPool.length > 0) {
         const picked = Utils.pick(migPool);
@@ -297,10 +390,47 @@ window.Sim = {
       }
     }
 
+    // 4. Dilema Moral & Pertukaran Sukar (Umur 18+)
+    if (s.age >= 18 && window.LIFE_EVENTS && window.LIFE_EVENTS.moralDilemmas && Utils.chance(0.24)) {
+      const dilPool = window.LIFE_EVENTS.moralDilemmas.filter(
+        e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id) && (!e.condition || e.condition(s))
+      );
+      if (dilPool.length > 0) {
+        const picked = Utils.pick(dilPool);
+        s.seenEventIds.push(picked.id);
+        return picked;
+      }
+    }
+
+    // 5. Kejutan "Black Swan" / Konflik / Tuah Luar Jangkaan (Umur 18+)
+    if (s.age >= 18 && window.LIFE_EVENTS && window.LIFE_EVENTS.blackSwans && Utils.chance(0.20)) {
+      const bsPool = window.LIFE_EVENTS.blackSwans.filter(
+        e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id) && (!e.condition || e.condition(s))
+      );
+      if (bsPool.length > 0) {
+        const picked = this._pickWeighted(bsPool);
+        s.seenEventIds.push(picked.id);
+        return picked;
+      }
+    }
+
+    // 5B. Peristiwa Lingkaran Rakan & Rumah Tangga
+    if (s.age >= 14 && window.LIFE_EVENTS && window.LIFE_EVENTS.relationshipEvents && Utils.chance(0.24)) {
+      const relPool = window.LIFE_EVENTS.relationshipEvents.filter(
+        e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id) && (!e.condition || e.condition(s))
+      );
+      if (relPool.length > 0) {
+        const picked = Utils.pick(relPool);
+        s.seenEventIds.push(picked.id);
+        return this._hydrateDynamicEvent(picked, s, c);
+      }
+    }
+
+    // 6. Peristiwa Budaya Negara & Universal (sedia ada)
     const countryPool = (GAME_EVENTS.country[s.countryId] || []).filter(
       e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
     );
-    if (countryPool.length > 0 && Utils.chance(0.68)) {
+    if (countryPool.length > 0 && Utils.chance(0.58)) {
       const picked = Utils.pick(countryPool);
       s.seenEventIds.push(picked.id);
       return picked;
@@ -309,7 +439,7 @@ window.Sim = {
     const uniPool = GAME_EVENTS.universal.filter(
       e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
     );
-    if (uniPool.length > 0 && Utils.chance(0.7)) {
+    if (uniPool.length > 0 && Utils.chance(0.62)) {
       const picked = Utils.pick(uniPool);
       s.seenEventIds.push(picked.id);
       return picked;
@@ -318,7 +448,7 @@ window.Sim = {
     const anyCountry = (GAME_EVENTS.country[s.countryId] || []).filter(
       e => s.age >= e.minAge && s.age <= e.maxAge
     );
-    if (anyCountry.length > 0 && Utils.chance(0.35)) {
+    if (anyCountry.length > 0 && Utils.chance(0.30)) {
       return Utils.pick(anyCountry);
     }
 
@@ -341,15 +471,42 @@ window.Sim = {
 
   resolveEventChoice(event, choice) {
     const s = GameState.current;
-    if (!s) return;
+    if (!s) return { outcome: '', nextEvent: null, toastType: 'culture' };
+
+    const c = Utils.getCountry(s.countryId);
 
     if (choice.effects) GameState.adjustStats(choice.effects);
     if (choice.moneyUsd) {
       const localDelta = Utils.usdToLocal(choice.moneyUsd, s.countryId);
       s.money += localDelta;
     }
-    GameState.addJournalEntry(`${event.icon} ${event.title}: ${choice.outcome}`, 'culture');
+    if (choice.setFlag) {
+      if (typeof choice.setFlag === 'string') {
+        GameState.setHiddenFlag(choice.setFlag);
+      } else if (choice.setFlag.key) {
+        GameState.setHiddenFlag(choice.setFlag.key, choice.setFlag.data || {});
+      }
+    }
+    if (choice.resolveFlag && s.hiddenFlags && s.hiddenFlags[choice.resolveFlag]) {
+      s.hiddenFlags[choice.resolveFlag].resolved = true;
+    }
+
+    let outcome = choice.outcome || '';
+    let nextEvent = null;
+    let toastType = choice.journalType === 'warning' ? 'error' : 'culture';
+
+    if (typeof choice.customAction === 'function') {
+      const res = choice.customAction(s, c) || {};
+      if (res.outcome) outcome = res.outcome;
+      if (res.nextEvent) nextEvent = res.nextEvent;
+      if (res.toastType) toastType = res.toastType;
+    }
+
+    if (!nextEvent && outcome) {
+      GameState.addJournalEntry(`${event.icon} ${event.title}: ${outcome}`, choice.journalType || 'culture');
+    }
     GameState.save();
+    return { outcome, nextEvent, toastType };
   },
 
   // --------------------------------------------------------------------------
@@ -700,133 +857,20 @@ window.Sim = {
     return { ok: true, msg: `Dijual dengan harga ${Utils.formatMoney(asset.value, s.countryId)}!` };
   },
 
+  meetFriend(source = 'auto') {
+    return Relationships.meetFriend(source);
+  },
+
   meetLocalDate() {
-    const s = GameState.current;
-    const c = Utils.getCountry(s.countryId);
-    if (s.age < 16) return { ok: false, msg: 'Tunggu sehingga umur 16 tahun untuk bercinta!' };
-    if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan!' };
-
-    const targetGender = s.gender === 'male' ? 'female' : 'male';
-    const heritage = Utils.pick(c.heritages).id;
-    const name = Utils.generateName(s.countryId, targetGender, heritage);
-    const job = Utils.pick(c.jobs).title;
-    const age = Utils.clamp(s.age + Utils.randInt(-3, 4), 16, 80);
-
-    const partner = {
-      id: 'rel_partner_' + Date.now(),
-      name,
-      role: targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki',
-      gender: targetGender,
-      age,
-      countryId: s.countryId,
-      closeness: Utils.randInt(58, 82),
-      alive: true,
-      job
-    };
-    s.relationships.push(partner);
-    s.partnerId = partner.id;
-    GameState.adjustStats({ happiness: 14, adaptation: 10 });
-    GameState.addJournalEntry(
-      `💘 Anda berkenalan dengan ${name} (${age} thn, ${job}) di ${s.city}, ${c.name} ${c.flag} dan mula bercinta!`,
-      'romance'
-    );
-    GameState.save();
-    return { ok: true, msg: `Anda kini bercinta dengan ${name}!` };
+    return Relationships.meetLocalDate();
   },
 
   interactRelation(relId, action) {
-    const s = GameState.current;
-    const rel = s.relationships.find(r => r.id === relId);
-    if (!rel || !rel.alive) return { ok: false, msg: 'Tidak dapat berinteraksi.' };
+    return Relationships.interactRelation(relId, action);
+  },
 
-    const key = `rel_${relId}_${action}`;
-    if (s.yearlyActions[key] && action !== 'propose' && action !== 'have_kid' && action !== 'breakup') {
-      return { ok: false, msg: `Anda sudah melakukan ini dengan ${rel.name} tahun ini.` };
-    }
-    s.yearlyActions[key] = true;
-
-    const c = Utils.getCountry(s.countryId);
-    const longDist = rel.countryId !== s.countryId;
-
-    if (action === 'spend_time') {
-      rel.closeness = Utils.clamp(rel.closeness + Utils.randInt(8, 15));
-      GameState.adjustStats({ happiness: 7 });
-      const text = longDist
-        ? `📱 Membuat panggilan video mesra bertanya khabar ${rel.name} di ${Utils.getCountry(rel.countryId).name}!`
-        : `😊 Meluangkan masa berkualiti bersama ${rel.name} di ${s.city}.`;
-      GameState.addJournalEntry(text);
-      GameState.save();
-      return { ok: true, msg: `Hubungan dengan ${rel.name} makin erat!` };
-    }
-
-    if (action === 'gift') {
-      const cost = Utils.usdToLocal(45, s.countryId);
-      if (s.money < cost) return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk hadiah.` };
-      s.money -= cost;
-      rel.closeness = Utils.clamp(rel.closeness + Utils.randInt(12, 20));
-      GameState.adjustStats({ happiness: 6 });
-      GameState.addJournalEntry(`🎁 Menghadiahkan cenderahati (${Utils.formatMoney(cost, s.countryId)}) kepada ${rel.name}!`);
-      GameState.save();
-      return { ok: true, msg: `${rel.name} amat menyukai hadiah anda!` };
-    }
-
-    if (action === 'propose') {
-      if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
-      if (rel.closeness < 70) return { ok: false, msg: `${rel.name} belum bersedia — eratkan kemesraan ke 70%+ dahulu!` };
-      const ringCost = Utils.usdToLocal(1800, s.countryId);
-      if (s.money < ringCost) return { ok: false, msg: `Kos pertunangan & kenduri kahwin ialah ${Utils.formatMoney(ringCost, s.countryId)}.` };
-      s.money -= ringCost;
-      s.married = true;
-      rel.role = rel.gender === 'female' ? 'Isteri' : 'Suami';
-      rel.closeness = 100;
-      GameState.adjustStats({ happiness: 24, adaptation: 12 });
-      GameState.addJournalEntry(
-        `💍 Anda selamat diijabkabulkan dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!`,
-        'romance'
-      );
-      GameState.save();
-      return { ok: true, msg: `Tahniah! Selamat pengantin baru bersama ${rel.name}!` };
-    }
-
-    if (action === 'have_kid') {
-      if (s.age < 18) return { ok: false, msg: 'Tunggu sehingga dewasa!' };
-      if (s.yearlyActions.had_kid) return { ok: false, msg: 'Anda sudah menimang cahaya mata tahun ini!' };
-      s.yearlyActions.had_kid = true;
-      const kidGender = Utils.chance(0.5) ? 'male' : 'female';
-      const heritage = Utils.pick(c.heritages).id;
-      const kidName = Utils.generateName(s.countryId, kidGender, heritage);
-      s.relationships.push({
-        id: 'rel_kid_' + Date.now(),
-        name: kidName,
-        role: kidGender === 'male' ? 'Anak Lelaki' : 'Anak Perempuan',
-        gender: kidGender,
-        age: 0,
-        countryId: s.countryId,
-        closeness: 100,
-        alive: true,
-        job: 'Bayi'
-      });
-      GameState.adjustStats({ happiness: 22 });
-      GameState.addJournalEntry(
-        `👶 Tahniah! Anda dan ${rel.name} menimang cahaya mata ${kidGender === 'male' ? 'lelaki' : 'perempuan'}, ${kidName}, lahir di ${s.city}, ${c.name} ${c.flag}!`,
-        'milestone'
-      );
-      GameState.save();
-      return { ok: true, msg: `Bayi ${kidName} selamat dilahirkan!` };
-    }
-
-    if (action === 'breakup') {
-      s.partnerId = null;
-      s.married = false;
-      rel.role = 'Bekas Pasangan';
-      rel.closeness = 15;
-      GameState.adjustStats({ happiness: -12 });
-      GameState.addJournalEntry(`💔 Anda dan ${rel.name} membawa haluan masing-masing.`, 'warning');
-      GameState.save();
-      return { ok: true, msg: `Hubungan dengan ${rel.name} berakhir.` };
-    }
-
-    return { ok: false, msg: 'Tindakan tidak dikenali.' };
+  adoptChild() {
+    return Relationships.adoptChild();
   },
 
   visitDoctor(isPrivate = false) {
@@ -928,5 +972,34 @@ window.Sim = {
       GameState.save();
       return { ok: false, msg: `Gagal ${localTestName}! Cuba lagi.` };
     }
+  },
+
+  doSpiritualPractice() {
+    const s = GameState.current;
+    GameState.ensureUpgradedState();
+    if (s.yearlyActions.spiritualPractice) {
+      return { ok: false, msg: 'Anda sudah meluangkan masa untuk amalan jiwa & kebajikan tahun ini.' };
+    }
+    const b = GameState.getBeliefObj(s.belief);
+    const charityCost = s.age >= 18 ? Utils.usdToLocal(35, s.countryId) : 0;
+    if (s.age >= 18 && s.money < charityCost) {
+      // Boleh lakukan tanpa derma tunai jika poket sempit
+      s.yearlyActions.spiritualPractice = true;
+      s.devotion = Utils.clamp((s.devotion || 40) + Utils.randInt(6, 12), 0, 100);
+      GameState.adjustStats({ happiness: 7, health: 3 });
+      GameState.addJournalEntry(`${b.icon} ${b.practiceTitle}: Anda menenangkan fikiran dan mengukuhkan ketahanan jiwa.`, 'spiritual');
+      GameState.save();
+      return { ok: true, msg: `Jiwa lebih tenang (${b.name})!` };
+    }
+    if (charityCost > 0) s.money -= charityCost;
+    s.yearlyActions.spiritualPractice = true;
+    s.devotion = Utils.clamp((s.devotion || 40) + Utils.randInt(8, 15), 0, 100);
+    GameState.adjustStats({ happiness: 10, health: 3, smarts: b.isReligious ? 1 : 3 });
+    GameState.addJournalEntry(
+      `${b.icon} ${b.practiceTitle}${charityCost > 0 ? ` (${b.charityLabel}: ${Utils.formatMoney(charityCost, s.countryId)})` : ''}: Hati terasa lapang dan ketahanan emosi anda semakin teguh.`,
+      'spiritual'
+    );
+    GameState.save();
+    return { ok: true, msg: `${b.practiceTitle} selesai! Ketahanan jiwa meningkat.` };
   }
 };
