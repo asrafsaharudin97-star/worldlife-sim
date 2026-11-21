@@ -596,7 +596,9 @@ window.GameState = {
             {
               type: 'culture',
               text: report
-                ? `📜 Penyata Harta Pusaka (${report.systemLabel}): Anda mewarisi bahagian tepat sebanyak ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}.`
+                ? (report.isIslamic && child.isAdopted
+                    ? `📜 Penyata Harta Pusaka (${report.systemLabel}): Sebagai anak angkat (bukan waris Faraid), anda menerima peruntukan Hibah Anak Angkat berjumlah ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}.`
+                    : `📜 Penyata Harta Pusaka (${report.systemLabel}): Anda mewarisi bahagian tepat sebanyak ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}${report.isIslamic && report.hibahAnakAngkatAmount > 0 ? ` (selepas peruntukan Hibah Anak Angkat sebanyak ${Utils.formatMoney(Utils.convertMoney(report.hibahAnakAngkatAmount, parent.countryId, cId), cId)})` : ''}.`)
                 : `💰 Anda mewarisi ${Utils.formatMoney(shareLocal, cId)} daripada harta pusaka ${parent.name}!`
             }
           ]

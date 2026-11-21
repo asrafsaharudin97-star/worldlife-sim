@@ -700,6 +700,7 @@ window.LegalInheritanceEngine = {
       ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive
     );
     const bioKids = allLivingKids.filter(k => !k.isAdopted);
+    const adoptedKids = allLivingKids.filter(k => k.isAdopted);
     const livingSiblings = (s.relationships || []).filter(r =>
       ['Abang', 'Kakak', 'Adik/Abang', 'Adik/Kakak'].includes(r.role) && r.alive
     );
@@ -707,6 +708,9 @@ window.LegalInheritanceEngine = {
     const shares = [];
     let wasiatAmount = 0;
     let wasiatLabel = 'Tiada Wasiat';
+    let hibahAnakAngkatAmount = 0;
+    let hibahAnakAngkatPct = 0;
+    let hibahAnakAngkatLabel = null;
     let estateTaxRate = 0;
     let estateTaxAmount = 0;
     let distributableEstate = netEstate;
@@ -719,7 +723,19 @@ window.LegalInheritanceEngine = {
         wasiatAmount = Math.round(netEstate * cappedFrac);
         wasiatLabel = `Wasiat Islam (${wasiatPct}% — ${s.wasiat.islamicBeneficiary || 'Wakaf & Kebajikan'})`;
       }
-      distributableEstate = Math.max(0, netEstate - wasiatAmount);
+      const afterWasiat = Math.max(0, netEstate - wasiatAmount);
+
+      // Hibah Anak Angkat (Khas untuk watak Islam: Anak angkat bukan waris Faraid,
+      // maka diperuntukkan Hibah Anak Angkat 8%–10% daripada baki harta bersih sebelum agihan Faraid)
+      if (adoptedKids.length > 0 && afterWasiat > 0) {
+        hibahAnakAngkatPct = adoptedKids.length === 1 ? 8 : 10;
+        const pctPool = Math.round(afterWasiat * (hibahAnakAngkatPct / 100));
+        const minSupportFloor = Math.min(Math.round(afterWasiat * 0.10), Utils.usdToLocal(1000, s.countryId) * adoptedKids.length);
+        hibahAnakAngkatAmount = Math.max(pctPool, minSupportFloor);
+        hibahAnakAngkatLabel = `Hibah Anak Angkat (${hibahAnakAngkatPct}% — ${adoptedKids.length} anak angkat)`;
+      }
+
+      distributableEstate = Math.max(0, afterWasiat - hibahAnakAngkatAmount);
 
       const hasKids = bioKids.length > 0;
       let fixedEntries = [];
@@ -854,17 +870,21 @@ window.LegalInheritanceEngine = {
         }
       }
 
-      // Anak angkat (bukan waris Faraid, tetapi boleh terima melalui Wasiat atau sambung legasi)
-      const adoptedKids = allLivingKids.filter(k => k.isAdopted);
+      // Anak angkat (bukan waris Faraid — menerima peruntukan Hibah Anak Angkat sebelum Faraid)
+      const perAdoptedHibah = adoptedKids.length > 0 ? Math.round(hibahAnakAngkatAmount / adoptedKids.length) : 0;
+      const perAdoptedPct = adoptedKids.length > 0 ? Math.round((hibahAnakAngkatPct / adoptedKids.length) * 10) / 10 : 0;
       for (const ak of adoptedKids) {
         shares.push({
           id: ak.id,
           name: ak.name,
-          role: `${ak.role} (Angkat)`,
+          role: `${ak.role} (Anak Angkat)`,
           fraction: 0,
-          fractionLabel: 'Bukan Waris Faraid (Pusaka Keluarga)',
-          pct: 0,
-          amount: 0,
+          isHibah: true,
+          fractionLabel: perAdoptedHibah > 0
+            ? 'Hibah Anak Angkat (Bukan Waris Faraid)'
+            : 'Bukan Waris Faraid (0%)',
+          pct: perAdoptedPct,
+          amount: perAdoptedHibah,
           isPlayableHeir: true,
           isEntity: false
         });
@@ -1071,6 +1091,9 @@ window.LegalInheritanceEngine = {
       netEstate,
       wasiatAmount,
       wasiatLabel,
+      hibahAnakAngkatAmount,
+      hibahAnakAngkatPct,
+      hibahAnakAngkatLabel,
       estateTaxRate: Math.round(estateTaxRate * 100),
       estateTaxAmount,
       distributableEstate,

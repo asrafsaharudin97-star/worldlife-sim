@@ -1361,9 +1361,10 @@ window.Modals = {
           Tolak Hutang &amp; Gadai Janji: <strong style="color:#dc2626;">-${fmt(report.totalDebts)}</strong><br/>
           <strong>Harta Pusaka Bersih: ${fmt(report.netEstate)}</strong><br/>
           ${report.isIslamic && report.wasiatAmount > 0 ? `Tolak ${Utils.escapeHtml(report.wasiatLabel)}: <strong>-${fmt(report.wasiatAmount)}</strong><br/>` : ''}
+          ${report.isIslamic && report.hibahAnakAngkatAmount > 0 ? `Tolak ${Utils.escapeHtml(report.hibahAnakAngkatLabel || 'Hibah Anak Angkat')}: <strong style="color:#0284c7;">-${fmt(report.hibahAnakAngkatAmount)}</strong><br/>` : ''}
           ${!report.isIslamic && report.estateTaxAmount > 0 ? `Tolak Cukai Pusaka ${Utils.escapeHtml(report.countryName)} (${report.estateTaxRate}%): <strong style="color:#dc2626;">-${fmt(report.estateTaxAmount)}</strong><br/>` : ''}
           ${!report.isIslamic ? `Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>` : ''}
-          <strong>Jumlah Diagihkan Kepada Waris: ${fmt(report.distributableEstate)}</strong>
+          <strong>Jumlah Diagihkan Kepada Waris${report.isIslamic ? ' Faraid' : ''}: ${fmt(report.distributableEstate)}</strong>
         </div>
 
         <div class="section-heading">🧾 Pecahan Agihan Harta Pusaka</div>
