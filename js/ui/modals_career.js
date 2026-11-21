@@ -51,7 +51,23 @@ window.CareerModals = {
   // TAB 1: PASARAN KERJA RAWAK DINAMIK & PENGURUSAN KERJAYA AKTIF
   // --------------------------------------------------------------------------
   _renderJobsTab(s, c) {
-    let html = '';
+    const activeStudy = s.education && s.education.activeStudy;
+    const certCount = (s.education && Array.isArray(s.education.certificates)) ? s.education.certificates.length : 0;
+    let html = `
+      <div class="info-banner highlight" style="margin-bottom:10px;">
+        <strong>📚 Pendidikan &amp; Kursus Profesional</strong><br/>
+        <small style="opacity:0.88;">
+          ${activeStudy
+            ? `Pengajian aktif: <strong>${Utils.escapeHtml(activeStudy.fieldName)}</strong> (Tahun ${activeStudy.yearsCompleted}/${activeStudy.totalYears}) • `
+            : 'Anda boleh sambung pengajian (Diploma/Ijazah/Master/PhD) atau ambil Kursus Profesional walaupun sedang bekerja atau dalam Mod Khas! • '}
+          Sijil dimiliki: <strong>${certCount}</strong>
+        </small>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button type="button" class="secondary-btn" id="btn-jobs-open-edu" style="flex:1;min-width:140px;padding:7px 10px;font-size:12.5px;">🎓 Sambung Pengajian (PhD)</button>
+          <button type="button" class="secondary-btn" id="btn-jobs-open-certs" style="flex:1;min-width:140px;padding:7px 10px;font-size:12.5px;">📜 Kursus Profesional</button>
+        </div>
+      </div>
+    `;
 
     if (s.job) {
       const ladder = Array.isArray(s.job.ladder) ? s.job.ladder : [s.job.title];
@@ -460,6 +476,12 @@ window.CareerModals = {
     });
 
     if (tab === 'jobs') {
+      const openEduBtn = document.getElementById('btn-jobs-open-edu');
+      if (openEduBtn) openEduBtn.addEventListener('click', () => this.showHub('education'));
+
+      const openCertsBtn = document.getElementById('btn-jobs-open-certs');
+      if (openCertsBtn) openCertsBtn.addEventListener('click', () => this.showHub('certs'));
+
       const workBtn = document.getElementById('act-work-hard');
       if (workBtn) workBtn.addEventListener('click', () => {
         const res = Sim.workHarder();

@@ -204,21 +204,28 @@ window.EduCareerEngine = {
       }
     }
 
-    // Jika Sepenuh Masa dan sedang bekerja, beri tahu atau lepaskan kerja
-    if (mode === 'full_time' && s.job) {
+    // Jika sedang dalam Mod Khas, kekalkan Mod Khas dan jalani pengajian secara Separuh Masa
+    let effectiveMode = mode;
+    if (s.activeSpecialMode && effectiveMode === 'full_time') {
+      effectiveMode = 'part_time';
+    }
+    const finalTotalYears = this.getProgramDuration(s, level, fieldId, effectiveMode);
+
+    // Jika Sepenuh Masa dan sedang bekerja biasa, beri tahu atau lepaskan kerja
+    if (effectiveMode === 'full_time' && s.job) {
       GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title} untuk fokus pengajian Sepenuh Masa.`, 'culture');
       s.job = null;
     }
 
-    const baseGpa = Utils.clamp(2.4 + (s.stats.smarts / 60), 2.5, 3.95);
+    const baseGpa = Math.max(2.5, Math.min(3.95, 2.4 + (s.stats.smarts / 60)));
     s.education.activeStudy = {
       level,
       field: fieldId,
       fieldName: fieldObj ? fieldObj.name : 'Pendidikan Am',
       institution: instName,
       yearsCompleted: 0,
-      totalYears,
-      mode,
+      totalYears: finalTotalYears,
+      mode: effectiveMode,
       funding,
       fundingLabel,
       annualTuition,
@@ -227,16 +234,18 @@ window.EduCareerEngine = {
     };
     s.education.stage = level === 'high_school' ? 'adult_school' : 'university';
     s.education.universityName = instName;
-    s.education.uniYearsLeft = totalYears;
+    s.education.uniYearsLeft = finalTotalYears;
 
-    const modeTxt = mode === 'part_time' ? 'Separuh Masa (Sambil Bekerja)' : 'Sepenuh Masa';
+    const modeTxt = effectiveMode === 'part_time'
+      ? (s.activeSpecialMode ? 'Separuh Masa (Sambil Mod Khas)' : 'Separuh Masa (Sambil Bekerja)')
+      : 'Sepenuh Masa';
     GameState.addJournalEntry(
-      `🎓 Anda mendaftar ${prog.title}${fieldObj ? ` (${fieldObj.name})` : ''} di ${instName}, ${c.name} ${c.flag} — ${modeTxt}, ${totalYears} tahun (${fundingLabel})!`,
+      `🎓 Anda mendaftar ${prog.title}${fieldObj ? ` (${fieldObj.name})` : ''} di ${instName}, ${c.name} ${c.flag} — ${modeTxt}, ${finalTotalYears} tahun (${fundingLabel})!`,
       'milestone'
     );
     GameState.adjustStats({ happiness: 8, smarts: 3 });
     GameState.save();
-    return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${totalYears} tahun, ${fundingLabel})!` };
+    return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${finalTotalYears} tahun, ${fundingLabel})!` };
   },
 
   studyHarder() {
