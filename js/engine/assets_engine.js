@@ -6,6 +6,20 @@
 window.AssetsEngine = {
   MAX_MARKET_REFRESHES: 2,
 
+  PROPERTY_LEMON_FLAWS: [
+    'Struktur retak / kawasan banjir kerap',
+    'Pemaju bermasalah & sistem perpaipan bocor teruk',
+    'Mendapan tanah & kerosakan pendawaian tersembunyi',
+    'Masalah anai-anai kritikal & bumbung reput'
+  ],
+
+  VEHICLE_LEMON_FLAWS: [
+    'Kereta banjir / enjin bermasalah',
+    'Kotak gear (gearbox) rosak & casis pernah kemalangan teruk',
+    'Sistem elektronik &ECU bermasalah kronik',
+    'Odometer diputar & kebocoran enjin tersembunyi'
+  ],
+
   ensureFields(s) {
     if (!s) return;
     if (!s.assets || typeof s.assets !== 'object') {
@@ -15,6 +29,7 @@ window.AssetsEngine = {
     if (!Array.isArray(s.assets.vehicles)) s.assets.vehicles = [];
     if (!Array.isArray(s.assets.collectibles)) s.assets.collectibles = [];
     if (!s.assets.portfolio || typeof s.assets.portfolio !== 'object') s.assets.portfolio = {};
+    if (typeof s.assets.unpaidTaxDebt !== 'number') s.assets.unpaidTaxDebt = 0;
 
     // Kekalkan medan ringkas untuk setiap hartanah/kenderaan lama
     s.assets.properties.forEach((p, idx) => {
@@ -25,11 +40,18 @@ window.AssetsEngine = {
       if (typeof p.rented !== 'boolean') p.rented = false;
       if (typeof p.yieldPct !== 'number') p.yieldPct = 5.5;
       if (typeof p.purchasePrice !== 'number') p.purchasePrice = p.value || 0;
+      if (typeof p.purchasedYear !== 'number') p.purchasedYear = s.year || 2026;
+      if (typeof p.yearsHeld !== 'number') p.yearsHeld = Math.max(0, (s.year || 2026) - p.purchasedYear);
+      if (typeof p.isLemon !== 'boolean') p.isLemon = false;
+      if (typeof p.lemonRevealed !== 'boolean') p.lemonRevealed = Boolean(p.isLemon);
     });
     s.assets.vehicles.forEach((v, idx) => {
       if (!v.uid) v.uid = `veh_mig_${idx}_${Date.now()}`;
       if (typeof v.condition !== 'number') v.condition = 82;
       if (typeof v.purchasePrice !== 'number') v.purchasePrice = v.value || 0;
+      if (typeof v.purchasedYear !== 'number') v.purchasedYear = s.year || 2026;
+      if (typeof v.isLemon !== 'boolean') v.isLemon = false;
+      if (typeof v.lemonRevealed !== 'boolean') v.lemonRevealed = Boolean(v.isLemon);
     });
 
     if (!s.assetMarket || typeof s.assetMarket !== 'object') {
@@ -218,9 +240,149 @@ window.AssetsEngine = {
   },
 
   // --------------------------------------------------------------------------
-  // 2. TINDAKAN HARTANAH (TUNAI / PINJAMAN BANK, SEWA, UBAH SUAI, BAIKI, JUAL)
+  // 1B. LOGIK "ASET BUSUK" (LEMON) & PRATONTON POTONGAN JUALAN ASET
   // --------------------------------------------------------------------------
-  buyProperty(listingId, useMortgage = false) {
+  revealLemonAsset(s, asset, assetType = 'property') {
+    if (!asset || !asset.isLemon || asset.lemonRevealed) return null;
+    asset.lemonRevealed = true;
+    const dropPct = Utils.randInt(20, 35);
+    const oldVal = asset.value || asset.purchasePrice || 0;
+    asset.value = Math.max(500, Math.round(oldVal * (1 - dropPct / 100)));
+    const upkeepMult = Number((1.5 + Math.random() * 0.5).toFixed(2));
+    asset.upkeep = Math.round((asset.upkeep || Math.round(oldVal * 0.02)) * upkeepMult);
+    asset.condition = Utils.clamp((asset.condition || 75) - Utils.randInt(12, 22), 10, 100);
+
+    const warnMsg = `⚠️ ASET BUSUK TERBONGKAR! ${asset.icon || '⚠️'} ${asset.name} yang anda beli didapati mempunyai kecacatan tersembunyi (${asset.lemonFlaw || 'kerosakan struktur/mekanikal'})! Nilai pasaran jatuh mendadak -${dropPct}% kepada ${Utils.formatMoney(asset.value, s.countryId)} dan kos penyelenggaraan meningkat ${upkeepMult}x.`;
+    GameState.adjustStats({ happiness: -10 });
+    if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + 8, 0, 100);
+    GameState.addJournalEntry(warnMsg, 'warning');
+    return warnMsg;
+  },
+
+  previewAssetSale(s, assetType, uidOrInstId, sellFraction = 1) {
+    this.ensureFields(s);
+    if (assetType === 'property') {
+      const p = s.assets.properties.find(x => x.uid === uidOrInstId);
+      if (!p) return null;
+      const grossPrice = Math.max(0, Math.round(p.value || 0));
+      const yearsHeld = Math.max(0, typeof p.yearsHeld === 'number' ? p.yearsHeld : ((s.year || 2026) - (p.purchasedYear || s.year || 2026)));
+      const legalFeePct = 2.0;
+      const ckhtPct = yearsHeld < 5 ? 5.0 : 3.5;
+      const legalFee = Math.round(grossPrice * (legalFeePct / 100));
+      const ckhtTax = Math.round(grossPrice * (ckhtPct / 100));
+      const totalFeesAndTaxes = legalFee + ckhtTax;
+      const mortgagePayoff = Math.max(0, Math.round(p.mortgage || 0));
+      const netProceeds = grossPrice - totalFeesAndTaxes - mortgagePayoff;
+
+      return {
+        assetType: 'property',
+        uid: p.uid,
+        name: p.name,
+        icon: p.icon || '🏠',
+        isLemon: Boolean(p.isLemon && p.lemonRevealed),
+        lemonFlaw: p.lemonFlaw || null,
+        yearsHeld,
+        grossPrice,
+        legalFeePct,
+        legalFee,
+        taxPct: ckhtPct,
+        taxLabel: `Cukai Jualan / CKHT (${ckhtPct.toFixed(1)}%${yearsHeld < 5 ? ' • Pegangan < 5 thn' : ' • Pegangan ≥ 5 thn'})`,
+        saleTax: ckhtTax,
+        totalFeesAndTaxes,
+        mortgagePayoff,
+        netProceeds
+      };
+    }
+
+    if (assetType === 'vehicle') {
+      const v = s.assets.vehicles.find(x => x.uid === uidOrInstId);
+      if (!v) return null;
+      const grossPrice = Math.max(0, Math.round(v.value || 0));
+      const taxPct = 2.5;
+      const saleTax = Math.round(grossPrice * (taxPct / 100));
+      return {
+        assetType: 'vehicle',
+        uid: v.uid,
+        name: v.name,
+        icon: v.icon || '🚗',
+        isLemon: Boolean(v.isLemon && v.lemonRevealed),
+        lemonFlaw: v.lemonFlaw || null,
+        grossPrice,
+        legalFeePct: 0,
+        legalFee: 0,
+        taxPct,
+        taxLabel: 'Cukai Jualan Aset (2.5%)',
+        saleTax,
+        totalFeesAndTaxes: saleTax,
+        mortgagePayoff: 0,
+        netProceeds: grossPrice - saleTax
+      };
+    }
+
+    if (assetType === 'collectible') {
+      const col = s.assets.collectibles.find(x => x.uid === uidOrInstId);
+      if (!col) return null;
+      const grossPrice = Math.max(0, Math.round(col.value || 0));
+      const taxPct = 2.5;
+      const saleTax = Math.round(grossPrice * (taxPct / 100));
+      return {
+        assetType: 'collectible',
+        uid: col.uid,
+        name: col.name,
+        icon: col.icon || '💎',
+        isLemon: false,
+        grossPrice,
+        legalFeePct: 0,
+        legalFee: 0,
+        taxPct,
+        taxLabel: 'Cukai Jualan Aset (2.5%)',
+        saleTax,
+        totalFeesAndTaxes: saleTax,
+        mortgagePayoff: 0,
+        netProceeds: grossPrice - saleTax
+      };
+    }
+
+    if (assetType === 'investment') {
+      const pos = s.assets.portfolio[uidOrInstId];
+      if (!pos || pos.units <= 0) return null;
+      const inst = AssetsData.INVESTMENTS.find(x => x.id === uidOrInstId);
+      const mPrice = (s.assetMarket.invPrices[uidOrInstId] && s.assetMarket.invPrices[uidOrInstId].price)
+        || this._scaleUsdToLocal(inst ? inst.baseUnitUsd : 100, s.countryId, false);
+      const frac = Math.max(0.05, Math.min(1, Number(sellFraction) || 1));
+      const unitsSold = pos.units * frac;
+      const grossPrice = Math.round(unitsSold * mPrice);
+      const costPortion = Math.round(pos.totalCost * frac);
+      const taxPct = 2.5;
+      const saleTax = Math.round(grossPrice * (taxPct / 100));
+      const netProceeds = grossPrice - saleTax;
+      return {
+        assetType: 'investment',
+        instId: uidOrInstId,
+        sellFraction: frac,
+        name: `${inst ? inst.name : uidOrInstId} (${Math.round(frac * 100)}%)`,
+        icon: inst ? inst.icon : '📈',
+        grossPrice,
+        costPortion,
+        profitBeforeTax: grossPrice - costPortion,
+        legalFeePct: 0,
+        legalFee: 0,
+        taxPct,
+        taxLabel: 'Cukai Jualan Aset (2.5%)',
+        saleTax,
+        totalFeesAndTaxes: saleTax,
+        mortgagePayoff: 0,
+        netProceeds
+      };
+    }
+
+    return null;
+  },
+
+  // --------------------------------------------------------------------------
+  // 2. TINDAKAN HARTANAH (TUNAI / PINJAMAN BANK, INSPEKSI, SEWA, UBAH SUAI, BAIKI, JUAL)
+  // --------------------------------------------------------------------------
+  buyProperty(listingId, useMortgage = false, opts = {}) {
     const s = GameState.current;
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membeli hartanah dari penjara.' };
@@ -228,6 +390,9 @@ window.AssetsEngine = {
 
     const item = s.assetMarket.properties.find(x => x.lid === listingId);
     if (!item) return { ok: false, msg: 'Penyenaraian hartanah tidak ditemui.' };
+
+    const useInspection = Boolean(opts && opts.useInspection);
+    const inspectionFee = useInspection ? Math.max(100, Math.round(item.price * 0.01)) : 0;
 
     let downPay = item.price;
     let mortgage = 0;
@@ -243,11 +408,18 @@ window.AssetsEngine = {
       annualMortgage = Math.round((mortgage / 20) * 1.18); // tempoh 20 tahun termasuk kadar faedah/keuntungan
     }
 
-    if (s.money < downPay) {
-      return { ok: false, msg: `Baki tidak mencukupi! Perlukan ${Utils.formatMoney(downPay, s.countryId)} (${useMortgage ? 'Deposit 20%' : 'Tunai penuh'}).` };
+    const totalUpfront = downPay + inspectionFee;
+    if (s.money < totalUpfront) {
+      return { ok: false, msg: `Baki tidak mencukupi! Perlukan ${Utils.formatMoney(totalUpfront, s.countryId)} (${useMortgage ? 'Deposit 20%' : 'Tunai penuh'}${useInspection ? ' + Inspeksi 1%' : ''}).` };
     }
 
-    s.money -= downPay;
+    s.money -= totalUpfront;
+
+    // Risiko "Aset Busuk" (15%–20% peluang tersembunyi; turun kepada ~3% jika mengupah pemeriksa/inspeksi!)
+    const lemonProb = useInspection ? 0.03 : 0.18;
+    const isLemon = (typeof opts.forceLemon === 'boolean') ? opts.forceLemon : Utils.chance(lemonProb);
+    const lemonFlaw = isLemon ? Utils.pick(this.PROPERTY_LEMON_FLAWS) : null;
+
     const prop = {
       uid: `prop_${Date.now()}_${Utils.randInt(10, 99)}`,
       tplId: item.tplId,
@@ -263,6 +435,12 @@ window.AssetsEngine = {
       yieldPct: item.yieldPct,
       upkeep: Math.round(item.price * ((item.upkeepPct || 1.5) / 100)),
       prestige: item.prestige || 0,
+      purchasedYear: s.year,
+      yearsHeld: 0,
+      isLemon,
+      lemonFlaw,
+      lemonRevealed: false,
+      inspected: useInspection,
       countryId: s.countryId
     };
     s.assets.properties.push(prop);
@@ -270,12 +448,26 @@ window.AssetsEngine = {
 
     if (item.prestige >= 7 && window.Dynasty) Dynasty.adjustReputation(Math.min(6, Math.round(item.prestige / 3)));
     GameState.adjustStats({ happiness: 10 });
+    const inspNote = useInspection ? ` (Termasuk Inspeksi ${Utils.formatMoney(inspectionFee, s.countryId)})` : '';
     GameState.addJournalEntry(
-      `🏠 Anda membeli ${prop.icon} ${prop.name} bernilai ${Utils.formatMoney(prop.value, s.countryId)} secara ${useMortgage ? `Pinjaman Bank (Deposit ${Utils.formatMoney(downPay, s.countryId)})` : 'Bayar Tunai'}!`,
+      `🏠 Anda membeli ${prop.icon} ${prop.name} bernilai ${Utils.formatMoney(prop.value, s.countryId)} secara ${useMortgage ? `Pinjaman Bank (Deposit ${Utils.formatMoney(downPay, s.countryId)})` : 'Bayar Tunai'}${inspNote}!`,
       'milestone'
     );
+
+    // Dedahkan kecacatan sejurus selepas pembelian (55% peluang) atau pada Age-Up seterusnya
+    let lemonMsg = null;
+    if (isLemon && (opts.revealImmediately || Utils.chance(0.55))) {
+      lemonMsg = this.revealLemonAsset(s, prop, 'property');
+    }
+
     GameState.save();
-    return { ok: true, msg: `Tahniah! Anda kini memiliki ${prop.name}!` };
+    return {
+      ok: true,
+      prop,
+      isLemon,
+      lemonRevealed: prop.lemonRevealed,
+      msg: lemonMsg || `Tahniah! Anda kini memiliki ${prop.name}!`
+    };
   },
 
   toggleRentProperty(uid) {
@@ -333,21 +525,25 @@ window.AssetsEngine = {
     const idx = s.assets.properties.findIndex(x => x.uid === uid);
     if (idx < 0) return { ok: false, msg: 'Hartanah tidak ditemui.' };
     const p = s.assets.properties[idx];
-    const netProceeds = p.value - (p.mortgage || 0);
-    s.money += netProceeds;
+    const prev = this.previewAssetSale(s, 'property', uid);
+    s.money += prev.netProceeds;
     s.assets.properties.splice(idx, 1);
     GameState.addJournalEntry(
-      `💵 Anda menjual ${p.name} pada harga ${Utils.formatMoney(p.value, s.countryId)}${p.mortgage > 0 ? ` (tolak baki pinjaman ${Utils.formatMoney(p.mortgage, s.countryId)})` : ''} — tunai bersih ${Utils.formatMoney(netProceeds, s.countryId)}.`,
+      `💵 Jualan Hartanah (${p.name}): Harga Kasar ${Utils.formatMoney(prev.grossPrice, s.countryId)} — Potongan Yuran Guaman & S&P (2.0%: -${Utils.formatMoney(prev.legalFee, s.countryId)}), Cukai Jualan/CKHT (${prev.taxPct.toFixed(1)}%: -${Utils.formatMoney(prev.saleTax, s.countryId)})${prev.mortgagePayoff > 0 ? `, Pelunasan Pinjaman (-${Utils.formatMoney(prev.mortgagePayoff, s.countryId)})` : ''} → Tunai Bersih Diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)}.`,
       'milestone'
     );
     GameState.save();
-    return { ok: true, msg: `Terjual! Tunai bersih ${Utils.formatMoney(netProceeds, s.countryId)}.` };
+    return {
+      ok: true,
+      breakdown: prev,
+      msg: `Terjual! Tunai bersih diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)} (selepas Yuran S&P & CKHT).`
+    };
   },
 
   // --------------------------------------------------------------------------
-  // 3. TINDAKAN KENDERAAN (BELI BAHARU/TERPAKAI, SERVIS & JUAL)
+  // 3. TINDAKAN KENDERAAN (BELI BAHARU/TERPAKAI, INSPEKSI, SERVIS & JUAL)
   // --------------------------------------------------------------------------
-  buyVehicle(listingId, isUsed = false) {
+  buyVehicle(listingId, isUsed = false, opts = {}) {
     const s = GameState.current;
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membeli kenderaan dari penjara.' };
@@ -356,9 +552,22 @@ window.AssetsEngine = {
     const arr = isUsed ? s.assetMarket.vehiclesUsed : s.assetMarket.vehiclesNew;
     const item = arr.find(x => x.lid === listingId);
     if (!item) return { ok: false, msg: 'Kenderaan tidak ditemui.' };
-    if (s.money < item.price) return { ok: false, msg: `Perlukan ${Utils.formatMoney(item.price, s.countryId)}.` };
 
-    s.money -= item.price;
+    const useInspection = Boolean(opts && opts.useInspection);
+    const inspectionFee = useInspection ? Math.max(50, Math.round(item.price * 0.01)) : 0;
+    const totalCost = item.price + inspectionFee;
+
+    if (s.money < totalCost) {
+      return { ok: false, msg: `Perlukan ${Utils.formatMoney(totalCost, s.countryId)}${useInspection ? ' (termasuk Inspeksi 1%)' : ''}.` };
+    }
+
+    s.money -= totalCost;
+
+    // Risiko "Aset Busuk" (15%–20% peluang; turun ke ~3% jika mengupah pemeriksa/inspeksi!)
+    const lemonProb = useInspection ? 0.03 : 0.18;
+    const isLemon = (typeof opts.forceLemon === 'boolean') ? opts.forceLemon : Utils.chance(lemonProb);
+    const lemonFlaw = isLemon ? Utils.pick(this.VEHICLE_LEMON_FLAWS) : null;
+
     const veh = {
       uid: `veh_${Date.now()}_${Utils.randInt(10, 99)}`,
       tplId: item.tplId,
@@ -372,7 +581,12 @@ window.AssetsEngine = {
       upkeep: Math.round(item.price * ((item.upkeepPct || 5) / 100)),
       depRate: item.depRate,
       looksBonus: item.looksBonus || 0,
-      classic: Boolean(item.classic)
+      classic: Boolean(item.classic),
+      purchasedYear: s.year,
+      isLemon,
+      lemonFlaw,
+      lemonRevealed: false,
+      inspected: useInspection
     };
     s.assets.vehicles.push(veh);
     if (isUsed) s.assetMarket.vehiclesUsed = s.assetMarket.vehiclesUsed.filter(x => x.lid !== listingId);
@@ -380,9 +594,22 @@ window.AssetsEngine = {
 
     if (veh.looksBonus > 0) GameState.adjustStats({ looks: Math.min(8, veh.looksBonus), happiness: 10 });
     if (veh.looksBonus >= 10 && window.Dynasty) Dynasty.adjustReputation(4);
-    GameState.addJournalEntry(`🚗 Anda membeli ${veh.icon} ${veh.name} (${isUsed ? 'Terpakai' : 'Baharu'}) pada harga ${Utils.formatMoney(veh.value, s.countryId)}!`, 'milestone');
+    const inspNote = useInspection ? ` (Termasuk Inspeksi ${Utils.formatMoney(inspectionFee, s.countryId)})` : '';
+    GameState.addJournalEntry(`🚗 Anda membeli ${veh.icon} ${veh.name} (${isUsed ? 'Terpakai' : 'Baharu'}) pada harga ${Utils.formatMoney(veh.value, s.countryId)}${inspNote}!`, 'milestone');
+
+    let lemonMsg = null;
+    if (isLemon && (opts.revealImmediately || Utils.chance(0.55))) {
+      lemonMsg = this.revealLemonAsset(s, veh, 'vehicle');
+    }
+
     GameState.save();
-    return { ok: true, msg: `Tahniah! ${veh.name} kini milik anda!` };
+    return {
+      ok: true,
+      veh,
+      isLemon,
+      lemonRevealed: veh.lemonRevealed,
+      msg: lemonMsg || `Tahniah! ${veh.name} kini milik anda!`
+    };
   },
 
   maintainVehicle(uid) {
@@ -404,15 +631,22 @@ window.AssetsEngine = {
     const idx = s.assets.vehicles.findIndex(x => x.uid === uid);
     if (idx < 0) return { ok: false, msg: 'Kenderaan tidak ditemui.' };
     const v = s.assets.vehicles[idx];
-    s.money += v.value;
+    const prev = this.previewAssetSale(s, 'vehicle', uid);
+    s.money += prev.netProceeds;
     s.assets.vehicles.splice(idx, 1);
-    GameState.addJournalEntry(`💵 Anda menjual ${v.name} dengan harga ${Utils.formatMoney(v.value, s.countryId)}.`);
+    GameState.addJournalEntry(
+      `💵 Jualan Kenderaan (${v.name}): Harga Kasar ${Utils.formatMoney(prev.grossPrice, s.countryId)} — Potongan Cukai Jualan Aset (2.5%: -${Utils.formatMoney(prev.saleTax, s.countryId)}) → Tunai Bersih Diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)}.`
+    );
     GameState.save();
-    return { ok: true, msg: `Terjual dengan harga ${Utils.formatMoney(v.value, s.countryId)}!` };
+    return {
+      ok: true,
+      breakdown: prev,
+      msg: `Terjual! Tunai bersih diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)} (selepas Cukai Jualan 2.5%).`
+    };
   },
 
   // --------------------------------------------------------------------------
-  // 4. TINDAKAN PELABURAN (BELI / JUAL 25% / 50% / 100% / AMAUN + UNTUNG/RUGI %)
+  // 4. TINDAKAN PELABURAN (BELI / JUAL 25% / 50% / 100% / AMAUN + CUKAI JUALAN 2.5%)
   // --------------------------------------------------------------------------
   buyInvestment(instId, amountLocal) {
     const s = GameState.current;
@@ -444,16 +678,15 @@ window.AssetsEngine = {
     const pos = s.assets.portfolio[instId];
     if (!pos || pos.units <= 0) return { ok: false, msg: 'Anda tidak memegang pelaburan ini.' };
     const inst = AssetsData.INVESTMENTS.find(x => x.id === instId);
-    const mPrice = (s.assetMarket.invPrices[instId] && s.assetMarket.invPrices[instId].price)
-      || this._scaleUsdToLocal(inst ? inst.baseUnitUsd : 100, s.countryId, false);
+    const prev = this.previewAssetSale(s, 'investment', instId, sellFraction);
+    if (!prev) return { ok: false, msg: 'Gagal mengira jualan pelaburan.' };
 
-    const frac = Math.max(0.05, Math.min(1, Number(sellFraction) || 1));
+    const frac = prev.sellFraction;
     const unitsSold = pos.units * frac;
-    const proceeds = Math.round(unitsSold * mPrice);
-    const costPortion = Math.round(pos.totalCost * frac);
-    const profit = proceeds - costPortion;
+    const costPortion = prev.costPortion;
+    const profit = prev.netProceeds - costPortion;
 
-    s.money += proceeds;
+    s.money += prev.netProceeds;
     if (frac >= 0.99) {
       delete s.assets.portfolio[instId];
     } else {
@@ -462,11 +695,15 @@ window.AssetsEngine = {
     }
 
     GameState.addJournalEntry(
-      `💵 Anda menjual ${Math.round(frac * 100)}% pegangan ${inst ? inst.name : instId} bernilai ${Utils.formatMoney(proceeds, s.countryId)} (${profit >= 0 ? 'Untung +' : 'Rugi '}${Utils.formatMoney(profit, s.countryId)}).`,
+      `💵 Jualan Pelaburan (${Math.round(frac * 100)}% ${inst ? inst.name : instId}): Harga Kasar ${Utils.formatMoney(prev.grossPrice, s.countryId)} — Potongan Cukai Jualan Aset (2.5%: -${Utils.formatMoney(prev.saleTax, s.countryId)}) → Tunai Bersih Diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)} (${profit >= 0 ? 'Untung Bersih +' : 'Rugi Bersih '}${Utils.formatMoney(profit, s.countryId)}).`,
       profit >= 0 ? 'milestone' : 'warning'
     );
     GameState.save();
-    return { ok: true, msg: `Jualan berjaya: ${Utils.formatMoney(proceeds, s.countryId)} (${profit >= 0 ? '+' : ''}${Utils.formatMoney(profit, s.countryId)})!` };
+    return {
+      ok: true,
+      breakdown: prev,
+      msg: `Jualan berjaya! Tunai bersih: ${Utils.formatMoney(prev.netProceeds, s.countryId)} (selepas Cukai Jualan 2.5%).`
+    };
   },
 
   // --------------------------------------------------------------------------
@@ -559,11 +796,19 @@ window.AssetsEngine = {
     const idx = s.assets.collectibles.findIndex(x => x.uid === uid);
     if (idx < 0) return { ok: false, msg: 'Koleksi tidak ditemui.' };
     const col = s.assets.collectibles[idx];
-    s.money += col.value;
+    const prev = this.previewAssetSale(s, 'collectible', uid);
+    s.money += prev.netProceeds;
     s.assets.collectibles.splice(idx, 1);
-    GameState.addJournalEntry(`🔨 Anda melelong ${col.name} pada harga ${Utils.formatMoney(col.value, s.countryId)}!`, 'milestone');
+    GameState.addJournalEntry(
+      `🔨 Jualan Koleksi (${col.name}): Harga Kasar ${Utils.formatMoney(prev.grossPrice, s.countryId)} — Potongan Cukai Jualan Aset (2.5%: -${Utils.formatMoney(prev.saleTax, s.countryId)}) → Tunai Bersih Diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)}!`,
+      'milestone'
+    );
     GameState.save();
-    return { ok: true, msg: `Berjaya dilelong: ${Utils.formatMoney(col.value, s.countryId)}!` };
+    return {
+      ok: true,
+      breakdown: prev,
+      msg: `Berjaya dijual! Tunai bersih diterima: ${Utils.formatMoney(prev.netProceeds, s.countryId)} (selepas Cukai Jualan 2.5%).`
+    };
   },
 
   // --------------------------------------------------------------------------
@@ -573,13 +818,17 @@ window.AssetsEngine = {
     this.ensureFields(s);
     let propVal = 0, vehVal = 0, invVal = 0, colVal = 0;
     let totalMortgage = 0, mortgagePayment = 0, rentalGross = 0, dividendGross = 0, maintenanceCost = 0;
+    let cukaiPintuAnnual = 0, cukaiTanahAnnual = 0;
 
     for (const p of s.assets.properties) {
-      propVal += (p.value || 0);
+      const pv = p.value || 0;
+      propVal += pv;
       totalMortgage += (p.mortgage || 0);
       if (p.mortgage > 0) mortgagePayment += Math.min(p.mortgage, p.annualMortgage || Math.round(p.mortgage / 15));
-      if (p.rented) rentalGross += Math.round((p.value || 0) * ((p.yieldPct || 5.5) / 100));
+      if (p.rented) rentalGross += Math.round(pv * ((p.yieldPct || 5.5) / 100));
       maintenanceCost += (p.upkeep || 0);
+      cukaiPintuAnnual += Math.round(pv * 0.0035);
+      cukaiTanahAnnual += Math.round(pv * 0.0015);
     }
 
     for (const v of s.assets.vehicles) {
@@ -603,14 +852,16 @@ window.AssetsEngine = {
       colVal += (c.value || 0);
     }
 
+    const totalPropertyTaxAnnual = cukaiPintuAnnual + cukaiTanahAnnual;
     const totalAssetValue = propVal + vehVal + invVal + colVal + (s.investments || 0);
-    const totalDebt = totalMortgage + ((s.education && s.education.educationLoan) || 0);
-    const netPassiveAnnual = rentalGross + dividendGross - maintenanceCost - mortgagePayment;
+    const totalDebt = totalMortgage + ((s.education && s.education.educationLoan) || 0) + (s.assets.unpaidTaxDebt || 0);
+    const netPassiveAnnual = rentalGross + dividendGross - maintenanceCost - mortgagePayment - totalPropertyTaxAnnual;
 
     return {
       propVal, vehVal, invVal, colVal,
       totalAssetValue, totalMortgage, totalDebt,
       rentalGross, dividendGross, maintenanceCost, mortgagePayment,
+      cukaiPintuAnnual, cukaiTanahAnnual, totalPropertyTaxAnnual,
       netPassiveAnnual
     };
   },
@@ -621,12 +872,40 @@ window.AssetsEngine = {
     this.generateYearlyMarket(s, { isRefresh: false });
     const trend = this.getTrendObj(s);
 
-    // 2) Kemas kini Hartanah (hargai pasaran, sewa, ansuran bank & peristiwa penyewa)
+    // 2) Kemas kini Hartanah (hargai pasaran, Cukai Pintu & Cukai Tanah, Aset Busuk, sewa, ansuran bank & peristiwa penyewa)
     const propShift = trend.propertyShift[0] + Math.random() * (trend.propertyShift[1] - trend.propertyShift[0]);
+    let totalCukaiPintu = 0;
+    let totalCukaiTanah = 0;
+
     for (const p of s.assets.properties) {
+      p.yearsHeld = (p.yearsHeld || 0) + 1;
+
+      // Dedahkan "Aset Busuk" yang belum terbongkar pada Age-Up ini
+      if (p.isLemon && !p.lemonRevealed) {
+        this.revealLemonAsset(s, p, 'property');
+      }
+
+      // Kira Cukai Pintu (0.35%) & Cukai Tanah (0.15%) berdasarkan nilai semasa hartanah
+      const pintu = Math.round((p.value || 0) * 0.0035);
+      const tanah = Math.round((p.value || 0) * 0.0015);
+      totalCukaiPintu += pintu;
+      totalCukaiTanah += tanah;
+
+      // Aset Busuk naik nilai lebih perlahan (-4% penalti pertumbuhan setiap tahun)
+      const lemonPenalty = p.isLemon ? -0.04 : 0;
       const condFactor = p.condition >= 80 ? 1.02 : (p.condition < 45 ? 0.96 : 1.0);
-      p.value = Math.max(1000, Math.round(p.value * (1 + propShift) * condFactor));
-      p.condition = Utils.clamp(p.condition - Utils.randInt(2, 5), 10, 100);
+      p.value = Math.max(1000, Math.round(p.value * (1 + propShift + lemonPenalty) * condFactor));
+      p.condition = Utils.clamp(p.condition - Utils.randInt(p.isLemon ? 4 : 2, p.isLemon ? 8 : 5), 10, 100);
+
+      // Bil pembaikan mengejut bagi Aset Busuk (30% peluang setahun)
+      if (p.isLemon && Utils.chance(0.30)) {
+        const surpriseBill = Math.max(Utils.usdToLocal(350, s.countryId), Math.round(p.value * (0.03 + Math.random() * 0.03)));
+        s.money -= surpriseBill;
+        GameState.addJournalEntry(
+          `🛠️ Bil Pembaikan Mengejut (${p.name} — Aset Bermasalah): Kos membaiki ${p.lemonFlaw || 'kerosakan struktur'} menelan belanja ${Utils.formatMoney(surpriseBill, s.countryId)}!`,
+          'warning'
+        );
+      }
 
       // Bayar ansuran pinjaman bank
       if (p.mortgage > 0) {
@@ -657,19 +936,47 @@ window.AssetsEngine = {
       }
     }
 
-    // 3) Kemas kini Kenderaan (susut nilai atau naik nilai bagi Kereta Klasik/Hypercar kondisi >= 80%!)
+    // Tolak Cukai Pintu (0.35%) & Cukai Tanah (0.15%) untuk semua hartanah dimiliki
+    const totalHoldingTax = totalCukaiPintu + totalCukaiTanah;
+    if (totalHoldingTax > 0) {
+      s.money -= totalHoldingTax;
+      if (s.money < 0) {
+        const unpaid = Math.min(totalHoldingTax, Math.abs(s.money));
+        s.assets.unpaidTaxDebt = (s.assets.unpaidTaxDebt || 0) + unpaid;
+        GameState.addJournalEntry(
+          `🏛️⚠️ Cukai Hartanah Tahunan (${s.assets.properties.length} hartanah): Cukai Pintu (0.35%: ${Utils.formatMoney(totalCukaiPintu, s.countryId)}) + Cukai Tanah (0.15%: ${Utils.formatMoney(totalCukaiTanah, s.countryId)}) = ${Utils.formatMoney(totalHoldingTax, s.countryId)}. Baki tunai negatif — tunggakan cukai ${Utils.formatMoney(unpaid, s.countryId)} ditambah ke hutang tertunggak!`,
+          'warning'
+        );
+      } else {
+        GameState.addJournalEntry(
+          `🏛️ Cukai Hartanah Tahunan (${s.assets.properties.length} hartanah): Cukai Pintu (0.35%: ${Utils.formatMoney(totalCukaiPintu, s.countryId)}) + Cukai Tanah (0.15%: ${Utils.formatMoney(totalCukaiTanah, s.countryId)}) = -${Utils.formatMoney(totalHoldingTax, s.countryId)} ditolak secara automatik.`
+        );
+      }
+    }
+
+    // 3) Kemas kini Kenderaan (susut nilai lebih pantas bagi Aset Busuk, atau naik nilai bagi Kereta Klasik/Hypercar kondisi >= 80%!)
     for (const v of s.assets.vehicles) {
+      if (v.isLemon && !v.lemonRevealed) {
+        this.revealLemonAsset(s, v, 'vehicle');
+      }
       v.ageYrs = (v.ageYrs || 0) + 1;
-      v.condition = Utils.clamp(v.condition - Utils.randInt(4, 9), 5, 100);
-      if (v.classic && v.condition >= 75) {
+      v.condition = Utils.clamp(v.condition - Utils.randInt(v.isLemon ? 7 : 4, v.isLemon ? 14 : 9), 5, 100);
+      if (v.classic && v.condition >= 75 && !v.isLemon) {
         v.value = Math.round(v.value * (1 + 0.05 + Math.random() * 0.04));
       } else {
-        v.value = Math.max(500, Math.round(v.value * (1 - Math.max(0.03, v.depRate || 0.08))));
+        const baseDep = Math.max(0.03, v.depRate || 0.08);
+        const effDep = v.isLemon ? Math.min(0.32, baseDep * 1.65) : baseDep;
+        v.value = Math.max(500, Math.round(v.value * (1 - effDep)));
       }
-      if (v.condition < 30 && Utils.chance(0.35)) {
-        const fix = Math.max(Utils.usdToLocal(250, s.countryId), Math.round(v.value * 0.12));
+      if ((v.isLemon && Utils.chance(0.38)) || (v.condition < 30 && Utils.chance(0.35))) {
+        const fix = Math.max(Utils.usdToLocal(250, s.countryId), Math.round(v.value * (v.isLemon ? 0.16 : 0.12)));
         s.money -= fix;
-        GameState.addJournalEntry(`🛠️ ${v.name} rosak di tepi jalan kerana kurang servis! Kos tunda & baiki: ${Utils.formatMoney(fix, s.countryId)}.`, 'warning');
+        GameState.addJournalEntry(
+          v.isLemon
+            ? `🛠️ Bil Pembaikan Mengejut (${v.name} — Aset Bermasalah): Kerosakan ${v.lemonFlaw || 'enjin'} memerlukan pembaikan segera bernilai ${Utils.formatMoney(fix, s.countryId)}!`
+            : `🛠️ ${v.name} rosak di tepi jalan kerana kurang servis! Kos tunda & baiki: ${Utils.formatMoney(fix, s.countryId)}.`,
+          'warning'
+        );
       }
     }
 

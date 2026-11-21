@@ -97,14 +97,23 @@ window.AssetModals = {
       html += `<div class="section-heading">🏠 Hartanah Dimiliki (${s.assets.properties.length})</div>`;
       s.assets.properties.forEach(p => {
         const estRent = Math.round(p.value * ((p.yieldPct || 5.5) / 100));
+        const cukaiPintu = Math.round((p.value || 0) * 0.0035);
+        const cukaiTanah = Math.round((p.value || 0) * 0.0015);
+        const showLemon = Boolean(p.isLemon && p.lemonRevealed);
         html += `
           <div class="migration-card">
             <div class="mig-head">
-              <div class="mig-title">${p.icon} ${Utils.escapeHtml(p.name)} ${p.rented ? '<span class="cat-badge synergy">🔑 Disewakan</span>' : ''}</div>
+              <div class="mig-title">
+                ${p.icon} ${Utils.escapeHtml(p.name)}
+                ${p.rented ? '<span class="cat-badge synergy">🔑 Disewakan</span>' : ''}
+                ${showLemon ? '<span class="cat-badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;">⚠️ Aset Bermasalah</span>' : ''}
+              </div>
               <strong style="color:#16a34a;">${Utils.formatMoney(p.value, s.countryId, true)}</strong>
             </div>
             <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-              Keadaan: <strong>${p.condition}%</strong> • Sewa: <strong>${Utils.formatMoney(estRent, s.countryId, true)}/thn</strong>
+              Keadaan: <strong>${p.condition}%</strong> • Sewa: <strong>${Utils.formatMoney(estRent, s.countryId, true)}/thn</strong> • Pegangan: ${p.yearsHeld || 0} thn<br/>
+              🏛️ Cukai Pintu (0.35%): <strong>${Utils.formatMoney(cukaiPintu, s.countryId)}/thn</strong> • Cukai Tanah (0.15%): <strong>${Utils.formatMoney(cukaiTanah, s.countryId)}/thn</strong>
+              ${showLemon ? `<br/><span style="color:#b91c1c;font-weight:700;">⚠️ Isu: ${Utils.escapeHtml(p.lemonFlaw || 'Kerosakan tersembunyi')} (Kos senggara tinggi)</span>` : ''}
               ${p.mortgage > 0 ? `<br/>🏦 Baki Pinjaman Bank: <strong style="color:#dc2626;">${Utils.formatMoney(p.mortgage, s.countryId, true)}</strong> (Ansuran ${Utils.formatMoney(p.annualMortgage, s.countryId, true)}/thn)` : ' • ✅ Bebas Hutang'}
             </div>
             <div class="mig-actions" style="grid-template-columns:repeat(4,1fr);">
@@ -153,14 +162,20 @@ window.AssetModals = {
     if (s.assets.vehicles.length > 0) {
       html += `<div class="section-heading">🚗 Kenderaan Dimiliki (${s.assets.vehicles.length})</div>`;
       s.assets.vehicles.forEach(v => {
+        const showLemon = Boolean(v.isLemon && v.lemonRevealed);
         html += `
           <div class="migration-card">
             <div class="mig-head">
-              <div class="mig-title">${v.icon} ${Utils.escapeHtml(v.name)} ${v.classic ? '<span class="cat-badge rare">⭐ Klasik</span>' : ''}</div>
+              <div class="mig-title">
+                ${v.icon} ${Utils.escapeHtml(v.name)}
+                ${v.classic ? '<span class="cat-badge rare">⭐ Klasik</span>' : ''}
+                ${showLemon ? '<span class="cat-badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;">⚠️ Aset Bermasalah</span>' : ''}
+              </div>
               <strong>${Utils.formatMoney(v.value, s.countryId, true)}</strong>
             </div>
             <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
               Keadaan: <strong>${v.condition}%</strong> • Usia: ${v.ageYrs || 0} thn • Penyelenggaraan: ${Utils.formatMoney(v.upkeep || 0, s.countryId, true)}/thn
+              ${showLemon ? `<br/><span style="color:#b91c1c;font-weight:700;">⚠️ Isu: ${Utils.escapeHtml(v.lemonFlaw || 'Enjin bermasalah')} (Kos senggara tinggi)</span>` : ''}
             </div>
             <div class="mig-actions">
               <button type="button" class="btn-sm primary veh-serv-btn" data-uid="${v.uid}">🔧 Servis &amp; Baiki</button>
@@ -319,6 +334,125 @@ window.AssetModals = {
   },
 
   // --------------------------------------------------------------------------
+  // MODAL PENGESAHAN PEMBELIAN (PILIHAN INSPEKSI 1% ELAK "ASET BUSUK")
+  // --------------------------------------------------------------------------
+  showPurchaseConfirmModal({ assetType, listingId, useMortgage = false, isUsed = false }) {
+    const s = GameState.current;
+    if (!s) return;
+    AssetsEngine.ensureFields(s);
+    const isProp = assetType === 'property';
+    const item = isProp
+      ? (s.assetMarket.properties || []).find(x => x.lid === listingId)
+      : ((isUsed ? s.assetMarket.vehiclesUsed : s.assetMarket.vehiclesNew) || []).find(x => x.lid === listingId);
+    if (!item) return;
+
+    const baseUpfront = (isProp && useMortgage) ? Math.round(item.price * 0.20) : item.price;
+    const inspFee = Math.max(isProp ? 100 : 50, Math.round(item.price * 0.01));
+    const cukaiPintu = isProp ? Math.round(item.price * 0.0035) : 0;
+    const cukaiTanah = isProp ? Math.round(item.price * 0.0015) : 0;
+
+    Modals.open({
+      icon: item.icon || (isProp ? '🏠' : '🚗'),
+      title: `Pengesahan Pembelian ${isProp ? 'Hartanah' : 'Kenderaan'}`,
+      subtitle: `${item.name} • ${Utils.formatMoney(item.price, s.countryId)}`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="line-height:1.6;">
+          <strong>${item.icon} ${Utils.escapeHtml(item.name)}</strong> (${Utils.escapeHtml(item.sub || '')})<br/>
+          Harga Pasaran: <strong>${Utils.formatMoney(item.price, s.countryId)}</strong> • Keadaan: <strong>${item.condition}%</strong><br/>
+          Kaedah Bayaran: <strong>${isProp && useMortgage ? `Pinjaman Bank (Deposit 20%: ${Utils.formatMoney(baseUpfront, s.countryId)})` : `Tunai Penuh (${Utils.formatMoney(baseUpfront, s.countryId)})`}</strong>
+          ${isProp ? `<br/>🏛️ Cukai Tahunan: Cukai Pintu (0.35%: ${Utils.formatMoney(cukaiPintu, s.countryId)}/thn) + Cukai Tanah (0.15%: ${Utils.formatMoney(cukaiTanah, s.countryId)}/thn)` : ''}
+        </div>
+
+        <label class="info-banner" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;background:#fffbeb;border-color:#fde68a;">
+          <input type="checkbox" id="chk-asset-inspection" style="margin-top:4px;transform:scale(1.2);" checked />
+          <div style="font-size:12.5px;line-height:1.5;">
+            <strong>🔍 Upah Pemeriksa / Inspeksi (Kos 1%: ${Utils.formatMoney(inspFee, s.countryId)})</strong><br/>
+            <span style="opacity:0.88;">Mengurangkan risiko terbeli <strong>"Aset Busuk"</strong> (${isProp ? 'struktur retak / kawasan banjir / pemaju bermasalah' : 'kereta banjir / enjin & gearbox bermasalah'}) daripada <strong>~18%</strong> turun kepada <strong>~3%</strong>.</span>
+          </div>
+        </label>
+
+        <div id="buy-total-display" class="info-banner" style="font-weight:700;text-align:center;">
+          Jumlah Bayaran Semasa: ${Utils.formatMoney(baseUpfront + inspFee, s.countryId)}
+        </div>
+
+        <button type="button" class="primary-btn" id="btn-confirm-asset-purchase">✅ Sahkan Pembelian</button>
+        <button type="button" class="ghost-btn" id="btn-cancel-asset-purchase" style="margin-top:8px;">← Batal &amp; Kembali</button>
+      `
+    });
+
+    const chk = document.getElementById('chk-asset-inspection');
+    const disp = document.getElementById('buy-total-display');
+    if (chk && disp) {
+      chk.addEventListener('change', () => {
+        const tot = baseUpfront + (chk.checked ? inspFee : 0);
+        disp.textContent = `Jumlah Bayaran Semasa: ${Utils.formatMoney(tot, s.countryId)}`;
+      });
+    }
+
+    document.getElementById('btn-confirm-asset-purchase').addEventListener('click', () => {
+      const useInspection = Boolean(chk && chk.checked);
+      const res = isProp
+        ? AssetsEngine.buyProperty(listingId, useMortgage, { useInspection })
+        : AssetsEngine.buyVehicle(listingId, isUsed, { useInspection });
+      App.toast(res.msg, res.ok ? (res.lemonRevealed ? 'error' : 'success') : 'error');
+      App.renderAll();
+      this.showHub(isProp ? 'realestate' : 'vehicles');
+    });
+
+    document.getElementById('btn-cancel-asset-purchase').addEventListener('click', () => {
+      this.showHub(isProp ? 'realestate' : 'vehicles');
+    });
+  },
+
+  // --------------------------------------------------------------------------
+  // MODAL RINGKASAN JUALAN ASET (POTONGAN YURAN GUAMAN, S&P, CKHT & CUKAI 2.5%)
+  // --------------------------------------------------------------------------
+  showSaleBreakdownModal(assetType, uidOrInstId, sellFraction = 1) {
+    const s = GameState.current;
+    if (!s) return;
+    const prev = AssetsEngine.previewAssetSale(s, assetType, uidOrInstId, sellFraction);
+    if (!prev) return;
+
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+
+    Modals.open({
+      icon: '🧾',
+      title: 'Ringkasan Jualan Aset',
+      subtitle: `${prev.icon} ${prev.name}`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="line-height:1.75;">
+          <strong>🧾 Penyata Terperinci Jualan (${Utils.escapeHtml(prev.name)})</strong><br/>
+          Harga Jualan Kasar: <strong>${fmt(prev.grossPrice)}</strong><br/>
+          ${prev.legalFee > 0 ? `Potongan Yuran Guaman &amp; S&amp;P (${prev.legalFeePct.toFixed(1)}%): <strong style="color:#dc2626;">-${fmt(prev.legalFee)}</strong><br/>` : ''}
+          Potongan ${Utils.escapeHtml(prev.taxLabel)}: <strong style="color:#dc2626;">-${fmt(prev.saleTax)}</strong><br/>
+          ${prev.mortgagePayoff > 0 ? `Pelunasan Baki Pinjaman Bank: <strong style="color:#dc2626;">-${fmt(prev.mortgagePayoff)}</strong><br/>` : ''}
+          <hr style="border:none;border-top:1px solid #cbd5e1;margin:6px 0;" />
+          Jumlah Yuran &amp; Cukai Jualan: <strong style="color:#dc2626;">-${fmt(prev.totalFeesAndTaxes)}</strong><br/>
+          <span style="font-size:14px;">💰 Tunai Bersih Diterima: <strong style="color:#16a34a;">${fmt(prev.netProceeds)}</strong></span>
+        </div>
+
+        <button type="button" class="primary-btn" id="btn-confirm-asset-sale">💵 Sahkan Jualan (${fmt(prev.netProceeds)})</button>
+        <button type="button" class="ghost-btn" id="btn-cancel-asset-sale" style="margin-top:8px;">← Batal &amp; Kembali</button>
+      `
+    });
+
+    document.getElementById('btn-confirm-asset-sale').addEventListener('click', () => {
+      let r;
+      if (assetType === 'property') r = AssetsEngine.sellProperty(uidOrInstId);
+      else if (assetType === 'vehicle') r = AssetsEngine.sellVehicle(uidOrInstId);
+      else if (assetType === 'collectible') r = AssetsEngine.sellCollectible(uidOrInstId);
+      else if (assetType === 'investment') r = AssetsEngine.sellInvestment(uidOrInstId, sellFraction);
+      App.toast(r ? r.msg : 'Jualan selesai', r && r.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showHub('portfolio');
+    });
+
+    document.getElementById('btn-cancel-asset-sale').addEventListener('click', () => {
+      this.showHub('portfolio');
+    });
+  },
+
+  // --------------------------------------------------------------------------
   // IKATAN PENDENGAR ACARA
   // --------------------------------------------------------------------------
   _bindHandlers(s, c, tab) {
@@ -349,20 +483,17 @@ window.AssetModals = {
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
       document.querySelectorAll('.prop-sell-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.sellProperty(b.dataset.uid);
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
+        this.showSaleBreakdownModal('property', b.dataset.uid);
       }));
       document.querySelectorAll('.veh-serv-btn').forEach(b => b.addEventListener('click', () => {
         const r = AssetsEngine.maintainVehicle(b.dataset.uid);
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
       document.querySelectorAll('.veh-sell-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.sellVehicle(b.dataset.uid);
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
+        this.showSaleBreakdownModal('vehicle', b.dataset.uid);
       }));
       document.querySelectorAll('.inv-sell-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.sellInvestment(b.dataset.inst, Number(b.dataset.frac));
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
+        this.showSaleBreakdownModal('investment', b.dataset.inst, Number(b.dataset.frac));
       }));
       document.querySelectorAll('.col-heir-btn').forEach(b => b.addEventListener('click', () => {
         const r = AssetsEngine.toggleHeirloom(b.dataset.uid);
@@ -373,17 +504,14 @@ window.AssetModals = {
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
       document.querySelectorAll('.col-sell-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.sellCollectible(b.dataset.uid);
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
+        this.showSaleBreakdownModal('collectible', b.dataset.uid);
       }));
     } else if (tab === 'realestate') {
       document.querySelectorAll('.prop-buy-cash').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.buyProperty(b.dataset.lid, false);
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('realestate');
+        this.showPurchaseConfirmModal({ assetType: 'property', listingId: b.dataset.lid, useMortgage: false });
       }));
       document.querySelectorAll('.prop-buy-mort').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.buyProperty(b.dataset.lid, true);
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('realestate');
+        this.showPurchaseConfirmModal({ assetType: 'property', listingId: b.dataset.lid, useMortgage: true });
       }));
     } else if (tab === 'vehicles') {
       document.querySelectorAll('.veh-sub-pill').forEach(p => p.addEventListener('click', () => {
@@ -391,8 +519,7 @@ window.AssetModals = {
         this.showHub('vehicles');
       }));
       document.querySelectorAll('.veh-buy-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.buyVehicle(b.dataset.lid, b.dataset.used === '1');
-        App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('vehicles');
+        this.showPurchaseConfirmModal({ assetType: 'vehicle', listingId: b.dataset.lid, isUsed: b.dataset.used === '1' });
       }));
     } else if (tab === 'investments') {
       document.querySelectorAll('.inv-buy-btn').forEach(b => b.addEventListener('click', () => {
