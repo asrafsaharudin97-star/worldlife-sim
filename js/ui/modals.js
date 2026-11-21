@@ -34,7 +34,7 @@ window.Modals = {
 
     const choicesHtml = event.choices.map((ch, idx) => `
       <button class="choice-btn" data-choice-idx="${idx}">
-        <span>${Utils.escapeHtml(ch.label)}</span>
+        <span class="choice-title">${Utils.escapeHtml(ch.label)}</span>
         ${ch.hint ? `<span class="choice-hint">${Utils.escapeHtml(ch.hint)}</span>` : ''}
       </button>
     `).join('');
