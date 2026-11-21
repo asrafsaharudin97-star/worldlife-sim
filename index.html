@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WorldLife — Simulator Kehidupan &amp; Budaya</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- Bahagian Atas Negara & Watak -->
+    <header id="game-header" class="game-header hidden">
+      <div class="header-top-row">
+        <button id="btn-menu" class="icon-btn" title="Menu &amp; Rekod Kehidupan" aria-label="Menu">☰</button>
+        <div class="header-brand">
+          <span class="brand-title">WORLDLIFE</span>
+          <span id="header-year-pill" class="year-pill">2026</span>
+        </div>
+        <button id="btn-passport" class="passport-chip" title="Pasport &amp; Profil Budaya">
+          <span id="header-flag">🇲🇾</span>
+          <span id="header-country-code">MY</span>
+        </button>
+      </div>
+
+      <div class="character-card">
+        <div class="avatar-wrap" id="char-avatar" title="Lihat Profil Watak">
+          <span class="avatar-emoji">👶</span>
+          <span class="age-badge" id="char-age-badge">0</span>
+        </div>
+        <div class="char-meta">
+          <div class="char-name-row">
+            <h1 id="char-name">Memuatkan...</h1>
+            <span id="residency-badge" class="residency-badge citizen">Warganegara</span>
+          </div>
+          <p id="char-subtitle" class="char-subtitle">Bayi • Kuala Lumpur, Malaysia</p>
+          <p id="char-culture-tag" class="char-culture-tag">Lahir di 🇲🇾 Malaysia</p>
+        </div>
+        <div class="char-wealth">
+          <span class="wealth-label">Baki Bank</span>
+          <span id="char-money" class="wealth-amount">RM 0</span>
+        </div>
+      </div>
+
+      <!-- Bar Penyesuaian Budaya (dipaparkan bila tinggal di luar negara) -->
+      <div id="adaptation-bar-wrap" class="adaptation-banner hidden">
+        <div class="adaptation-info">
+          <span id="adaptation-label">🌍 Penyesuaian Budaya</span>
+          <span id="adaptation-val">20%</span>
+        </div>
+        <div class="mini-track">
+          <div id="adaptation-fill" class="mini-fill" style="width: 20%"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Jurnal Kehidupan -->
+    <main id="life-feed-container" class="life-feed-container hidden">
+      <div id="life-feed" class="life-feed"></div>
+    </main>
+
+    <!-- Statistik & Bar Navigasi Bawah -->
+    <footer id="game-footer" class="game-footer hidden">
+      <div class="stats-grid">
+        <div class="stat-row">
+          <span class="stat-icon">😊</span>
+          <span class="stat-name">Gembira</span>
+          <div class="stat-bar-track"><div id="bar-happiness" class="stat-bar-fill"></div></div>
+          <span id="val-happiness" class="stat-val">80%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-icon">❤️</span>
+          <span class="stat-name">Kesihatan</span>
+          <div class="stat-bar-track"><div id="bar-health" class="stat-bar-fill"></div></div>
+          <span id="val-health" class="stat-val">85%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-icon">🧠</span>
+          <span class="stat-name">Kepintaran</span>
+          <div class="stat-bar-track"><div id="bar-smarts" class="stat-bar-fill"></div></div>
+          <span id="val-smarts" class="stat-val">70%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-icon">✨</span>
+          <span class="stat-name">Penampilan</span>
+          <div class="stat-bar-track"><div id="bar-looks" class="stat-bar-fill"></div></div>
+          <span id="val-looks" class="stat-val">75%</span>
+        </div>
+      </div>
+
+      <nav class="action-dock">
+        <button class="dock-btn" data-tab="occupation">
+          <span class="dock-icon">💼</span>
+          <span class="dock-label">Kerjaya</span>
+        </button>
+        <button class="dock-btn" data-tab="assets">
+          <span class="dock-icon">🏠</span>
+          <span class="dock-label">Aset</span>
+        </button>
+
+        <button id="btn-age-up" class="age-up-btn" title="Tambah 1 Tahun">
+          <span class="age-plus">+</span>
+          <span class="age-text">UMUR</span>
+        </button>
+
+        <button class="dock-btn" data-tab="relationships">
+          <span class="dock-icon">❤️</span>
+          <span class="dock-label">Hubungan</span>
+        </button>
+        <button class="dock-btn" data-tab="activities">
+          <span class="dock-icon">🌍</span>
+          <span class="dock-label">Aktiviti</span>
+        </button>
+      </nav>
+    </footer>
+
+    <!-- Skrin Permulaan / Cipta Watak -->
+    <section id="start-screen" class="start-screen">
+      <div class="start-hero">
+        <div class="hero-badge">🌏 Simulator Kehidupan &amp; Budaya</div>
+        <h1 class="hero-title">World<span>Life</span></h1>
+        <p class="hero-desc">
+          Jalani kehidupan mengikut budaya sebenar setiap negara — daripada lepak Mamak &amp; SPM di Malaysia hingga Hanami di Jepun atau bebas cukai di Dubai. Berhijrah ke luar negara dan lihat seluruh budaya permainan berubah!
+        </p>
+      </div>
+
+      <div class="creator-card">
+        <div class="creator-section">
+          <label class="creator-label">1. Pilih Negara Kelahiran</label>
+          <div id="country-grid" class="country-grid"></div>
+          <div id="country-preview" class="country-preview"></div>
+        </div>
+
+        <div class="creator-row">
+          <div class="creator-section flex-1">
+            <label class="creator-label">2. Jantina</label>
+            <div class="pill-toggle" id="gender-toggle">
+              <button type="button" class="pill-opt active" data-gender="male">♂ Lelaki</button>
+              <button type="button" class="pill-opt" data-gender="female">♀ Perempuan</button>
+            </div>
+          </div>
+
+          <div class="creator-section flex-1" id="heritage-section">
+            <label class="creator-label">3. Latar Belakang Budaya</label>
+            <select id="heritage-select" class="input-field"></select>
+          </div>
+        </div>
+
+        <div class="creator-section">
+          <label class="creator-label">4. Nama Watak</label>
+          <div class="name-input-row">
+            <input type="text" id="custom-name-input" class="input-field" placeholder="Kosongkan atau tekan dadu..." maxlength="36" />
+            <button type="button" id="btn-random-name" class="secondary-btn" title="Jana nama tempatan">🎲</button>
+          </div>
+        </div>
+
+        <div class="creator-actions">
+          <button type="button" id="btn-start-life" class="primary-btn">✨ Mula Kehidupan Baru</button>
+          <button type="button" id="btn-continue-life" class="ghost-btn hidden">▶ Sambung Kehidupan Disimpan</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Modal Overlay -->
+    <div id="modal-backdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div id="modal-sheet" class="modal-sheet">
+        <div class="modal-header" id="modal-header">
+          <div class="modal-title-group">
+            <span id="modal-icon" class="modal-icon">✨</span>
+            <div>
+              <h2 id="modal-title" class="modal-title">Tajuk</h2>
+              <p id="modal-subtitle" class="modal-subtitle"></p>
+            </div>
+          </div>
+          <button id="modal-close" class="modal-close-btn" aria-label="Tutup">✕</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Notifikasi Toast -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- Skrip permainan -->
+  <script defer src="js/data/countries.js"></script>
+  <script defer src="js/data/events.js"></script>
+  <script defer src="js/engine/utils.js"></script>
+  <script defer src="js/engine/state.js"></script>
+  <script defer src="js/engine/simulation.js"></script>
+  <script defer src="js/ui/modals.js"></script>
+  <script defer src="js/ui/app.js"></script>
+</body>
+</html>
