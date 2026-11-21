@@ -668,6 +668,78 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `Wasiat Sivil dikemas kini (${labels[s.wasiat.civilMode]}).` };
   },
 
+  setAdoptedHibahPct(s, pct) {
+    this.ensureLegalFields(s);
+    if (!this.isSyariahApplicable(s)) {
+      return { ok: false, msg: 'Hibah Anak Angkat hanya tersedia di bawah Undang-Undang Syariah.' };
+    }
+    const val = Math.max(0, Math.min(10, Number(pct) || 0));
+    s.wasiat.hibahAdoptedPct = val;
+    GameState.addJournalEntry(
+      val > 0
+        ? `🎁 Peruntukan Hibah Anak Angkat ditetapkan kepada ${val}% daripada baki harta bersih sebelum agihan Faraid.`
+        : '🎁 Peruntukan Hibah Anak Angkat ditetapkan kepada 0% (tiada potongan sebelum Faraid).',
+      'culture'
+    );
+    GameState.save();
+    return { ok: true, msg: `Hibah Anak Angkat dikemas kini (${val}%).` };
+  },
+
+  giveLivingHibah(s, { recipientId, type = 'cash', amountLocal = 0, assetId = null } = {}) {
+    this.ensureLegalFields(s);
+    if (!this.isSyariahApplicable(s)) {
+      return { ok: false, msg: 'Hibah Semasa Hidup hanya tersedia di bawah Undang-Undang Syariah.' };
+    }
+    const recipient = (s.relationships || []).find(r =>
+      r.id === recipientId && r.alive && (
+        (s.married && r.id === s.partnerId) ||
+        ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role)
+      )
+    );
+    if (!recipient) {
+      return { ok: false, msg: 'Sila pilih pasangan atau anak yang masih hidup sebagai penerima Hibah.' };
+    }
+    if (!Array.isArray(s.hibahHistory)) s.hibahHistory = [];
+
+    if (type === 'cash') {
+      const amt = Math.round(Number(amountLocal) || 0);
+      if (amt <= 0 || (s.money || 0) < amt) {
+        return { ok: false, msg: 'Baki tunai tidak mencukupi untuk Hibah ini.' };
+      }
+      s.money -= amt;
+      recipient.closeness = Utils.clamp((recipient.closeness ?? 70) + 10, 0, 100);
+      recipient.trust = Utils.clamp((recipient.trust ?? 70) + 8, 0, 100);
+      s.hibahHistory.push({ year: s.year, recipientId: recipient.id, recipientName: recipient.name, type: 'cash', label: Utils.formatMoney(amt, s.countryId), value: amt });
+      GameState.adjustStats({ happiness: 8 });
+      GameState.addJournalEntry(
+        `🎁 Hibah Semasa Hidup: Anda menghibahkan wang tunai ${Utils.formatMoney(amt, s.countryId)} kepada ${recipient.name} (${recipient.role}). Aset ini telah dipindah milik dan dikecualikan daripada Faraid kelak.`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: `Hibah tunai ${Utils.formatMoney(amt, s.countryId)} berjaya diserahkan kepada ${recipient.name}!` };
+    }
+
+    let list = null;
+    if (type === 'property' && s.assets && Array.isArray(s.assets.properties)) list = s.assets.properties;
+    else if (type === 'vehicle' && s.assets && Array.isArray(s.assets.vehicles)) list = s.assets.vehicles;
+    else if (type === 'heirloom' && s.assets && Array.isArray(s.assets.collectibles)) list = s.assets.collectibles;
+
+    const idx = list ? list.findIndex(x => x && x.id === assetId) : -1;
+    if (idx < 0) return { ok: false, msg: 'Aset yang dipilih tidak ditemui.' };
+    const [asset] = list.splice(idx, 1);
+
+    recipient.closeness = Utils.clamp((recipient.closeness ?? 70) + 16, 0, 100);
+    recipient.trust = Utils.clamp((recipient.trust ?? 70) + 12, 0, 100);
+    s.hibahHistory.push({ year: s.year, recipientId: recipient.id, recipientName: recipient.name, type, label: asset.name, value: asset.value || 0 });
+    GameState.adjustStats({ happiness: 12 });
+    GameState.addJournalEntry(
+      `🎁 Hibah Semasa Hidup: Anda menghibahkan ${asset.name} (${Utils.formatMoney(asset.value || 0, s.countryId)}) kepada ${recipient.name} (${recipient.role}). Aset ini telah dipindah milik sepenuhnya dan dikecualikan daripada Faraid.`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Hibah ${asset.name} berjaya diserahkan kepada ${recipient.name}!` };
+  },
+
   // --------------------------------------------------------------------------
   // 7. CUKAI PUSAKA SIVIL & ENJIN PENYATA HARTA PUSAKA (FARAID & SIVIL)
   // --------------------------------------------------------------------------
@@ -750,14 +822,18 @@ window.LegalInheritanceEngine = {
       }
       const afterWasiat = Math.max(0, netEstate - wasiatAmount);
 
-      // Hibah Anak Angkat (Khas untuk watak Islam: Anak angkat bukan waris Faraid,
-      // maka diperuntukkan Hibah Anak Angkat 8%–10% daripada baki harta bersih sebelum agihan Faraid)
+      // Hibah Anak Angkat (Khas untuk watak Islam di negara Islam: Anak angkat bukan waris Faraid,
+      // diagihkan sebagai Hibah sebelum Faraid; boleh dilaras 0%, 5%, atau 10%)
       if (adoptedKids.length > 0 && afterWasiat > 0) {
-        hibahAnakAngkatPct = adoptedKids.length === 1 ? 8 : 10;
-        const pctPool = Math.round(afterWasiat * (hibahAnakAngkatPct / 100));
-        const minSupportFloor = Math.min(Math.round(afterWasiat * 0.10), Utils.usdToLocal(1000, s.countryId) * adoptedKids.length);
-        hibahAnakAngkatAmount = Math.max(pctPool, minSupportFloor);
-        hibahAnakAngkatLabel = `Hibah Anak Angkat (${hibahAnakAngkatPct}% — ${adoptedKids.length} anak angkat)`;
+        const chosenPct = (s.wasiat && typeof s.wasiat.hibahAdoptedPct === 'number')
+          ? Math.max(0, Math.min(10, s.wasiat.hibahAdoptedPct))
+          : (adoptedKids.length === 1 ? 8 : 10);
+        hibahAnakAngkatPct = chosenPct;
+        if (hibahAnakAngkatPct > 0) {
+          const pctPool = Math.round(afterWasiat * (hibahAnakAngkatPct / 100));
+          hibahAnakAngkatAmount = Math.min(afterWasiat, pctPool);
+          hibahAnakAngkatLabel = `Hibah Anak Angkat (${hibahAnakAngkatPct}% — ${adoptedKids.length} anak angkat)`;
+        }
       }
 
       distributableEstate = Math.max(0, afterWasiat - hibahAnakAngkatAmount);
