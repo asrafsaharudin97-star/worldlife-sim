@@ -72,7 +72,11 @@ window.Modals = {
   // --------------------------------------------------------------------------
   // 2. MODAL SEKOLAH & KERJAYA (Mengikut Negara Semasa!)
   // --------------------------------------------------------------------------
-  showOccupation() {
+  showOccupation(subTab = null) {
+    if (window.CareerModals && CareerModals.showHub) {
+      CareerModals.showHub(subTab);
+      return;
+    }
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
     const ed = s.education;

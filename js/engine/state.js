@@ -339,6 +339,9 @@ window.GameState = {
     if (window.PrisonFugitive && PrisonFugitive.ensureFields) {
       PrisonFugitive.ensureFields(s);
     }
+    if (window.EduCareerEngine && EduCareerEngine.ensureFields) {
+      EduCareerEngine.ensureFields(s);
+    }
   },
 
   setHiddenFlag(key, data = {}) {

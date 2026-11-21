@@ -72,9 +72,12 @@ window.Sim = {
     // 4B. Penjara, Pendapatan 5 Mod Khas, Laman Sosial & Penyelarasan Stres/Haba Polis
     this._processModesAndAlignment(s, c);
 
-    // 4C. Rombak Dek Aktiviti Tahunan & Kemas Kini Dinasti / Timer Penebusan
+    // 4C. Rombak Dek Aktiviti Tahunan, Pasaran Kerja Dinamik & Kemas Kini Dinasti / Timer Penebusan
     if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
       ActivitiesDeck.generateYearlyDeck(s);
+    }
+    if (s.age >= 18 && window.EduCareerEngine && EduCareerEngine.generateYearlyJobMarket) {
+      EduCareerEngine.generateYearlyJobMarket(s);
     }
     if (window.Dynasty && Dynasty.tickYear) {
       Dynasty.tickYear(s);
@@ -173,15 +176,24 @@ window.Sim = {
         gradeText = score >= 85 ? 'Cemerlang Kepujian!' : score >= 65 ? 'Keputusan Baik' : 'Tamat Sekolah';
       }
       ed.hasHighSchool = true;
+      if (!ed.educationLevel || ed.educationLevel === 'none') ed.educationLevel = 'high_school';
       ed.examGrade = gradeText;
       ed.stage = 'highschool_done';
       ed.schoolName = null;
       GameState.addJournalEntry(
-        `🎓 Anda menamatkan ${ced.secondary.examName} di ${c.name} dengan keputusan: ${gradeText}! Anda kini boleh mohon Universiti, mula bekerja, atau berhijrah pada umur 18.`,
+        `🎓 Anda menamatkan ${ced.secondary.examName} di ${c.name} dengan keputusan: ${gradeText}! Anda kini boleh mohon Diploma/Universiti, ambil Sijil, mula bekerja, atau berhijrah pada umur 18.`,
         'milestone'
       );
       GameState.adjustStats({ happiness: score >= 65 ? 12 : 2, smarts: 5 });
-    } else if (ed.stage === 'university') {
+    }
+
+    // Enjin Pendidikan Sepanjang Hayat (Kelas Dewasa, Diploma, Ijazah, Master, PhD & Bayaran Balik Pinjaman)
+    if (window.EduCareerEngine && EduCareerEngine.tickYearlyEducation) {
+      const handled = EduCareerEngine.tickYearlyEducation(s, c);
+      if (handled) return;
+    }
+
+    if (ed.stage === 'university' && !ed.activeStudy) {
       const isLocal = s.citizenships.includes(s.countryId) || s.residencyStatus === 'PR';
       const tuition = Math.round(ced.uniTuitionAnnual * (isLocal ? 1 : 1.75));
       if (s.age <= 22 && s.money < tuition && s.relationships.some(r => ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role) && r.alive)) {
@@ -195,6 +207,7 @@ window.Sim = {
       if (ed.uniYearsLeft <= 0) {
         ed.stage = 'graduated';
         ed.hasDegree = true;
+        ed.educationLevel = 'bachelor';
         GameState.addJournalEntry(
           `🎉 Tahniah! Anda berjaya menamatkan pengajian di ${ed.universityName} (${c.name} ${c.flag}) dan menggenggam Ijazah Sarjana Muda!`,
           'milestone'
@@ -218,7 +231,13 @@ window.Sim = {
       const usdSalary = Utils.localToUsd(gross, s.countryId);
       if (usdSalary > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdSalary);
 
-      if (s.job.performance >= 72 && Utils.chance(0.55)) {
+      let promoted = false;
+      if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(0.45)) {
+        const pRes = EduCareerEngine.tryPromote(s, false);
+        promoted = Boolean(pRes && pRes.ok);
+      }
+
+      if (!promoted && s.job.performance >= 72 && Utils.chance(0.55)) {
         const bump = Utils.randInt(4, 10);
         s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
         GameState.addJournalEntry(
@@ -933,6 +952,7 @@ window.Sim = {
     s.yearlyActions.workHard = true;
     s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(10, 18));
     GameState.adjustStats({ health: -3, happiness: -2, smarts: 2, adaptation: 4 });
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
     GameState.addJournalEntry(`💼 Anda bekerja lebih masa sebagai ${s.job.title}. Majikan anda amat berpuas hati!`);
     GameState.save();
     return { ok: true, msg: 'Prestasi kerja meningkat!' };

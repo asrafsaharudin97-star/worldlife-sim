@@ -1,0 +1,571 @@
+/* ==========================================================================
+   WorldLife — Antara Muka Pendidikan Sepanjang Hayat (Sehingga PhD),
+   Sijil Profesional & Pasaran Kerja Rawak Dinamik (Bahasa Melayu)
+   ========================================================================== */
+
+window.CareerModals = {
+  _activeTab: 'jobs',
+  _industryFilter: 'ALL',
+  _selectedField: 'computer_science',
+  _selectedMode: 'full_time',
+  _selectedFunding: 'cash',
+  _browsingNewJob: false,
+
+  showHub(subTab = null) {
+    const s = GameState.current;
+    if (!s) return;
+    EduCareerEngine.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+
+    if (subTab) this._activeTab = subTab;
+    else if (s.age < 18 && this._activeTab === 'jobs') this._activeTab = 'education';
+
+    const tab = this._activeTab;
+    const tabsHtml = `
+      <div class="tab-pills" style="margin-bottom:10px;">
+        <button type="button" class="tab-pill career-tab-pill ${tab === 'jobs' ? 'active' : ''}" data-ctab="jobs">💼 Pasaran Kerja</button>
+        <button type="button" class="tab-pill career-tab-pill ${tab === 'education' ? 'active' : ''}" data-ctab="education">🎓 Pendidikan</button>
+        <button type="button" class="tab-pill career-tab-pill ${tab === 'certs' ? 'active' : ''}" data-ctab="certs">📜 Sijil &amp; Kursus</button>
+        <button type="button" class="tab-pill career-tab-pill ${tab === 'record' ? 'active' : ''}" data-ctab="record">🏆 Rekod</button>
+      </div>
+    `;
+
+    let body = '';
+    if (tab === 'jobs') body = this._renderJobsTab(s, c);
+    else if (tab === 'education') body = this._renderEducationTab(s, c);
+    else if (tab === 'certs') body = this._renderCertsTab(s, c);
+    else body = this._renderRecordTab(s, c);
+
+    const lvlInfo = EducationData.LEVEL_INFO[s.education.educationLevel] || EducationData.LEVEL_INFO.none;
+    Modals.open({
+      icon: '💼',
+      title: 'Pendidikan & Kerjaya',
+      subtitle: `${c.flag} ${c.name} • ${lvlInfo.icon} ${lvlInfo.short}${s.education.hasDoctorateTitle ? ' (Dr.)' : ''}`,
+      bodyHtml: tabsHtml + body
+    });
+
+    this._bindHandlers(s, c, tab);
+  },
+
+  // --------------------------------------------------------------------------
+  // TAB 1: PASARAN KERJA RAWAK DINAMIK & PENGURUSAN KERJAYA AKTIF
+  // --------------------------------------------------------------------------
+  _renderJobsTab(s, c) {
+    let html = '';
+
+    if (s.job) {
+      const ladder = Array.isArray(s.job.ladder) ? s.job.ladder : [s.job.title];
+      const rankIdx = s.job.rankIndex || 0;
+      const nextRank = ladder[rankIdx + 1] || null;
+      const pct = Math.round(((rankIdx + 1) / ladder.length) * 100);
+
+      html += `
+        <div class="career-active-card">
+          <div class="cac-top">
+            <div>
+              <div class="cac-title">${s.job.icon || '💼'} ${Utils.escapeHtml(s.job.title)}</div>
+              <div class="cac-sub">Gaji: <strong>${Utils.formatMoney(s.job.salary, s.countryId)}/thn</strong> • Cukai ${Math.round((c.taxRate || 0) * 100)}% • Tempoh: ${s.job.years} thn</div>
+            </div>
+            <span class="cat-badge synergy">Pangkat ${rankIdx + 1}/${ladder.length}</span>
+          </div>
+          <div class="cac-bars">
+            <div>
+              <div class="ph-bar-lbl"><span>Prestasi Kerja</span><strong>${s.job.performance}%</strong></div>
+              <div class="mini-track" style="height:7px;"><div class="mini-fill" style="width:${s.job.performance}%;background:#22c55e;"></div></div>
+            </div>
+            <div>
+              <div class="ph-bar-lbl"><span>Tangga Pangkat</span><strong>${pct}%</strong></div>
+              <div class="mini-track" style="height:7px;"><div class="mini-fill" style="width:${pct}%;background:#3b82f6;"></div></div>
+            </div>
+          </div>
+          ${nextRank ? `<div class="cac-next">🎯 Pangkat Seterusnya: <strong>${Utils.escapeHtml(nextRank)}</strong></div>` : '<div class="cac-next">👑 Anda telah mencapai puncak tangga kerjaya ini!</div>'}
+        </div>
+
+        <div class="action-list" style="margin-bottom:12px;">
+          <button type="button" class="action-item" id="act-work-hard" ${s.yearlyActions.workHard ? 'disabled' : ''}>
+            <span class="ai-icon">⚡</span>
+            <span class="ai-content">
+              <span class="ai-title">Kerja Keras &amp; Lebih Masa</span>
+              <span class="ai-desc">Tingkatkan prestasi kerja &amp; peluang naik pangkat (+Stres sedikit)</span>
+            </span>
+            <span class="ai-right">Prestasi ++</span>
+          </button>
+          <button type="button" class="action-item" id="act-work-network" ${s.yearlyActions.workNetwork ? 'disabled' : ''}>
+            <span class="ai-icon">🤝</span>
+            <span class="ai-content">
+              <span class="ai-title">Bina Rangkaian (Networking)</span>
+              <span class="ai-desc">Rapat dengan pengarah &amp; tokoh industri (+Reputasi &amp; Prestasi)</span>
+            </span>
+            <span class="ai-right">Reputasi +</span>
+          </button>
+          <button type="button" class="action-item" id="act-raise" ${s.yearlyActions.askedRaise ? 'disabled' : ''}>
+            <span class="ai-icon">💰</span>
+            <span class="ai-content">
+              <span class="ai-title">Minta Kenaikan Gaji</span>
+              <span class="ai-desc">Berunding dengan majikan untuk naik gaji (+6–14%)</span>
+            </span>
+            <span class="ai-right">Rundingan</span>
+          </button>
+          <button type="button" class="action-item" id="act-toggle-switch-job">
+            <span class="ai-icon">🔄</span>
+            <span class="ai-content">
+              <span class="ai-title">${this._browsingNewJob ? 'Tutup Senarai Tukar Kerja' : 'Tukar Kerja (Lihat Pasaran Kerja)'}</span>
+              <span class="ai-desc">Cari tawaran kerjaya baharu yang lebih lumayan</span>
+            </span>
+            <span class="ai-right">${this._browsingNewJob ? 'Tutup' : 'Teroka →'}</span>
+          </button>
+          <button type="button" class="action-item" id="act-quit-job">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title">Berhenti Kerja</span>
+              <span class="ai-desc">Letak jawatan untuk rehat atau sambung belajar Sepenuh Masa</span>
+            </span>
+            <span class="ai-right cost">Berhenti</span>
+          </button>
+        </div>
+      `;
+
+      if (!this._browsingNewJob) return html;
+    }
+
+    if (s.age < 18) {
+      return html + `<div class="info-banner highlight">💼 Pasaran kerja sepenuh masa di ${c.name} dibuka pada umur <strong>18 tahun</strong>. Fokus pada pendidikan &amp; sijil dahulu!</div>`;
+    }
+
+    if (s.careerMarket.openings.length === 0 || s.careerMarket.lastMarketYear !== s.year) {
+      EduCareerEngine.generateYearlyJobMarket(s);
+    }
+
+    const rLeft = s.careerMarket.refreshesLeft ?? 2;
+    const indFilter = this._industryFilter || 'ALL';
+    const openingObjs = s.careerMarket.openings
+      .map(id => CareersData.CAREERS.find(x => x.id === id))
+      .filter(Boolean);
+
+    const filtered = openingObjs.filter(j => indFilter === 'ALL' || j.industry === indFilter);
+
+    html += `
+      <div class="act-engine-header" style="margin-top:4px;">
+        <div class="aeh-top">
+          <div>
+            <div class="aeh-title">💼 Pasaran Kerja ${c.name} ${c.flag} (${openingObjs.length} Jawatan Aktif)</div>
+            <div class="aeh-sub">Dirombak secara rawak setiap tahun mengikut kelayakan &amp; industri global</div>
+          </div>
+          <button type="button" class="reroll-idea-btn" id="btn-refresh-job-market" ${rLeft <= 0 ? 'disabled' : ''}>
+            🔄 Segarkan Pasaran (${rLeft}/2)
+          </button>
+        </div>
+      </div>
+
+      <div class="tab-pills" style="margin-bottom:10px;">
+        ${CareersData.INDUSTRIES.map(ind => `
+          <button type="button" class="tab-pill ind-filter-pill ${ind.id === indFilter ? 'active' : ''}" data-ind="${ind.id}">
+            ${ind.icon} ${Utils.escapeHtml(ind.label)}
+          </button>
+        `).join('')}
+      </div>
+    `;
+
+    if (filtered.length === 0) {
+      html += `<div class="info-banner">Tiada jawatan dalam industri ini pada papan semasa. Pilih <strong>Semua</strong> atau klik <strong>🔄 Segarkan Pasaran Kerja</strong>!</div>`;
+      return html;
+    }
+
+    html += `<div class="action-list">`;
+    filtered.forEach(j => {
+      const matched = EduCareerEngine.isCareerFieldMatched(s, j);
+      const salary = EduCareerEngine.getCareerSalaryLocal(s, j, 0);
+      const reqLvl = EducationData.LEVEL_INFO[j.minEducation] || EducationData.LEVEL_INFO.none;
+      const hasCertBonus = (j.preferredCerts || []).some(cid => (s.education.certificates || []).includes(cid));
+      const fieldStr = j.requiredFields === 'any'
+        ? 'Mana-mana bidang'
+        : j.requiredFields.map(fid => (EducationData.getField(fid) || { short: fid }).short).join('/');
+
+      html += `
+        <button type="button" class="action-item career-apply-btn ${j.isRare ? 'rare-activity' : ''}" data-career-id="${j.id}">
+          <span class="ai-icon">${j.icon}</span>
+          <span class="ai-content">
+            <span class="ai-title">
+              ${Utils.escapeHtml(j.title)}
+              ${j.isRare ? '<span class="rare-gold-tag">🌟 HEADHUNTER</span>' : ''}
+            </span>
+            <span class="ai-desc">
+              ${matched ? '<span class="cat-badge synergy">✓ Sesuai Kelayakan</span>' : `<span class="cat-badge">🔒 ${reqLvl.short}${j.requiredFields !== 'any' ? ` (${fieldStr})` : ''}</span>`}
+              ${hasCertBonus ? '<span class="cat-badge rare">📜 Bonus Sijil!</span>' : ''}
+              <br/>${Utils.escapeHtml(j.desc)}
+            </span>
+          </span>
+          <span class="ai-right">
+            <span class="act-status-pill free">${Utils.formatMoney(salary, s.countryId)}/thn</span>
+          </span>
+        </button>
+      `;
+    });
+    html += `</div>`;
+    return html;
+  },
+
+  // --------------------------------------------------------------------------
+  // TAB 2: PENDIDIKAN SEPANJANG HAYAT (KELAS DEWASA -> DIPLOMA -> DEGREE -> MASTER -> PhD)
+  // --------------------------------------------------------------------------
+  _renderEducationTab(s, c) {
+    const ed = s.education;
+    const lvlInfo = EducationData.LEVEL_INFO[ed.educationLevel] || EducationData.LEVEL_INFO.none;
+    const fieldObj = ed.educationField ? EducationData.getField(ed.educationField) : null;
+    let html = '';
+
+    // 1) Status kanak-kanak / sekolah biasa
+    if (ed.stage === 'infant') {
+      html += `<div class="info-banner">👶 Anda masih kecil! ${c.education.preschool.name} bermula pada umur ${c.education.preschool.startAge} tahun.</div>`;
+      return html;
+    }
+
+    if (['preschool', 'primary', 'secondary'].includes(ed.stage) && !ed.activeStudy) {
+      html += `
+        <div class="info-banner highlight">
+          <strong>🏫 ${Utils.escapeHtml(ed.schoolName)}</strong><br/>
+          Sedang belajar dalam sistem sekolah ${c.name}. Peperiksaan utama: <strong>${c.education.secondary.examName}</strong> (umur ${c.education.secondary.examAge}).
+        </div>
+        <div class="action-list">
+          <button type="button" class="action-item" id="act-study-hard" ${s.yearlyActions.studyHard ? 'disabled' : ''}>
+            <span class="ai-icon">📖</span>
+            <span class="ai-content">
+              <span class="ai-title">Belajar Bersungguh-sungguh</span>
+              <span class="ai-desc">Tingkatkan Kepintaran &amp; peluang biasiswa masa depan</span>
+            </span>
+            <span class="ai-right">Pintar ++</span>
+          </button>
+        </div>
+      `;
+      return html;
+    }
+
+    // 2) Status pendidikan semasa dewasa
+    html += `
+      <div class="info-banner highlight">
+        <strong>${lvlInfo.icon} Tahap Akademik Tertinggi: ${lvlInfo.label}</strong>${fieldObj ? ` (${fieldObj.icon} ${fieldObj.name})` : ''}<br/>
+        Kepintaran: <strong>${s.stats.smarts}%</strong> • Sijil Dimiliki: <strong>${ed.certificates.length}</strong>${ed.educationLoan > 0 ? ` • Hutang Pengajian: <strong>${Utils.formatMoney(ed.educationLoan, s.countryId)}</strong>` : ''}
+      </div>
+    `;
+
+    // 3) Jika sedang dalam pengajian aktif
+    if (ed.activeStudy) {
+      const st = ed.activeStudy;
+      const prog = EducationData.PROGRAMS.find(p => p.id === st.level);
+      const pct = Math.min(100, Math.round((st.yearsCompleted / st.totalYears) * 100));
+      html += `
+        <div class="career-active-card">
+          <div class="cac-top">
+            <div>
+              <div class="cac-title">${prog ? prog.icon : '🎓'} ${Utils.escapeHtml(prog ? prog.title : st.level)} — ${Utils.escapeHtml(st.fieldName)}</div>
+              <div class="cac-sub">${Utils.escapeHtml(st.institution)} • ${st.mode === 'part_time' ? 'Separuh Masa (Sambil Bekerja)' : 'Sepenuh Masa'} • ${Utils.escapeHtml(st.fundingLabel)}</div>
+            </div>
+            <span class="cat-badge synergy">PNGK ${st.gpa}</span>
+          </div>
+          <div style="margin-top:8px;">
+            <div class="ph-bar-lbl"><span>Kemajuan Pengajian</span><strong>Tahun ${st.yearsCompleted}/${st.totalYears} (${pct}%)</strong></div>
+            <div class="mini-track" style="height:8px;"><div class="mini-fill" style="width:${pct}%;background:#3b82f6;"></div></div>
+          </div>
+          ${st.level === 'phd' ? `<div class="cac-next">📄 Penerbitan Jurnal PhD: <strong>${st.publications || 0} kertas</strong> • Ujian Viva menanti pada tahun akhir!</div>` : ''}
+        </div>
+        <div class="action-list">
+          <button type="button" class="action-item" id="act-study-hard" ${s.yearlyActions.studyHard ? 'disabled' : ''}>
+            <span class="ai-icon">📚</span>
+            <span class="ai-content">
+              <span class="ai-title">Ulang Kaji &amp; Kajian Intensif</span>
+              <span class="ai-desc">Naikkan Kepintaran &amp; PNGK/GPA pengajian anda</span>
+            </span>
+            <span class="ai-right">GPA +</span>
+          </button>
+        </div>
+      `;
+      return html;
+    }
+
+    // 4) Borang Pendaftaran Pembelajaran Sepanjang Hayat (Dewasa / Peluang Kedua -> PhD)
+    const selField = this._selectedField || 'computer_science';
+    const selMode = this._selectedMode || 'full_time';
+    const selFund = this._selectedFunding || 'cash';
+    const famOk = EduCareerEngine.canUseFamilyFunding(s);
+
+    html += `
+      <div class="section-heading">⚙️ Tetapan Pendaftaran Pengajian</div>
+      <div class="edu-config-box">
+        <label class="edu-lbl">1. Pilih Bidang / Jurusan (10 Bidang):</label>
+        <select id="edu-field-select" class="input-field" style="width:100%;margin-bottom:8px;">
+          ${EducationData.FIELDS.map(f => `<option value="${f.id}" ${f.id === selField ? 'selected' : ''}>${f.icon} ${Utils.escapeHtml(f.name)}</option>`).join('')}
+        </select>
+
+        <label class="edu-lbl">2. Mod Pengajian:</label>
+        <div class="tab-pills" style="margin-bottom:8px;">
+          <button type="button" class="tab-pill edu-mode-btn ${selMode === 'full_time' ? 'active' : ''}" data-emode="full_time">🏫 Sepenuh Masa</button>
+          <button type="button" class="tab-pill edu-mode-btn ${selMode === 'part_time' ? 'active' : ''}" data-emode="part_time">🌙 Separuh Masa (+1 thn, Kekal Kerja)</button>
+        </div>
+
+        <label class="edu-lbl">3. Kaedah Pembiayaan Yuran:</label>
+        <div class="tab-pills">
+          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'cash' ? 'active' : ''}" data-efund="cash">💵 Bayar Tunai</button>
+          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'scholarship' ? 'active' : ''}" data-efund="scholarship">🏆 Mohon Biasiswa</button>
+          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'loan' ? 'active' : ''}" data-efund="loan">🏦 Pinjaman Pendidikan</button>
+          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'family' ? 'active' : ''}" data-efund="family" ${!famOk ? 'disabled' : ''}>👨‍👩‍👧 Tajaan Keluarga</button>
+        </div>
+      </div>
+
+      <div class="section-heading">🎓 Pilih Peringkat Pengajian</div>
+      <div class="action-list">
+    `;
+
+    EducationData.PROGRAMS.forEach(prog => {
+      const elig = EduCareerEngine.checkProgramEligibility(s, prog.id, prog.needsField ? selField : null);
+      const yrs = EduCareerEngine.getProgramDuration(s, prog.id, prog.needsField ? selField : null, selMode);
+      const tuition = EduCareerEngine.getTuitionAnnual(s, prog.id, prog.needsField ? selField : null);
+      const isFastTrack = prog.id === 'bachelor' && ed.educationLevel === 'diploma' && ed.educationField === selField;
+
+      html += `
+        <button type="button" class="action-item edu-enroll-btn" data-level="${prog.id}" ${!elig.ok ? 'disabled' : ''}>
+          <span class="ai-icon">${prog.icon}</span>
+          <span class="ai-content">
+            <span class="ai-title">
+              ${Utils.escapeHtml(prog.title)}
+              ${isFastTrack ? '<span class="cat-badge synergy">⚡ Laluan Pantas 2 Thn!</span>' : ''}
+            </span>
+            <span class="ai-desc">
+              ${elig.ok ? `<span class="cat-badge synergy">✓ Layak • ${yrs} Tahun</span>` : `<span class="cat-badge">🔒 ${Utils.escapeHtml(elig.reason)}</span>`}
+              <br/>${Utils.escapeHtml(prog.desc)}
+            </span>
+          </span>
+          <span class="ai-right">
+            <span class="act-status-pill cost">${Utils.formatMoney(tuition, s.countryId)}/thn</span>
+          </span>
+        </button>
+      `;
+    });
+
+    html += `</div>`;
+    return html;
+  },
+
+  // --------------------------------------------------------------------------
+  // TAB 3: SIJIL PROFESIONAL & KEMAHIRAN (28 SIJIL BERASASKAN BIDANG)
+  // --------------------------------------------------------------------------
+  _renderCertsTab(s, c) {
+    const ed = s.education;
+    const groups = [...new Set(EducationData.CERTIFICATES.map(x => x.group))];
+    let html = `
+      <div class="info-banner highlight">
+        <strong>📜 Sijil Profesional &amp; Kemahiran (${ed.certificates.length}/${EducationData.CERTIFICATES.length} Dimiliki)</strong><br/>
+        Sijil yang sepadan dengan bidang anda membuka kerjaya pakar dan memberi <strong>bonus gaji &amp; temu duga +10% hingga +25%</strong>!
+      </div>
+    `;
+
+    groups.forEach(grp => {
+      const list = EducationData.CERTIFICATES.filter(x => x.group === grp);
+      html += `<div class="section-heading">📂 ${Utils.escapeHtml(grp)}</div><div class="action-list">`;
+      list.forEach(cert => {
+        const owned = ed.certificates.includes(cert.id);
+        const elig = EduCareerEngine.checkCertificateEligibility(s, cert);
+        const costLocal = Utils.usdToLocal(cert.costUsd, s.countryId);
+
+        html += `
+          <button type="button" class="action-item cert-take-btn ${owned ? 'act-done-card' : ''}" data-cert-id="${cert.id}" ${owned || !elig.ok || s.yearlyActions.tookCert ? 'disabled' : ''}>
+            <span class="ai-icon">${cert.icon}</span>
+            <span class="ai-content">
+              <span class="ai-title">${Utils.escapeHtml(cert.title)}</span>
+              <span class="ai-desc">
+                ${owned ? '<span class="cat-badge synergy">✓ Dimiliki</span>' : elig.ok ? `<span class="cat-badge synergy">✓ Layak • Gaji +${cert.salaryBonusPct}%</span>` : `<span class="cat-badge">🔒 ${Utils.escapeHtml(elig.reason)}</span>`}
+                <br/>${Utils.escapeHtml(cert.desc)}
+              </span>
+            </span>
+            <span class="ai-right">
+              <span class="act-status-pill ${owned ? 'done' : 'cost'}">${owned ? '✓ Lulus' : Utils.formatMoney(costLocal, s.countryId)}</span>
+            </span>
+          </button>
+        `;
+      });
+      html += `</div>`;
+    });
+
+    return html;
+  },
+
+  // --------------------------------------------------------------------------
+  // TAB 4: REKOD AKADEMIK, SIJIL & PINJAMAN PENDIDIKAN
+  // --------------------------------------------------------------------------
+  _renderRecordTab(s, c) {
+    const ed = s.education;
+    const lvlInfo = EducationData.LEVEL_INFO[ed.educationLevel] || EducationData.LEVEL_INFO.none;
+    let html = `
+      <div class="info-banner highlight">
+        <strong>🎓 Profil Akademik ${Utils.escapeHtml(EduCareerEngine.getDisplayName(s))}</strong><br/>
+        Tahap Tertinggi: <strong>${lvlInfo.icon} ${lvlInfo.label}</strong><br/>
+        Baki Pinjaman Pendidikan: <strong>${Utils.formatMoney(ed.educationLoan || 0, s.countryId)}</strong>
+      </div>
+    `;
+
+    html += `<div class="section-heading">🏛️ Ijazah &amp; Kelayakan Tamat (${ed.completedDegrees.length})</div>`;
+    if (ed.completedDegrees.length === 0) {
+      html += `<div class="info-banner">Belum ada diploma atau ijazah tamat lagi.</div>`;
+    } else {
+      ed.completedDegrees.forEach(d => {
+        html += `
+          <div class="info-banner">
+            <strong>🎓 ${Utils.escapeHtml(d.title || d.level)} — ${Utils.escapeHtml(d.fieldName || 'Am')}</strong><br/>
+            ${Utils.escapeHtml(d.institution)} • Tahun ${d.year} • PNGK ${d.gpa}${d.publications ? ` • ${d.publications} Jurnal` : ''}
+          </div>
+        `;
+      });
+    }
+
+    html += `<div class="section-heading">📜 Sijil Profesional Dimiliki (${ed.certificates.length})</div>`;
+    if (ed.certificates.length === 0) {
+      html += `<div class="info-banner">Belum ada sijil profesional. Buka tab Sijil &amp; Kursus untuk meningkatkan nilai kerjaya anda!</div>`;
+    } else {
+      ed.certificates.forEach(cid => {
+        const co = EducationData.CERTIFICATES.find(x => x.id === cid);
+        if (!co) return;
+        html += `
+          <div class="info-banner">
+            <strong>${co.icon} ${Utils.escapeHtml(co.title)}</strong><br/>
+            Bonus Gaji +${co.salaryBonusPct}% • Bonus Temu Duga +${co.interviewBonus}%
+          </div>
+        `;
+      });
+    }
+
+    return html;
+  },
+
+  // --------------------------------------------------------------------------
+  // IKATAN PENDENGAR ACARA
+  // --------------------------------------------------------------------------
+  _bindHandlers(s, c, tab) {
+    document.querySelectorAll('.career-tab-pill').forEach(pill => {
+      pill.addEventListener('click', () => this.showHub(pill.dataset.ctab));
+    });
+
+    if (tab === 'jobs') {
+      const workBtn = document.getElementById('act-work-hard');
+      if (workBtn) workBtn.addEventListener('click', () => {
+        const res = Sim.workHarder();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('jobs');
+      });
+
+      const netBtn = document.getElementById('act-work-network');
+      if (netBtn) netBtn.addEventListener('click', () => {
+        const res = EduCareerEngine.networkAtWork();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('jobs');
+      });
+
+      const raiseBtn = document.getElementById('act-raise');
+      if (raiseBtn) raiseBtn.addEventListener('click', () => {
+        const res = Sim.askForRaise();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('jobs');
+      });
+
+      const toggleSwitch = document.getElementById('act-toggle-switch-job');
+      if (toggleSwitch) toggleSwitch.addEventListener('click', () => {
+        this._browsingNewJob = !this._browsingNewJob;
+        this.showHub('jobs');
+      });
+
+      const quitBtn = document.getElementById('act-quit-job');
+      if (quitBtn) quitBtn.addEventListener('click', () => {
+        GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title}.`);
+        s.job = null;
+        this._browsingNewJob = false;
+        GameState.save();
+        App.renderAll();
+        App.toast('Anda telah berhenti kerja.', 'culture');
+        this.showHub('jobs');
+      });
+
+      const refBtn = document.getElementById('btn-refresh-job-market');
+      if (refBtn) refBtn.addEventListener('click', () => {
+        const res = EduCareerEngine.refreshJobMarket();
+        App.toast(res.msg, res.ok ? 'culture' : 'error');
+        this.showHub('jobs');
+      });
+
+      document.querySelectorAll('.ind-filter-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          this._industryFilter = pill.dataset.ind || 'ALL';
+          this.showHub('jobs');
+        });
+      });
+
+      document.querySelectorAll('.career-apply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const res = EduCareerEngine.applyForCareer(btn.dataset.careerId);
+          App.renderAll();
+          if (res.interviewEvent) {
+            this._browsingNewJob = false;
+            Modals.showEvent(res.interviewEvent);
+            return;
+          }
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          if (res.ok) this._browsingNewJob = false;
+          this.showHub('jobs');
+        });
+      });
+    } else if (tab === 'education') {
+      const studyBtn = document.getElementById('act-study-hard');
+      if (studyBtn) studyBtn.addEventListener('click', () => {
+        const res = EduCareerEngine.studyHarder();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('education');
+      });
+
+      const fieldSel = document.getElementById('edu-field-select');
+      if (fieldSel) fieldSel.addEventListener('change', (e) => {
+        this._selectedField = e.target.value;
+        this.showHub('education');
+      });
+
+      document.querySelectorAll('.edu-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this._selectedMode = btn.dataset.emode;
+          this.showHub('education');
+        });
+      });
+
+      document.querySelectorAll('.edu-fund-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this._selectedFunding = btn.dataset.efund;
+          this.showHub('education');
+        });
+      });
+
+      document.querySelectorAll('.edu-enroll-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const level = btn.dataset.level;
+          const prog = EducationData.PROGRAMS.find(p => p.id === level);
+          const res = EduCareerEngine.enrollProgram({
+            level,
+            fieldId: prog && prog.needsField ? this._selectedField : null,
+            mode: this._selectedMode,
+            funding: this._selectedFunding
+          });
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          App.renderAll();
+          this.showHub('education');
+        });
+      });
+    } else if (tab === 'certs') {
+      document.querySelectorAll('.cert-take-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const res = EduCareerEngine.takeCertificate(btn.dataset.certId);
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          App.renderAll();
+          this.showHub('certs');
+        });
+      });
+    }
+  }
+};

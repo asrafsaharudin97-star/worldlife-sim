@@ -1,0 +1,732 @@
+/* ==========================================================================
+   WorldLife — Enjin Pendidikan Sepanjang Hayat (Sehingga PhD), Sijil Bidang,
+   Pasaran Kerja Rawak Dinamik, Temu Duga & Tangga Kenaikan Pangkat
+   Bahasa Melayu
+   ========================================================================== */
+
+window.EduCareerEngine = {
+  MAX_MARKET_REFRESHES: 2,
+
+  // --------------------------------------------------------------------------
+  // 1. PENYELARASAN MEDAN KEADAAN WATAK (SERASI DENGAN SAVE LAMA)
+  // --------------------------------------------------------------------------
+  ensureFields(s) {
+    if (!s) return;
+    if (!s.education) {
+      s.education = {
+        stage: 'infant',
+        schoolName: null,
+        universityName: null,
+        uniYearsLeft: 0,
+        hasHighSchool: false,
+        hasDegree: false,
+        examGrade: null
+      };
+    }
+    const ed = s.education;
+    if (!ed.educationLevel) {
+      if (ed.hasDegree) ed.educationLevel = 'bachelor';
+      else if (ed.hasHighSchool) ed.educationLevel = 'high_school';
+      else ed.educationLevel = 'none';
+    }
+    if (!('educationField' in ed)) ed.educationField = ed.hasDegree ? 'business_finance' : null;
+    if (!('activeStudy' in ed)) ed.activeStudy = null;
+    if (!Array.isArray(ed.completedDegrees)) {
+      ed.completedDegrees = [];
+      if (ed.hasDegree) {
+        ed.completedDegrees.push({
+          level: 'bachelor',
+          field: ed.educationField || 'business_finance',
+          institution: ed.universityName || 'Universiti',
+          year: s.year,
+          gpa: 3.4
+        });
+      }
+    }
+    if (!Array.isArray(ed.certificates)) ed.certificates = [];
+    if (typeof ed.educationLoan !== 'number') ed.educationLoan = 0;
+    if (typeof ed.hasDoctorateTitle !== 'boolean') ed.hasDoctorateTitle = ed.educationLevel === 'phd';
+
+    // Kekalkan flag serasi versi lama
+    const rank = window.EducationData ? EducationData.levelRank(ed.educationLevel) : 0;
+    if (rank >= 1) ed.hasHighSchool = true;
+    if (rank >= 3) ed.hasDegree = true;
+
+    if (!s.careerMarket) {
+      s.careerMarket = {
+        openings: [],
+        recentJobIds: [],
+        refreshesLeft: this.MAX_MARKET_REFRESHES,
+        lastMarketYear: -1
+      };
+    }
+    if (!Array.isArray(s.careerMarket.openings)) s.careerMarket.openings = [];
+    if (!Array.isArray(s.careerMarket.recentJobIds)) s.careerMarket.recentJobIds = [];
+    if (typeof s.careerMarket.refreshesLeft !== 'number') s.careerMarket.refreshesLeft = this.MAX_MARKET_REFRESHES;
+  },
+
+  // Paparkan gelaran "Dr." pada nama watak yang telah menamatkan PhD
+  getDisplayName(s) {
+    if (!s) return '';
+    const hasDr = Boolean(s.education && (s.education.hasDoctorateTitle || s.education.educationLevel === 'phd'));
+    if (hasDr && !/^Dr\.\s/i.test(s.name)) {
+      return `Dr. ${s.name}`;
+    }
+    return s.name;
+  },
+
+  // --------------------------------------------------------------------------
+  // 2. PENGIRAAN YURAN & PENDAFTARAN PENDIDIKAN SEPANJANG HAYAT
+  // --------------------------------------------------------------------------
+  getProgramDuration(s, level, fieldId, mode = 'full_time') {
+    const ed = s.education;
+    const prog = EducationData.PROGRAMS.find(p => p.id === level);
+    if (!prog) return 2;
+
+    let yrs = prog.baseYears;
+    // Laluan pantas 2 tahun jika naik taraf daripada Diploma bidang sama ke Ijazah!
+    if (level === 'bachelor' && ed.educationLevel === 'diploma' && ed.educationField === fieldId) {
+      yrs = prog.fastTrackYears || 2;
+    }
+    if (level === 'phd' && s.stats.smarts < 75) {
+      yrs = 4;
+    }
+    if (mode === 'part_time') {
+      yrs += 1;
+    }
+    return yrs;
+  },
+
+  getTuitionAnnual(s, level, fieldId) {
+    const c = Utils.getCountry(s.countryId);
+    const prog = EducationData.PROGRAMS.find(p => p.id === level);
+    const field = EducationData.getField(fieldId);
+    const isLocal = s.citizenships.includes(s.countryId) || s.residencyStatus === 'PR';
+    const baseAnnual = (c.education && c.education.uniTuitionAnnual) ? c.education.uniTuitionAnnual : Utils.usdToLocal(4500, s.countryId);
+    const factor = (prog ? prog.tuitionFactor : 1) * (field ? field.tuitionMult : 1) * (isLocal ? 1 : 1.65);
+    const qualityMult = 0.85 + ((c.educationQuality || 75) / 300);
+    return Math.max(0, Math.round(baseAnnual * factor * qualityMult));
+  },
+
+  canUseFamilyFunding(s) {
+    const hasParent = s.relationships && s.relationships.some(r => ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role) && r.alive);
+    const highRep = window.Dynasty && Dynasty.getData().familyReputation >= 65;
+    return Boolean(hasParent && (s.age <= 28 || highRep));
+  },
+
+  checkProgramEligibility(s, level, fieldId) {
+    this.ensureFields(s);
+    const ed = s.education;
+    const prog = EducationData.PROGRAMS.find(p => p.id === level);
+    if (!prog) return { ok: false, reason: 'Program tidak dikenali.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, reason: 'Anda berada di dalam penjara.' };
+    if (ed.activeStudy) return { ok: false, reason: 'Anda sedang mengikuti pengajian aktif sekarang.' };
+    if (s.age < prog.minAge) return { ok: false, reason: `Umur minimum ialah ${prog.minAge} tahun.` };
+    if (prog.exactLevelOnly && ed.educationLevel !== prog.exactLevelOnly) {
+      return { ok: false, reason: 'Anda sudah memiliki kelayakan sekolah menengah atau lebih tinggi.' };
+    }
+    if (!EducationData.hasMinLevel(ed.educationLevel, prog.reqLevel)) {
+      const reqInfo = EducationData.LEVEL_INFO[prog.reqLevel];
+      return { ok: false, reason: `Perlukan kelayakan minimum: ${reqInfo ? reqInfo.label : prog.reqLevel}.` };
+    }
+    if (prog.needsField && !fieldId) {
+      return { ok: false, reason: 'Sila pilih bidang pengajian terlebih dahulu.' };
+    }
+    // Elak ulang tahap & bidang yang sama tepat
+    if (ed.completedDegrees.some(d => d.level === level && (!prog.needsField || d.field === fieldId))) {
+      return { ok: false, reason: 'Anda sudah memiliki kelayakan ini dalam bidang yang sama!' };
+    }
+    return { ok: true, reason: '' };
+  },
+
+  enrollProgram({ level, fieldId = null, mode = 'full_time', funding = 'cash' }) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    const elig = this.checkProgramEligibility(s, level, fieldId);
+    if (!elig.ok) return { ok: false, msg: elig.reason };
+
+    const c = Utils.getCountry(s.countryId);
+    const prog = EducationData.PROGRAMS.find(p => p.id === level);
+    const fieldObj = fieldId ? EducationData.getField(fieldId) : null;
+    const annualTuition = this.getTuitionAnnual(s, level, fieldId);
+    const totalYears = this.getProgramDuration(s, level, fieldId, mode);
+    const uniName = (c.education && c.education.universities && c.education.universities.length > 0)
+      ? Utils.pick(c.education.universities)
+      : `Universiti ${s.city}`;
+    const instName = level === 'high_school' ? `Pusat Pendidikan Dewasa ${s.city}` : uniName;
+
+    // Semak pilihan pembiayaan yuran
+    let fundingLabel = 'Bayar Tunai';
+    if (funding === 'scholarship') {
+      const reqSmarts = Math.max(55, (prog.minSmarts || 40) + 18);
+      const chance = s.stats.smarts >= reqSmarts ? 0.72 : (s.stats.smarts >= reqSmarts - 10 ? 0.35 : 0.08);
+      if (!Utils.chance(chance)) {
+        return {
+          ok: false,
+          msg: `Permohonan biasiswa ditolak (Kepintaran anda ${s.stats.smarts}%, disyorkan ${reqSmarts}%+). Cuba Pinjaman Pendidikan atau Bayar Tunai!`
+        };
+      }
+      fundingLabel = 'Biasiswa Penuh';
+    } else if (funding === 'family') {
+      if (!this.canUseFamilyFunding(s)) {
+        return { ok: false, msg: 'Tajaan keluarga tidak tersedia (perlukan ibu/bapa masih hidup atau Reputasi Keluarga tinggi).' };
+      }
+      fundingLabel = 'Tajaan Keluarga';
+    } else if (funding === 'loan') {
+      fundingLabel = 'Pinjaman Pendidikan';
+    } else {
+      if (annualTuition > 0 && s.money < annualTuition) {
+        return {
+          ok: false,
+          msg: `Baki tidak mencukupi untuk yuran tahun pertama (${Utils.formatMoney(annualTuition, s.countryId)}). Cuba Pinjaman Pendidikan atau Biasiswa!`
+        };
+      }
+    }
+
+    // Jika Sepenuh Masa dan sedang bekerja, beri tahu atau lepaskan kerja
+    if (mode === 'full_time' && s.job) {
+      GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title} untuk fokus pengajian Sepenuh Masa.`, 'culture');
+      s.job = null;
+    }
+
+    const baseGpa = Utils.clamp(2.4 + (s.stats.smarts / 60), 2.5, 3.95);
+    s.education.activeStudy = {
+      level,
+      field: fieldId,
+      fieldName: fieldObj ? fieldObj.name : 'Pendidikan Am',
+      institution: instName,
+      yearsCompleted: 0,
+      totalYears,
+      mode,
+      funding,
+      fundingLabel,
+      annualTuition,
+      gpa: Number(baseGpa.toFixed(2)),
+      publications: 0
+    };
+    s.education.stage = level === 'high_school' ? 'adult_school' : 'university';
+    s.education.universityName = instName;
+    s.education.uniYearsLeft = totalYears;
+
+    const modeTxt = mode === 'part_time' ? 'Separuh Masa (Sambil Bekerja)' : 'Sepenuh Masa';
+    GameState.addJournalEntry(
+      `🎓 Anda mendaftar ${prog.title}${fieldObj ? ` (${fieldObj.name})` : ''} di ${instName}, ${c.name} ${c.flag} — ${modeTxt}, ${totalYears} tahun (${fundingLabel})!`,
+      'milestone'
+    );
+    GameState.adjustStats({ happiness: 8, smarts: 3 });
+    GameState.save();
+    return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${totalYears} tahun, ${fundingLabel})!` };
+  },
+
+  studyHarder() {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.yearlyActions.studyHard) return { ok: false, msg: 'Anda sudah mengulang kaji intensif tahun ini!' };
+    s.yearlyActions.studyHard = true;
+    const gain = Utils.randInt(4, 8);
+    GameState.adjustStats({ smarts: gain, happiness: -2 });
+    if (s.education.activeStudy) {
+      s.education.activeStudy.gpa = Number(Math.min(4.0, (s.education.activeStudy.gpa || 3.0) + 0.14).toFixed(2));
+      GameState.addJournalEntry(
+        `📚 Anda mengulang kaji bersungguh-sungguh untuk ${s.education.activeStudy.institution} (Kepintaran +${gain}%, PNGK/GPA kini ${s.education.activeStudy.gpa})!`
+      );
+    } else {
+      GameState.addJournalEntry(`📖 Anda belajar bersungguh-sungguh tahun ini (Kepintaran +${gain}%)!`);
+    }
+    GameState.save();
+    return { ok: true, msg: `Kepintaran +${gain}%!` };
+  },
+
+  // Dipanggil setiap tahun dari Sim._processEducation
+  tickYearlyEducation(s, c) {
+    this.ensureFields(s);
+    const ed = s.education;
+
+    // 1) Bayaran balik Pinjaman Pendidikan automatik apabila bekerja
+    if (ed.educationLoan > 0 && s.job && s.job.salary > 0) {
+      const installment = Math.min(ed.educationLoan, Math.max(Utils.usdToLocal(800, s.countryId), Math.round(s.job.salary * 0.08)));
+      s.money -= installment;
+      ed.educationLoan = Math.max(0, ed.educationLoan - installment);
+      if (ed.educationLoan === 0) {
+        GameState.addJournalEntry('🎉 Pinjaman Pendidikan anda telah DILUNASKAN sepenuhnya!', 'milestone');
+      }
+    }
+
+    // 2) Kemajuan pengajian aktif (Kelas Dewasa / Diploma / Ijazah / Master / PhD)
+    const st = ed.activeStudy;
+    if (!st) return false;
+
+    // Proses yuran tahunan
+    if (st.annualTuition > 0) {
+      if (st.funding === 'cash') {
+        s.money -= st.annualTuition;
+      } else if (st.funding === 'loan') {
+        ed.educationLoan = (ed.educationLoan || 0) + st.annualTuition;
+      }
+    }
+
+    // Separuh masa sambil bekerja menambah sedikit stres
+    if (st.mode === 'part_time') {
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8 });
+      GameState.adjustStats({ health: -2 });
+    }
+
+    st.yearsCompleted += 1;
+    ed.uniYearsLeft = Math.max(0, st.totalYears - st.yearsCompleted);
+    GameState.adjustStats({ smarts: Utils.randInt(3, 6) });
+    st.gpa = Number(Utils.clamp((st.gpa || 3.0) + (s.stats.smarts >= 70 ? 0.08 : -0.04) + (Math.random() * 0.1 - 0.04), 2.1, 4.0).toFixed(2));
+
+    // Peristiwa tahunan khas penyelidikan PhD (tesis, penerbitan jurnal)
+    if (st.level === 'phd' && st.yearsCompleted < st.totalYears) {
+      if (Utils.chance(0.55)) {
+        st.publications = (st.publications || 0) + 1;
+        GameState.adjustStats({ smarts: 3, happiness: 5 });
+        if (window.Dynasty) Dynasty.adjustReputation(2);
+        GameState.addJournalEntry(
+          `📄 Kajian PhD (${st.fieldName}): Kertas penyelidikan anda berjaya diterbitkan dalam jurnal antarabangsa (Jumlah penerbitan: ${st.publications})!`,
+          'milestone'
+        );
+      } else {
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 7 });
+        GameState.addJournalEntry(
+          `🔬 Tahun ${st.yearsCompleted}/${st.totalYears} PhD di ${st.institution}: Anda bertungkus-lumus membaiki bab metodologi tesis selepas semakan penyelia.`,
+          'culture'
+        );
+      }
+    }
+
+    // Tamat pengajian!
+    if (st.yearsCompleted >= st.totalYears) {
+      const prog = EducationData.PROGRAMS.find(p => p.id === st.level);
+      // Ujian Viva PhD
+      if (st.level === 'phd') {
+        const vivaPass = Utils.chance(0.82 + (s.stats.smarts / 500));
+        if (!vivaPass) {
+          st.totalYears += 1;
+          ed.uniYearsLeft = 1;
+          if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+          GameState.addJournalEntry(
+            `🎓 Ujian Viva PhD: Panel pemeriksa meminta pindaan besar tesis anda — pengajian disambung 1 tahun lagi!`,
+            'warning'
+          );
+          return true;
+        }
+      }
+
+      const prevRank = EducationData.levelRank(ed.educationLevel);
+      const newRank = EducationData.levelRank(st.level);
+      if (newRank >= prevRank) {
+        ed.educationLevel = st.level;
+        if (st.field) ed.educationField = st.field;
+      }
+      if (newRank >= 1) ed.hasHighSchool = true;
+      if (newRank >= 3) ed.hasDegree = true;
+
+      ed.completedDegrees.push({
+        level: st.level,
+        title: prog ? prog.title : st.level,
+        field: st.field,
+        fieldName: st.fieldName,
+        institution: st.institution,
+        year: s.year,
+        gpa: st.gpa,
+        publications: st.publications || 0
+      });
+
+      if (st.level === 'phd') {
+        ed.hasDoctorateTitle = true;
+        if (window.Dynasty) Dynasty.adjustReputation(10);
+        if (window.KarmaEndings) {
+          KarmaEndings.adjustAlignment({ fame: 8, karma: 6 });
+          KarmaEndings.addHighlight('👑', `Menggenggam PhD (${st.fieldName}) & gelaran Dr. dari ${st.institution}`);
+        }
+        if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+        GameState.addJournalEntry(
+          `👑 TAHNIAH ${this.getDisplayName(s)}! Anda lulus ujian Viva PhD (${st.fieldName}) di ${st.institution} dengan ${st.publications || 1} penerbitan jurnal! Gelaran "Dr." rasmi dianugerahkan & Reputasi Keluarga +10%!`,
+          'milestone'
+        );
+      } else {
+        if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+        GameState.addJournalEntry(
+          `🎓 KONVOKESYEN! Anda menamatkan ${prog ? prog.title : st.level}${st.field ? ` (${st.fieldName})` : ''} di ${st.institution} (PNGK ${st.gpa})!`,
+          'milestone'
+        );
+      }
+
+      GameState.adjustStats({ happiness: 18, smarts: 6 });
+      ed.activeStudy = null;
+      ed.stage = newRank >= 3 ? 'graduated' : 'highschool_done';
+    }
+    return true;
+  },
+
+  // --------------------------------------------------------------------------
+  // 3. SIJIL PROFESIONAL & KEMAHIRAN BERASASKAN BIDANG
+  // --------------------------------------------------------------------------
+  checkCertificateEligibility(s, cert) {
+    this.ensureFields(s);
+    const ed = s.education;
+    if (s.age < 17) return { ok: false, reason: 'Dibuka bermula umur 17 tahun.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, reason: 'Tidak tersedia ketika di dalam penjara.' };
+    if (ed.certificates.includes(cert.id)) return { ok: false, reason: 'Sudah Dimiliki' };
+
+    if (!EducationData.hasMinLevel(ed.educationLevel, cert.minEducation)) {
+      const lvl = EducationData.LEVEL_INFO[cert.minEducation];
+      return { ok: false, reason: `Perlukan: ${lvl ? lvl.short : cert.minEducation}` };
+    }
+
+    if (cert.requiredFields !== 'any' && Array.isArray(cert.requiredFields) && !cert.requiredFields.includes('any')) {
+      const earnedFields = new Set([
+        ed.educationField,
+        ...(ed.completedDegrees || []).map(d => d.field)
+      ].filter(Boolean));
+      const matched = cert.requiredFields.some(f => earnedFields.has(f));
+      if (!matched) {
+        const names = cert.requiredFields.map(fid => {
+          const fo = EducationData.getField(fid);
+          return fo ? fo.short : fid;
+        }).join(' / ');
+        const lvl = EducationData.LEVEL_INFO[cert.minEducation];
+        return { ok: false, reason: `Perlukan: ${lvl ? lvl.short : ''} ${names}`.trim() };
+      }
+    }
+
+    return { ok: true, reason: '' };
+  },
+
+  takeCertificate(certId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    const cert = EducationData.CERTIFICATES.find(c => c.id === certId);
+    if (!cert) return { ok: false, msg: 'Sijil tidak ditemui.' };
+    if (s.yearlyActions.tookCert) return { ok: false, msg: 'Anda hanya boleh mengambil 1 peperiksaan sijil profesional setahun!' };
+
+    const elig = this.checkCertificateEligibility(s, cert);
+    if (!elig.ok) return { ok: false, msg: elig.reason };
+
+    const costLocal = Utils.usdToLocal(cert.costUsd, s.countryId);
+    if (s.money < costLocal) {
+      return { ok: false, msg: `Yuran kursus & peperiksaan ialah ${Utils.formatMoney(costLocal, s.countryId)}.` };
+    }
+
+    s.money -= costLocal;
+    s.yearlyActions.tookCert = true;
+
+    const passChance = Utils.clamp(0.62 + ((s.stats.smarts - (cert.smartsReq || 40)) * 0.008), 0.30, 0.96);
+    if (Utils.chance(passChance)) {
+      s.education.certificates.push(cert.id);
+      GameState.adjustStats({ smarts: Utils.randInt(4, 7), happiness: 11 });
+      if (window.Dynasty) Dynasty.adjustReputation(2);
+      if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+      GameState.addJournalEntry(
+        `📜 LULUS SIJIL! Anda memperoleh ${cert.icon} ${cert.title}! Bonus gaji +${cert.salaryBonusPct}% & peluang temu duga lebih tinggi dalam bidang berkaitan.`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: `Tahniah! Lulus ${cert.title} (+${cert.salaryBonusPct}% bonus gaji)!` };
+    } else {
+      GameState.adjustStats({ smarts: 2, happiness: -4 });
+      GameState.addJournalEntry(
+        `📜 Anda tidak sempat mencapai markah lulus untuk peperiksaan ${cert.title} kali ini, namun ilmu kursus meningkatkan Kepintaran (+2%).`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: `Gagal peperiksaan ${cert.title} kali ini — tingkatkan Kepintaran & cuba lagi tahun depan!` };
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // 4. PASARAN KERJA RAWAK DINAMIK (10–12 JAWATAN/TAHUN + ANTI-ULANG + 2 REFRESH)
+  // --------------------------------------------------------------------------
+  getCareerSalaryLocal(s, career, rankIndex = 0) {
+    const c = Utils.getCountry(s.countryId);
+    const mult = c.salaryMultiplier || 0.55;
+    const rankMult = 1 + (rankIndex * 0.28);
+    let certBonus = 1;
+    const certs = (s.education && s.education.certificates) || [];
+    if (Array.isArray(career.preferredCerts)) {
+      for (const cid of career.preferredCerts) {
+        if (certs.includes(cid)) {
+          const cObj = EducationData.CERTIFICATES.find(x => x.id === cid);
+          certBonus += ((cObj ? cObj.salaryBonusPct : 12) / 100);
+        }
+      }
+    }
+    certBonus = Math.min(1.40, certBonus);
+    const usdAnnual = Math.round(career.baseSalary * mult * rankMult * certBonus);
+    return Utils.usdToLocal(usdAnnual, s.countryId);
+  },
+
+  isCareerFieldMatched(s, career) {
+    this.ensureFields(s);
+    const ed = s.education;
+    if (!EducationData.hasMinLevel(ed.educationLevel, career.minEducation)) return false;
+    if (career.requiredFields === 'any') return true;
+    const earnedFields = new Set([
+      ed.educationField,
+      ...(ed.completedDegrees || []).map(d => d.field)
+    ].filter(Boolean));
+    return Array.isArray(career.requiredFields) && career.requiredFields.some(f => earnedFields.has(f));
+  },
+
+  generateYearlyJobMarket(s, opts = {}) {
+    if (!s || !window.CareersData) return [];
+    this.ensureFields(s);
+    const cm = s.careerMarket;
+
+    if (!opts.isRefresh) {
+      cm.refreshesLeft = this.MAX_MARKET_REFRESHES;
+      cm.lastMarketYear = s.year;
+      if (cm.openings.length > 0) {
+        cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 24);
+      }
+    } else if (cm.openings.length > 0) {
+      cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 24);
+    }
+
+    const recentSet = new Set(cm.recentJobIds || []);
+    const all = CareersData.CAREERS;
+    const fresh = all.filter(j => !recentSet.has(j.id));
+    const pool = fresh.length >= 16 ? fresh : all;
+
+    const picked = [];
+    const addPick = (j) => {
+      if (j && !picked.includes(j.id)) picked.push(j.id);
+    };
+
+    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+    // 1) 3–4 jawatan sesuai kelayakan/bidang/sijil watak
+    const matching = shuffle(pool.filter(j => !j.isRare && this.isCareerFieldMatched(s, j) && (j.minEducation !== 'none' || (j.preferredCerts || []).some(c => s.education.certificates.includes(c)))));
+    for (const j of matching.slice(0, 4)) addPick(j);
+
+    // 2) 4–5 jawatan umum, kemahiran, hospitaliti atau kreatif pelbagai industri
+    const general = shuffle(pool.filter(j => !j.isRare && !picked.includes(j.id) && (j.minEducation === 'none' || j.minEducation === 'high_school' || j.industry === 'trades' || j.industry === 'creative' || j.industry === 'hospitality')));
+    for (const j of general.slice(0, 5)) addPick(j);
+
+    // 3) 2–3 jawatan berprestij / nadir ("Peluang Terhad / Headhunter")
+    const rareOrHigh = shuffle(pool.filter(j => !picked.includes(j.id) && (j.isRare || j.baseSalary >= 70000)));
+    for (const j of rareOrHigh.slice(0, 3)) addPick(j);
+
+    // 4) Cukupkan sehingga 11–12 jawatan aktif
+    const targetCount = Utils.randInt(10, 12);
+    for (const j of shuffle(pool)) {
+      if (picked.length >= targetCount) break;
+      addPick(j);
+    }
+
+    cm.openings = picked;
+    return picked;
+  },
+
+  refreshJobMarket() {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.careerMarket.refreshesLeft <= 0) {
+      return { ok: false, msg: 'Anda sudah menggunakan kesemua 2 segaran Pasaran Kerja tahun ini!' };
+    }
+    s.careerMarket.refreshesLeft -= 1;
+    this.generateYearlyJobMarket(s, { isRefresh: true });
+    GameState.save();
+    return { ok: true, msg: `🔄 Pasaran kerja disegarkan! (Baki: ${s.careerMarket.refreshesLeft}/${this.MAX_MARKET_REFRESHES})` };
+  },
+
+  // --------------------------------------------------------------------------
+  // 5. SEMAKAN KELAYAKAN, TEMU DUGA KERJA & KENAIKAN PANGKAT
+  // --------------------------------------------------------------------------
+  checkJobEligibility(s, career) {
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: '⛓️ Anda berada di dalam penjara dan tidak boleh memohon kerja biasa.' };
+    }
+    if (s.fugitive && s.fugitive.isFugitive) {
+      if (s.fugitive.fakeIdentityTier === 'cheap') {
+        if (Utils.chance(0.65)) {
+          s.fugitive.recaptureRisk = Utils.clamp((s.fugitive.recaptureRisk || 25) + 10, 0, 99);
+          GameState.addJournalEntry(
+            `🚨 Majikan mengesyaki dokumen palsu murahan anda semasa semakan latar belakang untuk jawatan ${career.title}! Risiko dikesan polis naik kepada ${s.fugitive.recaptureRisk}%.`,
+            'warning'
+          );
+          GameState.save();
+          return { ok: false, msg: '🚨 Dokumen palsu murahan anda gagal semakan latar belakang! Risiko dikesan polis meningkat.' };
+        }
+      } else if (s.fugitive.fakeIdentityTier !== 'pro') {
+        return {
+          ok: false,
+          msg: '🚨 Status PELARIAN: Anda disenarai hitam daripada pekerjaan rasmi! Beli Identiti Palsu Gred Profesional di Pasaran Gelap.'
+        };
+      }
+    }
+    if (s.age < 18) return { ok: false, msg: 'Pekerjaan sepenuh masa dibuka pada umur 18 tahun.' };
+    if (s.education.activeStudy && s.education.activeStudy.mode === 'full_time') {
+      return { ok: false, msg: 'Anda sedang belajar Sepenuh Masa! Tamatkan pengajian dahulu atau daftar Separuh Masa untuk bekerja.' };
+    }
+
+    if (!EducationData.hasMinLevel(s.education.educationLevel, career.minEducation)) {
+      const req = EducationData.LEVEL_INFO[career.minEducation];
+      return { ok: false, msg: `Jawatan ini memerlukan kelayakan minimum: ${req ? req.label : career.minEducation}.` };
+    }
+
+    if (!this.isCareerFieldMatched(s, career)) {
+      const fNames = (career.requiredFields || []).map(fid => {
+        const f = EducationData.getField(fid);
+        return f ? f.short : fid;
+      }).join(' / ');
+      return { ok: false, msg: `Jawatan ini memerlukan bidang pengajian: ${fNames}.` };
+    }
+
+    const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
+    if (s.criminalRecord > 0 && !hasCleanId && (career.industry === 'law_gov' || career.baseSalary >= 60000) && Utils.chance(0.6)) {
+      return { ok: false, msg: 'Semakan rekod latar belakang mengesan rekod jenayah anda.' };
+    }
+
+    return { ok: true, msg: '' };
+  },
+
+  applyForCareer(careerId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    const career = CareersData.CAREERS.find(c => c.id === careerId);
+    if (!career) return { ok: false, msg: 'Jawatan tidak ditemui.' };
+
+    const elig = this.checkJobEligibility(s, career);
+    if (!elig.ok) return elig;
+
+    // Jawatan peringkat pertengahan / tinggi / nadir mencetuskan Modal Temu Duga Kerja!
+    const needsInterview = career.isRare || career.minEducation !== 'none' || career.baseSalary >= 40000;
+    if (needsInterview) {
+      return {
+        ok: true,
+        interviewEvent: this.buildInterviewEvent(s, career),
+        msg: `Dipanggil ke Temu Duga untuk ${career.title}!`
+      };
+    }
+
+    return this.hireCharacter(s, career, 20);
+  },
+
+  buildInterviewEvent(s, career) {
+    const q = Utils.pick(CareersData.INTERVIEW_QUESTIONS);
+    const salaryLocal = this.getCareerSalaryLocal(s, career, 0);
+    const certs = (s.education && s.education.certificates) || [];
+    let certInterviewBonus = 0;
+    (career.preferredCerts || []).forEach(cid => {
+      if (certs.includes(cid)) {
+        const co = EducationData.CERTIFICATES.find(x => x.id === cid);
+        certInterviewBonus += (co ? co.interviewBonus : 12);
+      }
+    });
+
+    const shuffledOpts = [...q.options].sort(() => Math.random() - 0.5);
+
+    return {
+      id: `interview_${career.id}_${Date.now()}`,
+      icon: career.icon,
+      title: `Temu Duga: ${career.title}`,
+      text: `${q.prompt}\n\n(Gaji ditawarkan: ${Utils.formatMoney(salaryLocal, s.countryId)}/thn${certInterviewBonus > 0 ? ` • Bonus Sijil +${certInterviewBonus}%!` : ''})`,
+      choices: shuffledOpts.map(opt => ({
+        label: opt.label,
+        hint: 'Jawapan temu duga',
+        journalType: 'culture',
+        customAction: () => {
+          const baseOdds = 52 + ((s.stats.smarts - 50) * 0.45) + ((s.stats.looks - 50) * 0.15) + certInterviewBonus + opt.bonus - (career.isRare ? 12 : 0);
+          const passed = Utils.chance(Utils.clamp(baseOdds, 12, 97) / 100);
+          if (passed) {
+            const res = this.hireCharacter(s, career, opt.bonus);
+            return { outcome: res.msg, toastType: 'success' };
+          }
+          GameState.adjustStats({ happiness: -4 });
+          return {
+            outcome: `Panel penemu duga memilih calon lain untuk jawatan ${career.title}. Tingkatkan Kepintaran, Sijil atau cuba lagi!`,
+            toastType: 'error'
+          };
+        }
+      }))
+    };
+  },
+
+  hireCharacter(s, career, bonusScore = 0) {
+    const c = Utils.getCountry(s.countryId);
+    // Pemegang PhD atau sijil relevan boleh bermula terus pada tangga pangkat ke-2!
+    let startRank = 0;
+    if (s.education.educationLevel === 'phd' && career.promotionLadder.length > 2) startRank = 1;
+    const rankTitle = career.promotionLadder[startRank] || career.title;
+    const salaryLocal = this.getCareerSalaryLocal(s, career, startRank);
+
+    s.job = {
+      id: career.id,
+      careerId: career.id,
+      title: rankTitle,
+      baseTitle: career.title,
+      industry: career.industry,
+      icon: career.icon,
+      salary: salaryLocal,
+      years: 0,
+      performance: Utils.clamp(65 + Math.round(bonusScore / 4), 55, 88),
+      rankIndex: startRank,
+      ladder: [...career.promotionLadder],
+      stressLevel: career.stressLevel || 50,
+      countryId: s.countryId
+    };
+
+    GameState.addJournalEntry(
+      `💼 DITERIMA BEKERJA! Anda memulakan tugas sebagai ${rankTitle} di ${s.city}, ${c.name} dengan gaji ${Utils.formatMoney(salaryLocal, s.countryId)}/thn!`,
+      'milestone'
+    );
+    GameState.adjustStats({ happiness: 12 });
+    if (career.isRare && window.KarmaEndings) {
+      KarmaEndings.addHighlight(career.icon, `Berjaya menyandang kerjaya nadir: ${rankTitle}`);
+    }
+    GameState.save();
+    return { ok: true, msg: `Tahniah! Anda diterima sebagai ${rankTitle} (${Utils.formatMoney(salaryLocal, s.countryId)}/thn)!` };
+  },
+
+  networkAtWork() {
+    const s = GameState.current;
+    if (!s.job) return { ok: false, msg: 'Tiada pekerjaan aktif.' };
+    if (s.yearlyActions.workNetwork) return { ok: false, msg: 'Anda sudah membina rangkaian kerja tahun ini.' };
+    s.yearlyActions.workNetwork = true;
+
+    s.job.performance = Utils.clamp((s.job.performance || 65) + Utils.randInt(6, 12), 0, 100);
+    GameState.adjustStats({ happiness: 6, adaptation: 4 });
+    if (window.Dynasty) Dynasty.adjustReputation(2);
+    GameState.addJournalEntry(
+      `🤝 Anda aktif membina rangkaian profesional bersama pengarah dan rakan industri sebagai ${s.job.title} (Prestasi ${s.job.performance}%).`,
+      'culture'
+    );
+    GameState.save();
+    return { ok: true, msg: 'Rangkaian profesional diperkukuh & peluang kenaikan pangkat meningkat!' };
+  },
+
+  tryPromote(s, forceAttempt = false) {
+    if (!s || !s.job || !Array.isArray(s.job.ladder)) return { ok: false, msg: 'Tiada laluan pangkat lanjut.' };
+    const nextIdx = (s.job.rankIndex || 0) + 1;
+    if (nextIdx >= s.job.ladder.length) {
+      return { ok: false, msg: 'Anda sudah berada di puncak tertinggi tangga kerjaya ini!' };
+    }
+    if (!forceAttempt && (s.job.performance < 78 || s.job.years < (nextIdx * 2))) {
+      return { ok: false, msg: 'Teruskan prestasi cemerlang untuk layak naik pangkat.' };
+    }
+
+    s.job.rankIndex = nextIdx;
+    const newTitle = s.job.ladder[nextIdx];
+    s.job.title = newTitle;
+    const bump = Utils.randInt(18, 30);
+    s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
+    s.job.performance = 70;
+
+    // Jawatan berprestij tinggi menaikkan Reputasi Keluarga!
+    const isPrestigious = /Profesor|Ketua Saintis|Hakim|Pengarah|CTO|CFO|CISO|CEO|CPO|CMO|CHRO|COO|Duta|Kapten|Komander|Naib Canselor|Legenda/i.test(newTitle);
+    if (isPrestigious && window.Dynasty) {
+      Dynasty.adjustReputation(6);
+    }
+    if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+    GameState.adjustStats({ happiness: 15 });
+    GameState.addJournalEntry(
+      `🏆 NAIK PANGKAT! Anda dinaikkan pangkat menjadi ${newTitle} dengan gaji baharu ${Utils.formatMoney(s.job.salary, s.countryId)}/thn (+${bump}%)${isPrestigious ? ' — Reputasi Keluarga +6%!' : '!'}`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `🏆 Naik pangkat ke ${newTitle} (+${bump}% gaji)!` };
+  }
+};
