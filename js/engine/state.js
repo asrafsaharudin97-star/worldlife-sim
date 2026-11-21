@@ -18,7 +18,7 @@ window.GameState = {
 
     const chosenReligion = religion || (window.LegalInheritanceEngine
       ? LegalInheritanceEngine.pickReligionByDemographics(countryId, validHeritage)
-      : 'Islam');
+      : 'Tiada');
     const familyBelief = window.LegalInheritanceEngine
       ? LegalInheritanceEngine.religionToBelief(chosenReligion)
       : (window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(countryId, validHeritage) : 'unassigned');
@@ -492,7 +492,7 @@ window.GameState = {
 
     const heirReligion = parent.religion || (window.LegalInheritanceEngine
       ? LegalInheritanceEngine.beliefToReligion(parent.belief)
-      : 'Islam');
+      : 'Tiada');
 
     const state = {
       id: 'life_' + Date.now(),
@@ -679,7 +679,7 @@ window.GameState = {
       : Math.max(0, this.getNetWorth());
     const heirReligion = parent.religion || (window.LegalInheritanceEngine
       ? LegalInheritanceEngine.beliefToReligion(belief)
-      : 'Islam');
+      : 'Tiada');
     const netWorth = inheritedAmount;
     const newGen = (parent.generation || 1) + 1;
     const heirAge = Utils.randInt(16, 22);

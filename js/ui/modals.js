@@ -945,7 +945,9 @@ window.Modals = {
             <input type="text" id="baby-name-input" class="input-field" value="${Utils.escapeHtml(draft.suggestedName)}" maxlength="48" placeholder="Masukkan nama anak..." />
             <button type="button" id="btn-baby-random-name" class="secondary-btn" title="Jana nama rawak mengikut budaya">🎲 Nama Rawak</button>
           </div>
-          <small style="opacity:0.78;display:block;margin-top:4px;">Tip: Anda boleh tulis nama panggilan ringkas (cth. "Aiman") — format bin/binti atau nama keluarga akan dilengkapkan secara automatik.</small>
+          <small style="opacity:0.78;display:block;margin-top:4px;">${Relationships.isMuslim(s)
+            ? 'Tip: Anda boleh tulis nama panggilan ringkas (cth. "Aiman") — format bin/binti akan dilengkapkan secara automatik.'
+            : 'Tip: Anda boleh tulis nama panggilan ringkas — nama keluarga akan dilengkapkan secara automatik.'}</small>
         </div>
 
         <button type="button" class="primary-btn" id="btn-baby-confirm-name" style="margin-top:12px;">✅ Sahkan Nama</button>

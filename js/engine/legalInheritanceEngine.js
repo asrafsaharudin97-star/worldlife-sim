@@ -516,7 +516,7 @@ window.LegalInheritanceEngine = {
   // --------------------------------------------------------------------------
   canRujuk(s) {
     this.ensureLegalFields(s);
-    if (!s || s.married || s.partnerId) return false;
+    if (!s || !this.isIslamic(s) || s.married || s.partnerId) return false;
     if (!s.idahState || !s.idahState.active || !s.idahState.inIdah || s.idahState.yearsLeft <= 0) return false;
     if ((s.idahState.talakCount || 0) >= 3) return false;
     const ex = (s.relationships || []).find(r => r.id === s.idahState.exSpouseId && r.alive);
@@ -614,6 +614,9 @@ window.LegalInheritanceEngine = {
   // --------------------------------------------------------------------------
   setIslamicWasiat(s, pct, beneficiary = 'Wakaf & Kebajikan') {
     this.ensureLegalFields(s);
+    if (!this.isIslamic(s)) {
+      return { ok: false, msg: 'Wasiat Islam hanya untuk watak beragama Islam.' };
+    }
     const clamped = Math.max(0, Math.min(33.33, Number(pct) || 0));
     s.wasiat.islamicPct = Math.round(clamped * 100) / 100;
     s.wasiat.islamicBeneficiary = beneficiary || 'Wakaf & Kebajikan';
@@ -629,6 +632,9 @@ window.LegalInheritanceEngine = {
 
   setCivilWasiat(s, mode, targetHeirId = null) {
     this.ensureLegalFields(s);
+    if (this.isIslamic(s)) {
+      return { ok: false, msg: 'Watak beragama Islam menggunakan Wasiat Islam & Hukum Faraid.' };
+    }
     const validModes = ['none', 'equal', 'single_heir', 'charity'];
     s.wasiat.civilMode = validModes.includes(mode) ? mode : 'none';
     s.wasiat.civilTargetHeirId = mode === 'single_heir' ? targetHeirId : null;
