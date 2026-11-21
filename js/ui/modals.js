@@ -1286,13 +1286,18 @@ window.Modals = {
               <span class="ai-desc">Salasilah, Reputasi Keluarga, Status Legasi &amp; Generasi Perdana</span>
             </span>
           </button>
-          <button class="action-item" id="menu-open-modes">
-            <span class="ai-icon">🎭</span>
-            <span class="ai-content">
-              <span class="ai-title">Laluan Hidup &amp; 5 Mod Khas</span>
-              <span class="ai-desc">Jenayah, Mafia, Artis, Pelakon &amp; Politik</span>
-            </span>
-          </button>
+          ${(GameState.current && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo(GameState.current)) ? (() => {
+            const info = SpecialModesEngine.getActiveInfo(GameState.current);
+            return `
+              <button class="action-item" id="menu-open-active-special">
+                <span class="ai-icon">${info.def.icon}</span>
+                <span class="ai-content">
+                  <span class="ai-title">Mod Khas Aktif: ${Utils.escapeHtml(info.def.title)}</span>
+                  <span class="ai-desc">Pangkat: ${Utils.escapeHtml(info.rank.title)} — Klik untuk buka Papan Pemuka</span>
+                </span>
+              </button>
+            `;
+          })() : ''}
           <button class="action-item" id="menu-open-social">
             <span class="ai-icon">📱</span>
             <span class="ai-content">
@@ -1354,9 +1359,12 @@ window.Modals = {
     document.getElementById('menu-open-legacy').addEventListener('click', () => {
       if (GameState.current && window.LegacyModals) LegacyModals.showFamilyLegacy();
     });
-    document.getElementById('menu-open-modes').addEventListener('click', () => {
-      if (GameState.current && GameState.current.alive && window.ModeModals) ModeModals.showLifeModes('crime');
-    });
+    const spMenuBtn = document.getElementById('menu-open-active-special');
+    if (spMenuBtn) {
+      spMenuBtn.addEventListener('click', () => {
+        if (GameState.current && GameState.current.alive && window.SpecialModeModals) SpecialModeModals.showDashboard();
+      });
+    }
     document.getElementById('menu-open-social').addEventListener('click', () => {
       if (GameState.current && GameState.current.alive && window.ModeModals) ModeModals.showSocialHub('social');
     });

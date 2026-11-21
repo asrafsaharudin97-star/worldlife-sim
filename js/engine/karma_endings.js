@@ -97,11 +97,11 @@ window.KarmaEndings = {
   ],
 
   MODES_LIST: [
-    { id: 'crime', name: 'Mod Jenayah', icon: '🕶️' },
-    { id: 'mafia', name: 'Mod Mafia', icon: '🎩' },
-    { id: 'artist', name: 'Mod Artis', icon: '🎵' },
-    { id: 'actor', name: 'Mod Pelakon', icon: '🎬' },
-    { id: 'politic', name: 'Mod Politik', icon: '🏛️' },
+    { id: 'politics', name: 'Politik & Kepimpinan', icon: '🏛️' },
+    { id: 'ceo', name: 'Usahawan & CEO', icon: '🏢' },
+    { id: 'fund_manager', name: 'Jerung Pasaran', icon: '📈' },
+    { id: 'celebrity', name: 'Selebriti & Konten', icon: '🌟' },
+    { id: 'athlete', name: 'Atlet Pro & E-Sukan', icon: '🏆' },
     { id: 'social', name: 'Laman Sosial / Viral', icon: '📱' }
   ],
 
@@ -179,11 +179,12 @@ window.KarmaEndings = {
     // 2. Mula Arka Cerita "Wow" baharu (umur 19+, peluang terkawal)
     if (s.age >= 19 && Object.values(active).filter(a => a && !a.done).length < 2 && Utils.chance(0.14)) {
       const candidates = [];
+      const am = s.activeSpecialMode;
       if (!active.mysterious_investor && s.age <= 55) candidates.push('mysterious_investor');
       if (!active.hidden_family_secret && s.age <= 65) candidates.push('hidden_family_secret');
-      if (!active.undercover_informant && (s.alignment.notoriety >= 25 || s.modes.mafia.active || s.modes.crime.heistsDone > 0)) candidates.push('undercover_informant');
+      if (!active.undercover_informant && (s.alignment.notoriety >= 25 || (s.criminalRecord || 0) > 0 || (am && am.modeId === 'fund_manager'))) candidates.push('undercover_informant');
       if (!active.framed_for_crime && s.age >= 22 && s.age <= 60) candidates.push('framed_for_crime');
-      if (!active.betrayal_attempt && (s.alignment.notoriety >= 45 || s.modes.mafia.rankIndex >= 2 || s.modes.politic.rankIndex >= 2)) candidates.push('betrayal_attempt');
+      if (!active.betrayal_attempt && (s.alignment.notoriety >= 45 || (am && am.rankIndex >= 2))) candidates.push('betrayal_attempt');
       if (!active.overnight_viral && s.age >= 16 && s.age <= 48) candidates.push('overnight_viral');
 
       if (candidates.length > 0) {
@@ -520,14 +521,19 @@ window.KarmaEndings = {
               journalType: caughtRat ? 'dilemma' : 'warning',
               customAction: (st) => {
                 if (caughtRat) {
-                  if (st.modes.mafia.active) st.modes.mafia.respect = Utils.clamp(st.modes.mafia.respect + 20);
-                  KarmaEndings.adjustAlignment({ notoriety: -10, stress: -8 });
+                  KarmaEndings.adjustAlignment({ notoriety: -10, stress: -8, power: 8 });
                   KarmaEndings.addHighlight('🎯', 'Berjaya memerangkap informan rahsia dalam lingkaran');
                   return { outcome: 'Kepintaran anda menyelamatkan seluruh operasi. Pengaruh anda digeruni kawan dan lawan.' };
                 } else {
                   return {
                     outcome: 'Anda digari dan dihadapkan ke mahkamah!',
-                    nextEvent: window.UnderworldModes ? window.UnderworldModes.buildTrialEvent(st, 'Konspirasi Sindiket & Bukti Informan', 5) : null
+                    nextEvent: window.PrisonFugitive ? PrisonFugitive.buildCourtTrialEvent({
+                      crimeLabel: 'Konspirasi & Bukti Informan',
+                      minYears: 3,
+                      maxYears: 7,
+                      security: 'medium',
+                      heat: 45
+                    }) : null
                   };
                 }
               }
@@ -566,8 +572,7 @@ window.KarmaEndings = {
             customAction: (st) => {
               const hurt = Utils.chance(0.45) ? -28 : -10;
               GameState.adjustStats({ health: hurt, happiness: -4 });
-              KarmaEndings.adjustAlignment({ karma: -20, notoriety: 24, stress: 14 });
-              if (st.modes.mafia.active) st.modes.mafia.respect = Utils.clamp(st.modes.mafia.respect + 25);
+              KarmaEndings.adjustAlignment({ karma: -20, notoriety: 24, stress: 14, power: 15 });
               KarmaEndings.addHighlight('🔥', 'Mematahkan serangan hendap musuh dengan tangan sendiri');
               return { outcome: hurt < -20 ? 'Anda parah dan terpaksa dirawat secara rahsia, namun nama anda kini menjadi igauan musuh!' : 'Anda berjaya lolos tanpa cedera berat — seluruh dunia bawah tahu anda bukan calang-calang!' };
             }
@@ -733,26 +738,29 @@ window.KarmaEndings = {
     GameState.ensureUpgradedState();
     const netUsd = Utils.localToUsd(GameState.getNetWorth(), s.countryId);
     const a = s.alignment;
-    const m = s.modes;
+    const am = s.activeSpecialMode;
+    const exited = Array.isArray(s.exitedModeIds) ? s.exitedModeIds : [];
+    const wasPolitics = (am && am.modeId === 'politics' && am.rankIndex >= 2) || s.formerLeaderPension > 0 || exited.includes('politics');
+    const wasCelebrity = (am && am.modeId === 'celebrity' && am.rankIndex >= 2) || exited.includes('celebrity');
+    const wasAthlete = (am && am.modeId === 'athlete' && am.rankIndex >= 2) || exited.includes('athlete');
+    const wasFinanceOrCeo = (am && (am.modeId === 'ceo' || am.modeId === 'fund_manager') && am.rankIndex >= 2) || exited.includes('ceo') || exited.includes('fund_manager');
     let id = 'humble_soul';
 
-    if (m.mafia.rankIndex >= 4 && !s.prison.inPrison) {
-      id = 'untouchable_godfather';
-    } else if (s.socialMedia.cancelledCount >= 1 && (a.peakFame || a.fame) >= 55) {
+    if (s.socialMedia && s.socialMedia.cancelledCount >= 1 && (a.peakFame || a.fame) >= 55) {
       id = 'cancelled_viral_legend';
-    } else if (m.politic.rankIndex >= 2 && a.karma >= 25) {
+    } else if (wasPolitics && a.karma >= 25) {
       id = 'peoples_reformer';
-    } else if (m.politic.rankIndex >= 2 && a.karma <= -15) {
+    } else if (wasPolitics && a.karma <= -15) {
       id = 'corrupt_tyrant';
     } else if ((s.prison.totalServed || 0) > 0 && a.karma >= 35) {
       id = 'prisoner_turned_saint';
-    } else if (m.artist.rankIndex >= 3 || (m.artist.awards || 0) >= 2) {
-      id = 'cultural_art_icon';
-    } else if (m.actor.rankIndex >= 3 || (m.actor.awards || 0) >= 2) {
+    } else if (wasCelebrity && (a.peakFame || a.fame) >= 75) {
       id = 'global_cinema_legend';
-    } else if (netUsd >= 900000 && (a.peakFame || a.fame) < 50) {
+    } else if (wasAthlete && (a.peakFame || a.fame) >= 60) {
+      id = 'cultural_art_icon';
+    } else if ((wasFinanceOrCeo || netUsd >= 900000) && netUsd >= 900000 && (a.peakFame || a.fame) < 55) {
       id = 'shadow_billionaire';
-    } else if (s.criminalRecord >= 2 || m.crime.heistsDone >= 2 || m.mafia.active) {
+    } else if ((s.criminalRecord || 0) >= 2 || (s.fugitive && s.fugitive.wanted)) {
       id = 'underworld_outlaw';
     } else if (s.countriesLivedIn.length >= 3 || s.citizenships.length >= 3) {
       id = 'world_nomad';

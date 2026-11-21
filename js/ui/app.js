@@ -54,7 +54,7 @@ window.App = {
       if (GameState.current && GameState.current.alive && window.LegacyModals) LegacyModals.showFamilyLegacy();
     });
     document.getElementById('btn-open-modes').addEventListener('click', () => {
-      if (GameState.current && GameState.current.alive) ModeModals.showLifeModes('crime');
+      if (GameState.current && GameState.current.alive && window.SpecialModeModals) SpecialModeModals.showDashboard();
     });
     document.getElementById('btn-open-social').addEventListener('click', () => {
       if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
@@ -418,6 +418,17 @@ window.App = {
         fugitiveBar.textContent = `🌟 IDENTITI BAHARU — Klik Status Kehidupan Baharu`;
       } else {
         fugitiveBar.classList.add('hidden');
+      }
+    }
+    const modesBtn = document.getElementById('btn-open-modes');
+    if (modesBtn && window.SpecialModesEngine) {
+      const spInfo = SpecialModesEngine.getActiveInfo(s);
+      if (spInfo) {
+        modesBtn.classList.remove('hidden');
+        modesBtn.textContent = `${spInfo.def.icon} ${spInfo.def.shortLabel}`;
+        modesBtn.title = `${spInfo.def.title} — ${spInfo.rank.title}`;
+      } else {
+        modesBtn.classList.add('hidden');
       }
     }
     const legBtn = document.getElementById('btn-open-legacy');

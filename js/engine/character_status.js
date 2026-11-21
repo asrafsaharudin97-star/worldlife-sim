@@ -1,7 +1,7 @@
 /* ==========================================================================
    WorldLife — Pusat Sumber Kebenaran Tunggal (Single Source of Truth)
-   Penyelarasan Pekerjaan, Gelaran, Pendapatan Tahunan, Peralihan Mod & Migrasi Save
-   Bahasa Melayu
+   Diselaraskan 100% dengan Enjin Mod Khas "Peluang Sekali Seumur Hidup",
+   Kerjaya Rasmi, Pendidikan PhD, Aset, Penjara & Pelarian (Bahasa Melayu)
    ========================================================================== */
 
 window.CharacterStatus = {
@@ -14,7 +14,6 @@ window.CharacterStatus = {
     }
     const secRoles = [];
 
-    // Semak peranan sampingan (Pelajar Separuh Masa, Laman Sosial aktif, dll.)
     if (s.education && s.education.activeStudy && s.education.activeStudy.mode === 'part_time') {
       const lvl = (window.EducationData && EducationData.LEVEL_INFO[s.education.activeStudy.level]) || { short: 'Pengajian' };
       secRoles.push(`Pelajar Separuh Masa ${lvl.short}`);
@@ -36,65 +35,20 @@ window.CharacterStatus = {
       };
     }
 
-    // KEUTAMAAN 2: MOD KHAS AKTIF (Politik > Mafia > Pelakon > Artis)
-    const activeSpecial = [];
-    if (s.modes && s.modes.politic && s.modes.politic.active && window.FameModes) {
-      const r = FameModes.POLITIC_RANKS[s.modes.politic.rankIndex] || FameModes.POLITIC_RANKS[0];
-      activeSpecial.push({
-        title: r.title,
-        category: 'politic',
-        badge: `🏛️ Politik • Sokongan ${s.modes.politic.approval}%`,
-        icon: '🏛️',
-        modeId: 'politic'
-      });
-    }
-    if (s.modes && s.modes.mafia && s.modes.mafia.active && window.UnderworldModes) {
-      const r = UnderworldModes.MAFIA_RANKS[s.modes.mafia.rankIndex] || UnderworldModes.MAFIA_RANKS[0];
-      activeSpecial.push({
-        title: `${r.title} (${s.modes.mafia.syndicateName || 'Sindiket'})`,
-        category: 'mafia',
-        badge: `🎩 Sindiket • Hormat ${s.modes.mafia.respect}%`,
-        icon: '🎩',
-        modeId: 'mafia'
-      });
-    }
-    if (s.modes && s.modes.actor && s.modes.actor.active && window.FameModes) {
-      const r = FameModes.ACTOR_RANKS[s.modes.actor.rankIndex] || FameModes.ACTOR_RANKS[0];
-      activeSpecial.push({
-        title: r.title,
-        category: 'actor',
-        badge: `🎬 Pelakon • Bakat ${s.modes.actor.skill}%`,
-        icon: '🎬',
-        modeId: 'actor'
-      });
-    }
-    if (s.modes && s.modes.artist && s.modes.artist.active && window.FameModes) {
-      const r = FameModes.ARTIST_RANKS[s.modes.artist.rankIndex] || FameModes.ARTIST_RANKS[0];
-      activeSpecial.push({
-        title: r.title,
-        category: 'artist',
-        badge: `🎵 Artis • Bakat ${s.modes.artist.skill}%`,
-        icon: '🎵',
-        modeId: 'artist'
-      });
-    }
-
-    if (activeSpecial.length > 0) {
-      const primary = activeSpecial[0];
-      if (activeSpecial.length > 1) {
-        secRoles.unshift(activeSpecial[1].title);
+    // KEUTAMAAN 2: MOD KHAS AKTIF ("Peluang Sekali Seumur Hidup")
+    if (s.activeSpecialMode && window.SpecialModesEngine) {
+      const info = SpecialModesEngine.getActiveInfo(s);
+      if (info) {
+        if (s.job && s.job.title) secRoles.unshift(s.job.title);
+        return {
+          title: info.rank.title,
+          category: info.def.id,
+          badge: `${info.def.icon} ${info.def.shortLabel} • ${info.def.metric1.label} ${info.state.metric1}%`,
+          secondaryRole: secRoles.length > 0 ? secRoles.join(' • ') : null,
+          icon: info.def.icon,
+          modeId: info.def.id
+        };
       }
-      if (s.job && s.job.title) {
-        secRoles.unshift(s.job.title);
-      }
-      return {
-        title: primary.title,
-        category: primary.category,
-        badge: primary.badge,
-        secondaryRole: secRoles.length > 0 ? secRoles.join(' • ') : null,
-        icon: primary.icon,
-        modeId: primary.modeId
-      };
     }
 
     // KEUTAMAAN 3: KERJAYA RASMI (Standard Career)
@@ -158,7 +112,7 @@ window.CharacterStatus = {
       };
     }
 
-    // Pempengaruh Sepenuh Masa jika pengikut besar tanpa kerja lain
+    // Pempengaruh Sosial (jika pengikut >= 50k tanpa kerja lain)
     if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers >= 50000) {
       return {
         title: 'Pempengaruh & Pencipta Konten',
@@ -198,7 +152,6 @@ window.CharacterStatus = {
     let taxLocal = 0;
     let retireContribLocal = 0;
 
-    // Jika di penjara, tiada gaji luar (hanya upah kerja penjara apabila dilakukan)
     if (s.prison && s.prison.inPrison) {
       return { grossLocal: 0, netLocal: 0, taxLocal: 0, retireContribLocal: 0, breakdown: [] };
     }
@@ -214,46 +167,27 @@ window.CharacterStatus = {
       breakdown.push({ label: s.job.title, gross: g, net: g - t - Math.round(ret * 0.5), icon: s.job.icon || '💼' });
     }
 
-    // 2) Elaun & Gaji Mod Politik / Menteri
-    if (s.modes && s.modes.politic && s.modes.politic.active && window.FameModes) {
-      const r = FameModes.POLITIC_RANKS[s.modes.politic.rankIndex] || FameModes.POLITIC_RANKS[0];
-      const g = Utils.usdToLocal(r.annualUsd, s.countryId);
-      const t = Math.round(g * (taxRate * 0.6));
-      grossLocal += g;
-      taxLocal += t;
-      breakdown.push({ label: `Elaun ${r.title}`, gross: g, net: g - t, icon: '🏛️' });
+    // 2) Pendapatan Mod Khas Aktif (Politik / CEO / Trader Pro / Selebriti / Atlet Pro)
+    if (s.activeSpecialMode && window.SpecialModesEngine) {
+      const info = SpecialModesEngine.getActiveInfo(s);
+      if (info) {
+        const usd = SpecialModesEngine.getActiveAnnualUsd(s);
+        const g = Utils.usdToLocal(usd, s.countryId);
+        const t = Math.round(g * (taxRate * 0.75));
+        grossLocal += g;
+        taxLocal += t;
+        breakdown.push({ label: `${info.rank.title}`, gross: g, net: g - t, icon: info.def.icon });
+      }
     }
 
-    // 3) Pendapatan Mod Mafia / Sindiket (Wang gelap — tanpa cukai rasmi)
-    if (s.modes && s.modes.mafia && s.modes.mafia.active && window.UnderworldModes) {
-      const r = UnderworldModes.MAFIA_RANKS[s.modes.mafia.rankIndex] || UnderworldModes.MAFIA_RANKS[0];
-      const g = Utils.usdToLocal(r.annualUsd, s.countryId);
+    // 3) Pencen Bekas Pemimpin (jika bersara bersih 5+ tahun dalam Politik)
+    if (s.formerLeaderPension > 0) {
+      const g = Math.round(s.formerLeaderPension);
       grossLocal += g;
-      breakdown.push({ label: `Bahagian Sindiket (${r.title})`, gross: g, net: g, icon: '🎩' });
+      breakdown.push({ label: 'Pencen Bekas Pemimpin', gross: g, net: g, icon: '🏛️' });
     }
 
-    // 4) Royalti Mod Artis
-    if (s.modes && s.modes.artist && s.modes.artist.active && window.FameModes) {
-      const r = FameModes.ARTIST_RANKS[s.modes.artist.rankIndex] || FameModes.ARTIST_RANKS[0];
-      const mult = s.modes.artist.contractType === 'predatory' ? 0.6 : 1;
-      const g = Utils.usdToLocal(Math.round(r.annualUsd * mult), s.countryId);
-      const t = Math.round(g * taxRate * 0.7);
-      grossLocal += g;
-      taxLocal += t;
-      breakdown.push({ label: `Royalti ${r.title}`, gross: g, net: g - t, icon: '🎵' });
-    }
-
-    // 5) Bayaran Mod Pelakon
-    if (s.modes && s.modes.actor && s.modes.actor.active && window.FameModes) {
-      const r = FameModes.ACTOR_RANKS[s.modes.actor.rankIndex] || FameModes.ACTOR_RANKS[0];
-      const g = Utils.usdToLocal(r.annualUsd, s.countryId);
-      const t = Math.round(g * taxRate * 0.7);
-      grossLocal += g;
-      taxLocal += t;
-      breakdown.push({ label: `Bayaran ${r.title}`, gross: g, net: g - t, icon: '🎬' });
-    }
-
-    // 6) Pendapatan Pasif Media Sosial (jika >= 10,000 pengikut)
+    // 4) Pendapatan Pasif Media Sosial (jika >= 10,000 pengikut)
     if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers >= 10000) {
       const usdSponsor = Math.min(85000, Math.round((s.socialMedia.followers / 10000) * 1800));
       const g = Utils.usdToLocal(usdSponsor, s.countryId);
@@ -261,14 +195,14 @@ window.CharacterStatus = {
       breakdown.push({ label: 'Tajaan & Iklan Media Sosial', gross: g, net: g, icon: '📱' });
     }
 
-    // 7) Pencen Persaraan (jika bersara)
+    // 5) Pencen Persaraan (jika bersara)
     if (s.retired && s.pensionAnnual > 0) {
       const g = Math.round(s.pensionAnnual);
       grossLocal += g;
       breakdown.push({ label: 'Pencen Persaraan', gross: g, net: g, icon: '🌅' });
     }
 
-    // 8) Pendapatan Pasif Aset (Sewa Hartanah & Dividen Pelaburan)
+    // 6) Pendapatan Pasif Aset (Sewa Hartanah & Dividen Pelaburan)
     if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
       const aSum = AssetsEngine.getAssetCashflowSummary(s);
       if (aSum.rentalGross > 0) {
@@ -293,14 +227,13 @@ window.CharacterStatus = {
     let baseName = s.name || '';
     const prefixes = [];
 
-    // Gelaran Politik aktif
-    if (s.modes && s.modes.politic && s.modes.politic.active && !(s.prison && s.prison.inPrison)) {
-      const idx = s.modes.politic.rankIndex || 0;
-      if (idx >= 4) prefixes.push('YAB');
-      else if (idx >= 2) prefixes.push('YB');
+    if (s.activeSpecialMode && window.SpecialModesEngine && !(s.prison && s.prison.inPrison)) {
+      const info = SpecialModesEngine.getActiveInfo(s);
+      if (info && info.rank && info.rank.prefix) {
+        prefixes.push(info.rank.prefix);
+      }
     }
 
-    // Gelaran Akademik PhD
     const hasDr = Boolean(s.education && (s.education.hasDoctorateTitle || s.education.educationLevel === 'phd'));
     if (hasDr && !/^Dr\.\s/i.test(baseName)) {
       prefixes.push('Dr.');
@@ -310,9 +243,9 @@ window.CharacterStatus = {
   },
 
   // --------------------------------------------------------------------------
-  // 4. PERALIHAN MOD YANG BERSIH (TIADA GELARAN BASI ATAU GAJI HANTU)
+  // 4. PERALIHAN MOD YANG BERSIH
   // --------------------------------------------------------------------------
-  syncCharacterModeTransitions(s, transition, opts = {}) {
+  syncCharacterModeTransitions(s, transition) {
     if (!s) return;
     GameState.ensureUpgradedState();
 
@@ -321,37 +254,14 @@ window.CharacterStatus = {
         GameState.addJournalEntry(`🚪 Jawatan anda sebagai ${s.job.title} ditamatkan serta-merta kerana sabitan penjara.`, 'warning');
         s.job = null;
       }
-      if (s.modes.politic && s.modes.politic.active) {
-        s.modes.politic.active = false;
-        GameState.addJournalEntry('🏛️ Anda dilucutkan daripada jawatan politik ekoran hukuman penjara.', 'warning');
+      if (s.activeSpecialMode && window.SpecialModesEngine) {
+        const info = SpecialModesEngine.getActiveInfo(s);
+        if (info) {
+          if (!s.exitedModeIds.includes(info.def.id)) s.exitedModeIds.push(info.def.id);
+          GameState.addJournalEntry(`⛓️ Anda dilucutkan daripada ${info.def.title} (${info.rank.title}) akibat sabitan penjara — mod ini dikunci selamanya.`, 'warning');
+        }
+        s.activeSpecialMode = null;
       }
-    } else if (transition === 'enter_politic_office') {
-      // Apabila menjadi Ahli Parlimen / Menteri / PM (rank >= 2), tamatkan kerja rasmi yang bercanggah
-      if (s.job) {
-        GameState.addJournalEntry(`🏛️ Anda meletak jawatan sebagai ${s.job.title} bagi menumpukan sepenuh masa kepada tugas kepimpinan negara.`, 'milestone');
-        s.job = null;
-      }
-      s.retired = false;
-    } else if (transition === 'leave_politic') {
-      if (s.modes.politic) {
-        s.modes.politic.active = false;
-        GameState.addJournalEntry('🏛️ Anda meletak jawatan dan bersara daripada arena politik aktif.', 'culture');
-      }
-    } else if (transition === 'enter_mafia') {
-      if (s.modes.politic && s.modes.politic.active) {
-        s.modes.politic.active = false;
-      }
-      s.retired = false;
-    } else if (transition === 'leave_mafia') {
-      if (s.modes.mafia) {
-        s.modes.mafia.active = false;
-        s.modes.mafia.syndicateName = null;
-        s.modes.mafia.rankIndex = 0;
-      }
-    } else if (transition === 'leave_artist') {
-      if (s.modes.artist) s.modes.artist.active = false;
-    } else if (transition === 'leave_actor') {
-      if (s.modes.actor) s.modes.actor.active = false;
     } else if (transition === 'enter_career') {
       s.retired = false;
     } else if (transition === 'quit_job') {
@@ -360,7 +270,6 @@ window.CharacterStatus = {
       const inc = this.getTotalAnnualIncome(s);
       s.pensionAnnual = Math.max(Utils.usdToLocal(6000, s.countryId), Math.round(inc.grossLocal * 0.35));
       s.job = null;
-      if (s.modes.politic) s.modes.politic.active = false;
       s.retired = true;
       GameState.addJournalEntry(`🌅 Anda memilih untuk bersara dengan pencen ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn!`, 'milestone');
     }
@@ -368,13 +277,12 @@ window.CharacterStatus = {
     this.recordPeakRole(s);
   },
 
-  // Rekodkan peranan tertinggi sepanjang hayat untuk Obituari & Salasilah Dinasti
   recordPeakRole(s) {
     if (!s) return;
     const occ = this.getDisplayOccupation(s);
     if (!occ || ['none', 'unemployed', 'child', 'school'].includes(occ.category)) return;
-    const weightMap = { politic: 5, mafia: 4, actor: 4, artist: 4, career: 3, education: 2, retired: 1, prison: 1 };
-    const newWeight = (weightMap[occ.category] || 1) * 10 + (s.modes && s.modes.politic && s.modes.politic.active ? (s.modes.politic.rankIndex || 0) : 0);
+    const isSpecial = Boolean(s.activeSpecialMode && occ.modeId === s.activeSpecialMode.modeId);
+    const newWeight = isSpecial ? (60 + (s.activeSpecialMode.rankIndex || 0) * 10) : (occ.category === 'career' ? 35 : 15);
     if (!s.peakRole || newWeight >= (s.peakRoleWeight || 0)) {
       s.peakRole = occ.title;
       s.peakRoleIcon = occ.icon;
@@ -387,13 +295,18 @@ window.CharacterStatus = {
   // --------------------------------------------------------------------------
   reconcileCharacterState(s) {
     if (!s || typeof s !== 'object') return s;
+    if (window.SpecialModesEngine && SpecialModesEngine.ensureFields) {
+      SpecialModesEngine.ensureFields(s);
+    }
     if (window.EduCareerEngine && EduCareerEngine.ensureFields) {
       EduCareerEngine.ensureFields(s);
     }
     if (window.PrisonFugitive && PrisonFugitive.ensureFields) {
       PrisonFugitive.ensureFields(s);
     }
-    // Pastikan save lama dengan Mod Politik / Mafia / Artis / Pelakon aktif terus diselaraskan
+    if (window.AssetsEngine && AssetsEngine.ensureFields) {
+      AssetsEngine.ensureFields(s);
+    }
     this.recordPeakRole(s);
     return s;
   }

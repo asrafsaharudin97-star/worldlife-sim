@@ -312,15 +312,6 @@ window.GameState = {
     if (!s.prison || typeof s.prison !== 'object') {
       s.prison = { inPrison: false, yearsLeft: 0, totalServed: 0, crimeName: null };
     }
-    if (!s.modes || typeof s.modes !== 'object') {
-      s.modes = {
-        crime: { opsSuccess: 0, heistsDone: 0 },
-        mafia: { active: false, syndicateName: null, rankIndex: 0, respect: 0 },
-        artist: { active: false, rankIndex: 0, skill: 0, releases: 0, awards: 0, contractType: null },
-        actor: { active: false, rankIndex: 0, skill: 0, films: 0, awards: 0 },
-        politic: { active: false, rankIndex: 0, approval: 40, faction: null, policiesPassed: 0, corruptionCount: 0 }
-      };
-    }
     if (!s.activeArcs || typeof s.activeArcs !== 'object') s.activeArcs = {};
     if (!Array.isArray(s.highlights)) s.highlights = [];
     if (!Array.isArray(s.modesVisited)) s.modesVisited = [];
@@ -345,8 +336,8 @@ window.GameState = {
     if (window.AssetsEngine && AssetsEngine.ensureFields) {
       AssetsEngine.ensureFields(s);
     }
-    if (window.ModeEngine && ModeEngine.ensureFields) {
-      ModeEngine.ensureFields(s);
+    if (window.SpecialModesEngine && SpecialModesEngine.ensureFields) {
+      SpecialModesEngine.ensureFields(s);
     }
     if (window.CharacterStatus && CharacterStatus.reconcileCharacterState) {
       CharacterStatus.reconcileCharacterState(s);
@@ -400,11 +391,14 @@ window.GameState = {
   getNetWorth() {
     const s = this.current;
     if (!s) return 0;
+    const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
+      ? SpecialModesEngine.getCeoEquityLocal(s)
+      : 0;
     if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
       const aSum = AssetsEngine.getAssetCashflowSummary(s);
-      return Math.round((s.money || 0) + (s.retirementFund || 0) + aSum.totalAssetValue - aSum.totalDebt);
+      return Math.round((s.money || 0) + (s.retirementFund || 0) + aSum.totalAssetValue + ceoEquity - aSum.totalDebt);
     }
-    let total = s.money + (s.investments || 0) + s.retirementFund;
+    let total = s.money + (s.investments || 0) + s.retirementFund + ceoEquity;
     for (const v of s.assets.vehicles) total += v.value;
     for (const p of s.assets.properties) total += p.value;
     return Math.round(total);

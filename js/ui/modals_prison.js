@@ -125,7 +125,6 @@ window.PrisonModals = {
             <span class="ai-right">${paroleReady ? 'Mohon' : '🔒 Kunci'}</span>
           </button>
         </div>
-        ${window.ModeEngine ? ModeEngine.renderDynamicBoardHtml(s, 'prison', 'Aktiviti Dinamik Blok Penjara') : ''}
       `
     });
 
@@ -144,16 +143,6 @@ window.PrisonModals = {
         }
       });
     });
-
-    if (window.ModeEngine) {
-      ModeEngine.bindDynamicBoard(() => {
-        if (GameState.current && GameState.current.prison && GameState.current.prison.inPrison) {
-          this.showPrisonHub();
-        } else {
-          Modals.close(true);
-        }
-      });
-    }
   },
 
   // --------------------------------------------------------------------------

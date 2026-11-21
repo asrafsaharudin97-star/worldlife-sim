@@ -79,8 +79,8 @@ window.Sim = {
     if (s.age >= 18 && window.EduCareerEngine && EduCareerEngine.generateYearlyJobMarket) {
       EduCareerEngine.generateYearlyJobMarket(s);
     }
-    if (window.ModeEngine && ModeEngine.refreshAllYearlyBoards) {
-      ModeEngine.refreshAllYearlyBoards(s);
+    if (window.SpecialModesEngine && SpecialModesEngine.tickYearlySpecialMode) {
+      SpecialModesEngine.tickYearlySpecialMode(s);
     }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
@@ -431,14 +431,10 @@ window.Sim = {
       if (legEv) return legEv;
     }
 
-    // 0. Peristiwa Khusus Dunia Bawah (Serbuan Pasukan Khas / Omertà) & Mod Kemasyhuran (Kontrak / Siasatan Politik)
-    if (window.UnderworldModes) {
-      const uwEv = UnderworldModes.pickUnderworldEvent(s);
-      if (uwEv) return uwEv;
-    }
-    if (window.FameModes) {
-      const fmEv = FameModes.pickFameModeEvent(s);
-      if (fmEv) return fmEv;
+    // 0. Tawaran "Peluang Sekali Seumur Hidup" Mod Khas (Umur 14+, tiada menu statik!)
+    if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerLifetimeOffer) {
+      const offerEv = SpecialModesEngine.maybeTriggerLifetimeOffer(s);
+      if (offerEv) return offerEv;
     }
 
     // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Jodoh / Ta'aruf
