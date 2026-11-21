@@ -634,15 +634,19 @@ window.LegalInheritanceEngine = {
   setIslamicWasiat(s, pct, beneficiary = 'Wakaf & Kebajikan') {
     this.ensureLegalFields(s);
     if (!this.isSyariahApplicable(s)) {
-      return { ok: false, msg: 'Wasiat Islam hanya untuk watak beragama Islam.' };
+      return { ok: false, msg: 'Wasiat Islam hanya untuk watak beragama Islam di negara Islam.' };
     }
     const clamped = Math.max(0, Math.min(33.33, Number(pct) || 0));
     s.wasiat.islamicPct = Math.round(clamped * 100) / 100;
     s.wasiat.islamicBeneficiary = beneficiary || 'Wakaf & Kebajikan';
+    // Pastikan hibahPct + wasiatPct <= 100% supaya baki Faraid tidak pernah negatif
+    if (typeof s.wasiat.hibahPct === 'number' && (s.wasiat.hibahPct + s.wasiat.islamicPct) > 100) {
+      s.wasiat.hibahPct = Math.max(0, Math.round((100 - s.wasiat.islamicPct) * 100) / 100);
+    }
     GameState.addJournalEntry(
       s.wasiat.islamicPct > 0
         ? `📜 Wasiat Islam dikemas kini: ${s.wasiat.islamicPct}% daripada harta pusaka bersih diperuntukkan kepada ${s.wasiat.islamicBeneficiary} (had maksimum 1/3 syarak).`
-        : '📜 Peruntukan Wasiat Islam dibatalkan — 100% harta bersih akan dibahagikan mengikut Faraid.',
+        : '📜 Peruntukan Wasiat Islam dibatalkan — baki harta bersih akan dibahagikan mengikut Hibah & Faraid.',
       'culture'
     );
     GameState.save();
@@ -652,7 +656,7 @@ window.LegalInheritanceEngine = {
   setCivilWasiat(s, mode, targetHeirId = null) {
     this.ensureLegalFields(s);
     if (this.isSyariahApplicable(s)) {
-      return { ok: false, msg: 'Watak beragama Islam menggunakan Wasiat Islam & Hukum Faraid.' };
+      return { ok: false, msg: 'Watak beragama Islam di negara Islam menggunakan Wasiat Islam, Hibah & Faraid.' };
     }
     const validModes = ['none', 'equal', 'single_heir', 'charity'];
     s.wasiat.civilMode = validModes.includes(mode) ? mode : 'none';
@@ -664,25 +668,166 @@ window.LegalInheritanceEngine = {
       charity: 'Wasiat Amal & Kebajikan (100%)'
     };
     GameState.addJournalEntry(`📜 Wasiat Sivil dikemas kini: ${labels[s.wasiat.civilMode]}.`, 'culture');
+    const backlash = this.evaluateHeirBacklash(s);
+    let backlashEvent = null;
+    if (backlash && backlash.severity !== 'none') {
+      this.applyHeirBacklash(s, backlash);
+      if (window.RelationshipDramaData && RelationshipDramaData.buildHeirBacklashEvent) {
+        backlashEvent = RelationshipDramaData.buildHeirBacklashEvent(s, backlash);
+      }
+    }
     GameState.save();
-    return { ok: true, msg: `Wasiat Sivil dikemas kini (${labels[s.wasiat.civilMode]}).` };
+    return { ok: true, msg: `Wasiat Sivil dikemas kini (${labels[s.wasiat.civilMode]}).`, backlash, backlashEvent };
+  },
+
+  setCustomHibah(s, { pct = 0, recipientType = 'adopted', recipientId = null, recipientName = null } = {}) {
+    this.ensureLegalFields(s);
+    if (!this.isSyariahApplicable(s)) {
+      return { ok: false, msg: 'Pengurusan Hibah hanya tersedia di bawah Undang-Undang Syariah.' };
+    }
+    const val = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    s.wasiat.hibahPct = val;
+    s.wasiat.hibahAdoptedPct = recipientType === 'adopted' ? val : 0;
+    s.wasiat.hibahRecipientType = recipientType || 'adopted';
+    s.wasiat.hibahRecipientId = recipientId || null;
+    s.wasiat.hibahRecipientName = recipientName || null;
+
+    // Kuatkuasakan hibahPercent + wasiatPercent <= 100%
+    const curWasiat = s.wasiat.islamicPct || 0;
+    if (val + curWasiat > 100) {
+      s.wasiat.islamicPct = Math.max(0, Math.round((100 - val) * 100) / 100);
+    }
+
+    const faraidLeft = Math.max(0, Math.round((100 - val - (s.wasiat.islamicPct || 0)) * 10) / 10);
+    const recLabel = recipientType === 'adopted'
+      ? 'Anak Angkat'
+      : (recipientName || (recipientType === 'other' ? 'Lain-lain / Kebajikan' : 'Penerima Hibah'));
+
+    GameState.addJournalEntry(
+      val > 0
+        ? `🎁 Hibah dikemas kini: ${val}% harta bersih diperuntukkan kepada ${recLabel} (Baki Faraid: ${faraidLeft}%).`
+        : '🎁 Peruntukan Hibah ditetapkan kepada 0% (baki diagihkan mengikut Faraid).',
+      'culture'
+    );
+
+    const backlash = this.evaluateHeirBacklash(s);
+    let backlashEvent = null;
+    if (backlash && backlash.severity !== 'none') {
+      this.applyHeirBacklash(s, backlash);
+      if (window.RelationshipDramaData && RelationshipDramaData.buildHeirBacklashEvent) {
+        backlashEvent = RelationshipDramaData.buildHeirBacklashEvent(s, backlash);
+      }
+    }
+    GameState.save();
+    return { ok: true, msg: `Hibah dikemas kini (${val}% kepada ${recLabel} • Baki Faraid ${faraidLeft}%).`, backlash, backlashEvent };
   },
 
   setAdoptedHibahPct(s, pct) {
+    return this.setCustomHibah(s, { pct, recipientType: 'adopted', recipientName: 'Anak Angkat' });
+  },
+
+  evaluateHeirBacklash(s) {
     this.ensureLegalFields(s);
-    if (!this.isSyariahApplicable(s)) {
-      return { ok: false, msg: 'Hibah Anak Angkat hanya tersedia di bawah Undang-Undang Syariah.' };
+    if (!s || !Array.isArray(s.relationships)) return { severity: 'none', disadvantagedHeirs: [] };
+    const syariah = this.isSyariahApplicable(s);
+
+    const livingSpouse = (s.married && s.partnerId)
+      ? s.relationships.find(r => r.id === s.partnerId && r.alive)
+      : null;
+    const livingParents = s.relationships.filter(r => ['Ibu', 'Ayah', 'Bapa'].includes(r.role) && r.alive);
+    const allLivingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+    const bioKids = allLivingKids.filter(k => !k.isAdopted);
+
+    if (syariah) {
+      const hibahPct = typeof s.wasiat.hibahPct === 'number' ? s.wasiat.hibahPct : (s.wasiat.hibahAdoptedPct || 0);
+      if (hibahPct <= 40) return { severity: 'none', disadvantagedHeirs: [] };
+
+      const recType = s.wasiat.hibahRecipientType || 'adopted';
+      const recId = s.wasiat.hibahRecipientId || null;
+      const legalHeirs = [livingSpouse, ...bioKids, ...livingParents].filter(Boolean);
+      const disadvantagedHeirs = legalHeirs.filter(h => !(recId && h.id === recId));
+      if (disadvantagedHeirs.length === 0) return { severity: 'none', disadvantagedHeirs: [] };
+
+      const severity = hibahPct >= 80 ? 'severe' : 'high';
+      const recLabel = recType === 'adopted'
+        ? 'Anak Angkat'
+        : (s.wasiat.hibahRecipientName || (recType === 'other' ? 'pihak luar / kebajikan' : 'seorang penerima'));
+      return {
+        severity,
+        isCivil: false,
+        hibahPct,
+        faraidLeft: Math.max(0, Math.round((100 - hibahPct - (s.wasiat.islamicPct || 0)) * 10) / 10),
+        recipientLabel: recLabel,
+        disadvantagedHeirs
+      };
     }
-    const val = Math.max(0, Math.min(10, Number(pct) || 0));
-    s.wasiat.hibahAdoptedPct = val;
-    GameState.addJournalEntry(
-      val > 0
-        ? `🎁 Peruntukan Hibah Anak Angkat ditetapkan kepada ${val}% daripada baki harta bersih sebelum agihan Faraid.`
-        : '🎁 Peruntukan Hibah Anak Angkat ditetapkan kepada 0% (tiada potongan sebelum Faraid).',
-      'culture'
-    );
-    GameState.save();
-    return { ok: true, msg: `Hibah Anak Angkat dikemas kini (${val}%).` };
+
+    // Sivil: Wasiat menafikan waris (100% Amal atau 1 Waris Utama yang mengecualikan waris lain)
+    const cMode = (s.wasiat && s.wasiat.civilMode) || 'none';
+    const legalHeirs = [livingSpouse, ...allLivingKids].filter(Boolean);
+    if (cMode === 'charity' && legalHeirs.length > 0) {
+      return {
+        severity: 'severe',
+        isCivil: true,
+        hibahPct: 100,
+        faraidLeft: 0,
+        recipientLabel: 'Badan Amal (100%)',
+        disadvantagedHeirs: legalHeirs
+      };
+    }
+    if (cMode === 'single_heir' && legalHeirs.length > 1) {
+      const targetId = s.wasiat.civilTargetHeirId;
+      const excluded = legalHeirs.filter(h => h.id !== targetId);
+      if (excluded.length > 0) {
+        const target = legalHeirs.find(h => h.id === targetId);
+        return {
+          severity: 'severe',
+          isCivil: true,
+          hibahPct: 100,
+          faraidLeft: 0,
+          recipientLabel: target ? target.name : '1 Waris Utama',
+          disadvantagedHeirs: excluded
+        };
+      }
+    }
+    return { severity: 'none', disadvantagedHeirs: [] };
+  },
+
+  applyHeirBacklash(s, backlash) {
+    if (!s || !backlash || backlash.severity === 'none') return;
+    const heirs = backlash.disadvantagedHeirs || [];
+    if (heirs.length === 0) return;
+
+    if (backlash.severity === 'severe') {
+      for (const h of heirs) {
+        h.closeness = Utils.clamp((h.closeness ?? 70) - Utils.randInt(60, 95), 0, 100);
+        h.trust = Utils.clamp((h.trust ?? 70) - Utils.randInt(60, 90), 0, 100);
+        h.isEstranged = true;
+      }
+      if (window.Dynasty) Dynasty.adjustReputation(-18);
+      if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + 18, 0, 100);
+      GameState.adjustStats({ happiness: -18 });
+      const names = heirs.map(h => h.name).join(', ');
+      GameState.addJournalEntry(
+        `💔 HUBUNGAN RETAK (HARTA): Keputusan memperuntukkan ${backlash.hibahPct}% harta kepada ${backlash.recipientLabel} menafikan hak waris (${names}). Mereka memutuskan hubungan dan berasa amat dikhianati!`,
+        'warning'
+      );
+      if (window.KarmaEndings && KarmaEndings.addHighlight) {
+        KarmaEndings.addHighlight('💔', `Konflik harta besar — waris (${names}) berasa dinafikan hak dan memutuskan hubungan.`);
+      }
+    } else if (backlash.severity === 'high') {
+      for (const h of heirs) {
+        h.closeness = Utils.clamp((h.closeness ?? 70) - Utils.randInt(25, 45), 0, 100);
+        h.trust = Utils.clamp((h.trust ?? 70) - 20, 0, 100);
+      }
+      if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + 10, 0, 100);
+      GameState.adjustStats({ happiness: -8 });
+      const names = heirs.map(h => h.name).join(', ');
+      GameState.addJournalEntry(
+        `🔥 KONFLIK HARTA KELUARGA: Waris sah (${names}) mempersoalkan pembahagian Hibah ${backlash.hibahPct}% kepada ${backlash.recipientLabel}. Hubungan keluarga menjadi tegang!`,
+        'warning'
+      );
+    }
   },
 
   giveLivingHibah(s, { recipientId, type = 'cash', amountLocal = 0, assetId = null } = {}) {
@@ -813,30 +958,45 @@ window.LegalInheritanceEngine = {
     let distributableEstate = netEstate;
 
     // ===== A. PENGIRAAN FARAID (ISLAM) =====
+    let hibahRecipientType = 'adopted';
+    let hibahRecipientId = null;
+    let hibahRecipientName = null;
     if (islamic) {
       const wasiatPct = Math.max(0, Math.min(33.33, (s.wasiat && s.wasiat.islamicPct) || 0));
-      if (wasiatPct > 0 && netEstate > 0) {
-        const cappedFrac = Math.min(1 / 3, wasiatPct / 100);
-        wasiatAmount = Math.round(netEstate * cappedFrac);
-        wasiatLabel = `Wasiat Islam (${wasiatPct}% — ${s.wasiat.islamicBeneficiary || 'Wakaf & Kebajikan'})`;
-      }
-      const afterWasiat = Math.max(0, netEstate - wasiatAmount);
+      const hasCustomHibah = Boolean(s.wasiat && typeof s.wasiat.hibahPct === 'number');
+      hibahRecipientType = (s.wasiat && s.wasiat.hibahRecipientType) || 'adopted';
+      hibahRecipientId = (s.wasiat && s.wasiat.hibahRecipientId) || null;
+      hibahRecipientName = (s.wasiat && s.wasiat.hibahRecipientName) || null;
 
-      // Hibah Anak Angkat (Khas untuk watak Islam di negara Islam: Anak angkat bukan waris Faraid,
-      // diagihkan sebagai Hibah sebelum Faraid; boleh dilaras 0%, 5%, atau 10%)
-      if (adoptedKids.length > 0 && afterWasiat > 0) {
-        const chosenPct = (s.wasiat && typeof s.wasiat.hibahAdoptedPct === 'number')
-          ? Math.max(0, Math.min(10, s.wasiat.hibahAdoptedPct))
-          : (adoptedKids.length === 1 ? 8 : 10);
-        hibahAnakAngkatPct = chosenPct;
-        if (hibahAnakAngkatPct > 0) {
-          const pctPool = Math.round(afterWasiat * (hibahAnakAngkatPct / 100));
-          hibahAnakAngkatAmount = Math.min(afterWasiat, pctPool);
+      let rawHibahPct = 0;
+      if (hasCustomHibah) {
+        rawHibahPct = Math.max(0, Math.min(100, s.wasiat.hibahPct));
+        if (hibahRecipientType === 'adopted' && adoptedKids.length === 0) rawHibahPct = 0;
+      } else if (adoptedKids.length > 0) {
+        rawHibahPct = adoptedKids.length === 1 ? 8 : 10;
+      }
+
+      // Kuatkuasakan hibahPct + wasiatPct <= 100% supaya baki Faraid tidak pernah negatif
+      const effectiveWasiatPct = Math.min(wasiatPct, Math.max(0, 100 - rawHibahPct));
+      if (effectiveWasiatPct > 0 && netEstate > 0) {
+        const cappedFrac = Math.min(1 / 3, effectiveWasiatPct / 100);
+        wasiatAmount = Math.round(netEstate * cappedFrac);
+        wasiatLabel = `Wasiat Islam (${effectiveWasiatPct}% — ${s.wasiat.islamicBeneficiary || 'Wakaf & Kebajikan'})`;
+      }
+
+      const afterWasiat = Math.max(0, netEstate - wasiatAmount);
+      hibahAnakAngkatPct = rawHibahPct;
+      if (hibahAnakAngkatPct > 0 && afterWasiat > 0) {
+        hibahAnakAngkatAmount = Math.min(afterWasiat, Math.round(netEstate * (hibahAnakAngkatPct / 100)));
+        if (hibahRecipientType === 'adopted') {
           hibahAnakAngkatLabel = `Hibah Anak Angkat (${hibahAnakAngkatPct}% — ${adoptedKids.length} anak angkat)`;
+        } else {
+          const recLbl = hibahRecipientName || (hibahRecipientType === 'other' ? 'Lain-lain / Kebajikan' : 'Penerima Hibah');
+          hibahAnakAngkatLabel = `Hibah (${hibahAnakAngkatPct}% — ${recLbl})`;
         }
       }
 
-      distributableEstate = Math.max(0, afterWasiat - hibahAnakAngkatAmount);
+      distributableEstate = Math.max(0, netEstate - wasiatAmount - hibahAnakAngkatAmount);
 
       const hasKids = bioKids.length > 0;
       let fixedEntries = [];
@@ -971,9 +1131,51 @@ window.LegalInheritanceEngine = {
         }
       }
 
-      // Anak angkat (bukan waris Faraid — menerima peruntukan Hibah Anak Angkat sebelum Faraid)
-      const perAdoptedHibah = adoptedKids.length > 0 ? Math.round(hibahAnakAngkatAmount / adoptedKids.length) : 0;
-      const perAdoptedPct = adoptedKids.length > 0 ? Math.round((hibahAnakAngkatPct / adoptedKids.length) * 10) / 10 : 0;
+      // Rekod penerima Hibah (Anak Angkat / Pasangan / Anak Tertentu / Lain-lain)
+      if (hibahAnakAngkatAmount > 0 && hibahRecipientType !== 'adopted') {
+        const targetRel = hibahRecipientId
+          ? (s.relationships || []).find(r => r.id === hibahRecipientId && r.alive)
+          : null;
+        if (targetRel) {
+          const existing = shares.find(sh => sh.id === targetRel.id);
+          if (existing) {
+            existing.amount += hibahAnakAngkatAmount;
+            existing.fractionLabel = `${existing.fractionLabel} + Hibah ${hibahAnakAngkatPct}%`;
+          } else {
+            shares.push({
+              id: targetRel.id,
+              name: targetRel.name,
+              role: targetRel.role,
+              fraction: 0,
+              isHibah: true,
+              fractionLabel: `Hibah (${hibahAnakAngkatPct}%)`,
+              pct: hibahAnakAngkatPct,
+              amount: hibahAnakAngkatAmount,
+              isPlayableHeir: allLivingKids.some(k => k.id === targetRel.id),
+              isEntity: false
+            });
+          }
+        } else {
+          shares.push({
+            id: 'entity_hibah_other',
+            name: hibahRecipientName || 'Penerima Hibah (Lain-lain)',
+            role: 'Penerima Hibah',
+            fraction: 0,
+            isHibah: true,
+            fractionLabel: `Hibah (${hibahAnakAngkatPct}%)`,
+            pct: hibahAnakAngkatPct,
+            amount: hibahAnakAngkatAmount,
+            isPlayableHeir: false,
+            isEntity: true
+          });
+        }
+      }
+
+      // Anak angkat (bukan waris Faraid — menerima peruntukan Hibah Anak Angkat jika dipilih)
+      const adoptedHibahPool = hibahRecipientType === 'adopted' ? hibahAnakAngkatAmount : 0;
+      const adoptedHibahPct = hibahRecipientType === 'adopted' ? hibahAnakAngkatPct : 0;
+      const perAdoptedHibah = adoptedKids.length > 0 ? Math.round(adoptedHibahPool / adoptedKids.length) : 0;
+      const perAdoptedPct = adoptedKids.length > 0 ? Math.round((adoptedHibahPct / adoptedKids.length) * 10) / 10 : 0;
       for (const ak of adoptedKids) {
         shares.push({
           id: ak.id,

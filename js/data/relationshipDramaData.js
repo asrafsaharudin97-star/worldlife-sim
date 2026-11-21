@@ -748,6 +748,156 @@ window.RelationshipDramaData = {
         }
       ]
     };
+  },
+
+  // --------------------------------------------------------------------------
+  // 6. KONFLIK HARTA KELUARGA & WARIS DINAFIKAN HAK (HIBAH TINGGI / WASIAT)
+  // --------------------------------------------------------------------------
+  buildHeirBacklashEvent(s, backlash) {
+    if (!backlash || backlash.severity === 'none') return null;
+    const heirs = backlash.disadvantagedHeirs || [];
+    const heirNames = heirs.map(h => `${h.name} (${h.role})`).join(', ');
+    const isSevere = backlash.severity === 'severe';
+
+    if (isSevere) {
+      return {
+        id: `heir_backlash_severe_${s.age}_${Date.now()}`,
+        icon: '💔',
+        title: 'Waris Dinafikan Hak / Hubungan Retak',
+        text: `Keluarga anda gempar apabila mengetahui keputusan anda memperuntukkan ${backlash.hibahPct}% harta kepada ${backlash.recipientLabel}, meninggalkan hampir tiada hak (${backlash.faraidLeft}%) untuk waris sah: ${heirNames}.\n\nMereka berasa amat dikhianati, menuntut penjelasan, dan ramai yang mula memutuskan hubungan dengan anda!`,
+        choices: [
+          {
+            label: '🪨 Pertahankan Keputusan Muktamad',
+            hint: 'Waris kekal terputus hubungan (Estranged) • Reputasi Keluarga merosot',
+            journalType: 'warning',
+            customAction: (state) => {
+              for (const h of heirs) {
+                const rel = state.relationships.find(r => r.id === h.id);
+                if (rel) {
+                  rel.closeness = 0;
+                  rel.trust = 0;
+                  rel.isEstranged = true;
+                }
+              }
+              if (window.Dynasty) Dynasty.adjustReputation(-8);
+              return {
+                outcome: `Anda bertegas mempertahankan keputusan tersebut. ${heirNames} memutuskan hubungan sepenuhnya dengan anda.`,
+                toastType: 'error'
+              };
+            }
+          },
+          {
+            label: '🙏 Jelaskan Niat Baik & Minta Maaf',
+            hint: 'Cuba redakan kemarahan — kesan terhad jika waris sudah terlalu kecewa',
+            customAction: (state) => {
+              const karma = (state.alignment && state.alignment.karma) || 0;
+              const heal = karma >= 25 ? 12 : 5;
+              for (const h of heirs) {
+                const rel = state.relationships.find(r => r.id === h.id);
+                if (rel) {
+                  rel.closeness = Utils.clamp((rel.closeness || 0) + heal, 0, 100);
+                  rel.trust = Utils.clamp((rel.trust || 0) + Math.round(heal / 2), 0, 100);
+                }
+              }
+              return {
+                outcome: `Anda cuba menjelaskan niat anda, namun luka di hati ${heirNames} terlalu dalam selagi pembahagian harta tidak diubah.`,
+                toastType: 'error'
+              };
+            }
+          },
+          {
+            label: '📜 Ubah Semula Pembahagian Harta',
+            hint: 'Tetapkan semula kepada pembahagian lebih adil & pulihkan sebahagian hubungan',
+            customAction: (state) => {
+              if (backlash.isCivil) {
+                state.wasiat.civilMode = 'equal';
+                state.wasiat.civilTargetHeirId = null;
+              } else {
+                state.wasiat.hibahPct = 20;
+                if (state.wasiat.hibahRecipientType === 'adopted') state.wasiat.hibahAdoptedPct = 20;
+              }
+              for (const h of heirs) {
+                const rel = state.relationships.find(r => r.id === h.id);
+                if (rel) {
+                  rel.closeness = Utils.clamp((rel.closeness || 0) + 35, 0, 100);
+                  rel.trust = Utils.clamp((rel.trust || 0) + 25, 0, 100);
+                  rel.isEstranged = false;
+                }
+              }
+              return {
+                outcome: `Anda membatalkan pembahagian ekstrem tersebut dan mengembalikan hak yang lebih adil kepada waris. Hubungan bersama ${heirNames} mula pulih perlahan-lahan.`,
+                toastType: 'success'
+              };
+            }
+          }
+        ]
+      };
+    }
+
+    return {
+      id: `heir_backlash_high_${s.age}_${Date.now()}`,
+      icon: '🔥',
+      title: 'Konflik Harta Keluarga',
+      text: `Waris sah anda (${heirNames}) bersemuka dengan anda secara tegang selepas mengetahui ${backlash.hibahPct}% harta diperuntukkan sebagai Hibah kepada ${backlash.recipientLabel} (baki Faraid tinggal ${backlash.faraidLeft}%).`,
+      choices: [
+        {
+          label: '🪨 Pertahankan Keputusan',
+          hint: 'Hubungan & kepercayaan waris merosot lagi',
+          journalType: 'warning',
+          customAction: (state) => {
+            for (const h of heirs) {
+              const rel = state.relationships.find(r => r.id === h.id);
+              if (rel) {
+                rel.closeness = Utils.clamp((rel.closeness ?? 40) - 14, 0, 100);
+                rel.trust = Utils.clamp((rel.trust ?? 40) - 12, 0, 100);
+              }
+            }
+            return {
+              outcome: `Anda bertegas itu hak mutlak anda semasa hidup. ${heirNames} pulang dengan rasa tidak puas hati yang mendalam.`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '💬 Jelaskan Niat Baik Secara Tenang',
+          hint: 'Mengurangkan ketegangan jika Karma atau hubungan keluarga kukuh',
+          customAction: (state) => {
+            const karma = (state.alignment && state.alignment.karma) || 0;
+            const boost = karma >= 20 ? 12 : 6;
+            for (const h of heirs) {
+              const rel = state.relationships.find(r => r.id === h.id);
+              if (rel) {
+                rel.closeness = Utils.clamp((rel.closeness ?? 40) + boost, 0, 100);
+                rel.trust = Utils.clamp((rel.trust ?? 40) + Math.round(boost * 0.7), 0, 100);
+              }
+            }
+            return {
+              outcome: `Penjelasan jujur anda sedikit melembutkan hati ${heirNames}, walaupun mereka masih berharap pembahagian harta lebih seimbang.`,
+              toastType: 'culture'
+            };
+          }
+        },
+        {
+          label: '📜 Ubah Semula Pembahagian (Turunkan ke 20%)',
+          hint: 'Redakan konflik keluarga dengan pembahagian lebih seimbang',
+          customAction: (state) => {
+            state.wasiat.hibahPct = 20;
+            if (state.wasiat.hibahRecipientType === 'adopted') state.wasiat.hibahAdoptedPct = 20;
+            for (const h of heirs) {
+              const rel = state.relationships.find(r => r.id === h.id);
+              if (rel) {
+                rel.closeness = Utils.clamp((rel.closeness ?? 40) + 22, 0, 100);
+                rel.trust = Utils.clamp((rel.trust ?? 40) + 15, 0, 100);
+              }
+            }
+            return {
+              outcome: `Anda melaraskan semula Hibah kepada 20% demi menjaga silaturahim keluarga. ${heirNames} berasa lega dan hubungan kembali tenang.`,
+              toastType: 'success'
+            };
+          }
+        }
+      ]
+    };
   }
 };
 

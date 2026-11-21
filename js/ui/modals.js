@@ -1203,14 +1203,30 @@ window.Modals = {
         { val: 33.33, label: '33.3% (Maksimum 1/3 Syarak)' }
       ];
       const adoptedKids = livingKids.filter(k => k.isAdopted);
-      const curHibahPct = (s.wasiat && typeof s.wasiat.hibahAdoptedPct === 'number')
-        ? s.wasiat.hibahAdoptedPct
+      const curHibahPct = (s.wasiat && typeof s.wasiat.hibahPct === 'number')
+        ? s.wasiat.hibahPct
         : (adoptedKids.length > 0 ? (adoptedKids.length === 1 ? 8 : 10) : 0);
+      const curRecType = (s.wasiat && s.wasiat.hibahRecipientType) || (adoptedKids.length > 0 ? 'adopted' : 'other');
+      const curRecId = (s.wasiat && s.wasiat.hibahRecipientId) || '';
 
       const livingSpouse = (s.married && s.partnerId)
         ? s.relationships.find(r => r.id === s.partnerId && r.alive)
         : null;
       const hibahRecipients = [livingSpouse, ...livingKids].filter(Boolean);
+
+      const customRecipientOptions = [];
+      if (adoptedKids.length > 0) {
+        customRecipientOptions.push({ val: 'adopted:', label: `👶 Anak Angkat (${adoptedKids.length} orang — bukan waris Faraid)` });
+      }
+      if (livingSpouse) {
+        customRecipientOptions.push({ val: `spouse:${livingSpouse.id}`, label: `💍 Pasangan: ${livingSpouse.name} (${livingSpouse.role})` });
+      }
+      for (const k of livingKids) {
+        customRecipientOptions.push({ val: `child:${k.id}`, label: `👤 Anak: ${k.name} (${k.role}${k.isAdopted ? ' • Angkat' : ''})` });
+      }
+      customRecipientOptions.push({ val: 'other:', label: '🌍 Lain-lain / Badan Kebajikan' });
+      const selectedRecKey = `${curRecType}:${curRecId}`;
+      const faraidRemain = Math.max(0, Math.round((100 - curHibahPct - curPct) * 10) / 10);
 
       const hibahItems = [];
       const curCash = Math.max(0, s.money || 0);
@@ -1249,17 +1265,24 @@ window.Modals = {
           `).join('')}
         </div>
 
-        <div class="section-heading" style="margin-top:14px;">🎁 Pengurusan Hibah</div>
+        <div class="section-heading" style="margin-top:14px;">🎁 Pengurusan Hibah (0%–100%)</div>
         <div class="info-banner" style="background:#f0f9ff;border-color:#bae6fd;line-height:1.55;">
-          <strong>1. Hibah Anak Angkat</strong><br/>
-          ${adoptedKids.length > 0 ? `
-            <small style="opacity:0.85;">Anak angkat bukan waris Faraid — diagih sebagai Hibah sebelum Faraid (Semasa: <strong>${curHibahPct}%</strong>).</small>
-            <div class="tab-pills" style="margin-top:8px;">
-              ${[0, 5, 10].map(p => `
-                <button type="button" class="tab-pill hibah-adopted-btn ${curHibahPct === p ? 'active' : ''}" data-hpct="${p}">${p}%</button>
-              `).join('')}
+          <strong>1. Peruntukan Hibah Tersuai (Sebelum Faraid)</strong><br/>
+          <small style="opacity:0.85;">${adoptedKids.length > 0 ? 'Anak angkat bukan waris Faraid — diagih sebagai Hibah sebelum Faraid.' : 'Pilih penerima & peratusan Hibah (0%–100%). Hibah > 40% boleh mencetuskan konflik waris!'}</small>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+            <select id="hibah-custom-recipient" class="input-field">
+              ${customRecipientOptions.map(o => `<option value="${Utils.escapeHtml(o.val)}" ${o.val === selectedRecKey ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`).join('')}
+            </select>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="range" id="hibah-pct-slider" min="0" max="100" step="1" value="${curHibahPct}" style="flex:1;" />
+              <input type="number" id="hibah-pct-input" class="input-field" min="0" max="100" value="${curHibahPct}" style="width:74px;text-align:center;padding:6px;" />
+              <strong>%</strong>
             </div>
-          ` : `<small style="opacity:0.75;">Tiada anak angkat</small>`}
+            <div id="hibah-faraid-preview" style="font-size:12px;color:#0f172a;">
+              Wasiat: <strong>${curPct}%</strong> • Hibah: <strong>${curHibahPct}%</strong> • Baki Faraid: <strong>${faraidRemain}%</strong>
+            </div>
+            <button type="button" class="secondary-btn" id="btn-save-custom-hibah" style="width:100%;">🎁 Simpan Peruntukan Hibah</button>
+          </div>
         </div>
 
         <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;line-height:1.55;">
@@ -1323,7 +1346,7 @@ window.Modals = {
     this.open({
       icon: '📜',
       title: 'Pengurusan Wasiat & Pusaka',
-      subtitle: islamic ? 'Sistem Faraid & Wasiat Islam' : `Undang-undang Sivil ${c.name}`,
+      subtitle: islamic ? 'Sistem Faraid, Wasiat & Hibah Islam' : `Undang-undang Sivil ${c.name}`,
       bodyHtml: `${bodyHtml}<button class="ghost-btn" id="btn-wasiat-back" style="margin-top:10px;">← Kembali</button>`
     });
 
@@ -1335,13 +1358,47 @@ window.Modals = {
       });
     });
 
-    document.querySelectorAll('.hibah-adopted-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const res = LegalInheritanceEngine.setAdoptedHibahPct(s, Number(btn.dataset.hpct));
+    const hibahSlider = document.getElementById('hibah-pct-slider');
+    const hibahInput = document.getElementById('hibah-pct-input');
+    const hibahPrev = document.getElementById('hibah-faraid-preview');
+    const syncHibahPreview = (rawVal) => {
+      const v = Math.max(0, Math.min(100, Math.round(Number(rawVal) || 0)));
+      if (hibahSlider) hibahSlider.value = String(v);
+      if (hibahInput) hibahInput.value = String(v);
+      const curW = Math.min((s.wasiat && s.wasiat.islamicPct) || 0, Math.max(0, 100 - v));
+      const rem = Math.max(0, Math.round((100 - v - curW) * 10) / 10);
+      if (hibahPrev) {
+        const warn = v >= 80 ? ' • ⚠️ <strong style="color:#dc2626;">Waris akan dinafikan hak!</strong>'
+          : (v > 40 ? ' • ⚠️ <strong style="color:#d97706;">Risiko konflik keluarga</strong>' : '');
+        hibahPrev.innerHTML = `Wasiat: <strong>${curW}%</strong> • Hibah: <strong>${v}%</strong> • Baki Faraid: <strong>${rem}%</strong>${warn}`;
+      }
+    };
+    if (hibahSlider) hibahSlider.addEventListener('input', (e) => syncHibahPreview(e.target.value));
+    if (hibahInput) hibahInput.addEventListener('input', (e) => syncHibahPreview(e.target.value));
+
+    const saveCustomHibahBtn = document.getElementById('btn-save-custom-hibah');
+    if (saveCustomHibahBtn) {
+      saveCustomHibahBtn.addEventListener('click', () => {
+        const pctVal = hibahInput ? Number(hibahInput.value) : 0;
+        const recSel = document.getElementById('hibah-custom-recipient');
+        const [recType, recId] = (recSel && recSel.value ? recSel.value : 'other:').split(':');
+        const recObj = recId ? (s.relationships || []).find(r => r.id === recId) : null;
+        const recName = recObj ? recObj.name : (recType === 'adopted' ? 'Anak Angkat' : 'Lain-lain / Kebajikan');
+        const res = LegalInheritanceEngine.setCustomHibah(s, {
+          pct: pctVal,
+          recipientType: recType || 'other',
+          recipientId: recId || null,
+          recipientName: recName
+        });
         App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        if (res.backlashEvent) {
+          this.showEvent(res.backlashEvent);
+          return;
+        }
         this.showWasiatModal(onBack);
       });
-    });
+    }
 
     const livingHibahBtn = document.getElementById('btn-confirm-living-hibah');
     if (livingHibahBtn) {
@@ -1365,7 +1422,12 @@ window.Modals = {
         const sel = document.getElementById('wasiat-single-heir-select');
         const targetId = sel ? sel.value : null;
         const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode, targetId);
-        App.toast(res.msg, 'success');
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        if (res.backlashEvent) {
+          this.showEvent(res.backlashEvent);
+          return;
+        }
         this.showWasiatModal(onBack);
       });
     });
