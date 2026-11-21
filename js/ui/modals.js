@@ -531,19 +531,26 @@ window.Modals = {
     const renderList = (items) => items.map(r => {
       const rc = Utils.getCountry(r.countryId);
       const isPartner = r.id === s.partnerId;
+      const isChildItem = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role);
+      if (isChildItem && window.Relationships && Relationships.ensureChildEducationFields) {
+        Relationships.ensureChildEducationFields(s, r);
+      }
       const bObj = GameState.getBeliefObj(r.belief);
       const distLabel = r.countryId !== s.countryId ? ` • ${rc.flag} Luar Negara` : '';
       const adoptTag = r.isAdopted ? ' • Anak Angkat' : '';
+      const childSchoolTag = (isChildItem && r.schoolLabel)
+        ? ` • 🏫 ${Utils.escapeHtml(r.schoolLabel)}${r.yearlySchoolFee > 0 ? ` (${Utils.formatMoney(r.yearlySchoolFee, s.countryId)}/thn)` : ''}`
+        : '';
       const icon = isPartner ? (s.married ? '💍' : '💑')
         : r.category === 'friend' ? '🧑‍🤝‍🧑'
-        : ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) ? '👶'
+        : isChildItem ? '👶'
         : '👤';
       return `
         <button class="action-item rel-open-btn" data-rel-id="${r.id}">
           <span class="ai-icon">${icon}</span>
           <span class="ai-content">
             <span class="ai-title">${Utils.escapeHtml(r.name)} <small style="font-weight:600;color:#64748b;">(${r.role}, ${r.age})</small></span>
-            <span class="ai-desc">${bObj.icon} ${bObj.name} • Kepercayaan ${r.trust ?? 65}% • Serasi ${r.compatibility ?? 75}%${adoptTag}${distLabel}</span>
+            <span class="ai-desc">${bObj.icon} ${bObj.name} • Kepercayaan ${r.trust ?? 65}%${childSchoolTag}${adoptTag}${distLabel}</span>
             <div class="rel-meter">
               <div class="rel-meter-fill" style="width:${r.closeness}%;background:${Utils.getStatColor(r.closeness)}"></div>
             </div>
@@ -644,6 +651,9 @@ window.Modals = {
     const isPartner = rel.id === s.partnerId;
     const isFriend = rel.category === 'friend';
     const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
+    if (isChild && window.Relationships && Relationships.ensureChildEducationFields) {
+      Relationships.ensureChildEducationFields(s, rel);
+    }
     const isMinorChild = isChild && rel.age < 18;
     const muslim = Relationships.isMuslim(s);
     const interfaithBlocked = isPartner && muslim && (rel.belief !== 'islam' || rel.gender === s.gender);
@@ -663,21 +673,36 @@ window.Modals = {
     const parentCountUsed = s.yearlyActions[`parent_cnt_${rel.id}`] || 0;
     const eduMeta = (isMinorChild && window.Relationships && Relationships.getChildEduActionMeta)
       ? Relationships.getChildEduActionMeta(rel.age)
-      : { icon: '📚', title: 'Beri Tuisyen & Bimbingan Belajar', desc: 'Tingkatkan Kepintaran & penjagaan pendidikan anak', costUsd: 180 };
-    const eduCost = Utils.usdToLocal(eduMeta.costUsd || 180, s.countryId);
+      : { icon: '📚', title: 'Kelas Tuisyen Tambahan (Pilihan)', desc: 'Tuisyen sampingan luar waktu sekolah', costUsd: 110 };
+    const eduCost = Utils.usdToLocal(eduMeta.costUsd || 110, s.countryId);
     const healthCost = Utils.usdToLocal(120, s.countryId);
+
+    const childSchoolFeeText = (rel.yearlySchoolFee || 0) > 0
+      ? `${Utils.formatMoney(rel.yearlySchoolFee, s.countryId)}/thn`
+      : 'Percuma';
 
     const childUpbringingHtml = isMinorChild ? `
       <div class="info-banner ${rel.isDelinquent ? '' : 'highlight'}" style="${rel.isDelinquent ? 'background:#fef2f2;border-color:#fecaca;' : ''}line-height:1.6;">
-        <strong>👶 Perkembangan &amp; Didikan Anak (Umur ${rel.age}/17)</strong>
+        <strong>👶 Perkembangan &amp; Persekolahan Anak (Umur ${rel.age}/17)</strong>
         ${rel.isDelinquent ? ' <span class="cat-badge" style="background:#dc2626;color:#fff;">⚠️ DELINKUEN</span>' : ''}<br/>
-        ${eduMeta.icon} Penjagaan Pendidikan / Perkembangan: <strong>${rel.educationCare ?? 65}%</strong> (Kepintaran: ${(rel.stats && rel.stats.smarts) ?? 65}%)<br/>
+        🏫 Sekolah Semasa: <strong>${Utils.escapeHtml(rel.schoolLabel || 'Belum Bersekolah')}</strong> (Yuran: <strong>${childSchoolFeeText}</strong>)<br/>
+        🧠 Kepintaran: <strong>${(rel.stats && rel.stats.smarts) ?? 65}%</strong> • 📚 Penjagaan Pendidikan: <strong>${rel.educationCare ?? 65}%</strong><br/>
         🩺 Penjagaan Kesihatan: <strong>${rel.healthCare ?? 75}%</strong> (Kesihatan: ${(rel.stats && rel.stats.health) ?? 80}%)<br/>
         🌟 Akhlak &amp; Moral: <strong>${rel.morals ?? 70}%</strong> • 🔥 Pemberontakan: <strong style="color:${(rel.rebelliousness ?? 10) > 65 ? '#dc2626' : 'inherit'};">${rel.rebelliousness ?? 10}%</strong><br/>
         <small style="opacity:0.8;">Tindakan keibubapaan tahun ini: <strong>${parentCountUsed}/3</strong></small>
       </div>
-      <div class="section-heading">👨‍👩‍👧 Tindakan Keibubapaan (${parentCountUsed}/3 Tahun Ini)</div>
+      <div class="section-heading">👨‍👩‍👧 Persekolahan &amp; Tindakan Keibubapaan (${parentCountUsed}/3 Tahun Ini)</div>
       <div class="action-list" style="margin-bottom:10px;">
+        ${rel.age >= 4 && rel.age <= 17 ? `
+          <button class="action-item" id="btn-change-child-school" style="background:#eff6ff;border-color:#93c5fd;">
+            <span class="ai-icon">🏫</span>
+            <span class="ai-content">
+              <span class="ai-title">${rel.age <= 6 ? 'Daftar / Tukar Tadika & Prasekolah' : 'Tukar Pilihan Sekolah Anak'}</span>
+              <span class="ai-desc">Semasa: ${Utils.escapeHtml(rel.schoolLabel || 'Belum Daftar')} (${childSchoolFeeText})</span>
+            </span>
+            <span class="ai-right" style="color:#1d4ed8;">Pilih →</span>
+          </button>
+        ` : ''}
         <button class="action-item parent-act-btn" data-pact="education" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_education`] ? 'disabled' : ''}>
           <span class="ai-icon">${eduMeta.icon}</span>
           <span class="ai-content">
@@ -711,7 +736,15 @@ window.Modals = {
           <span class="ai-right">Percuma</span>
         </button>
       </div>
-    ` : '';
+    ` : (isChild && rel.age >= 18 ? `
+      <div class="info-banner highlight" style="line-height:1.6;">
+        <strong>🎓 Status Pengajian &amp; Kerjaya Anak (${rel.age} Tahun)</strong><br/>
+        Status: <strong>${Utils.escapeHtml(rel.schoolLabel || rel.job || 'Dewasa')}</strong><br/>
+        ${rel.university ? `Institusi: <strong>${Utils.escapeHtml(rel.university)}</strong> • Bidang: <strong>${Utils.escapeHtml(rel.major || '-')}</strong><br/>` : ''}
+        ${typeof rel.currentCgpa === 'number' ? `PNGK Semasa: <strong>${rel.currentCgpa.toFixed(2)}</strong>${rel.uniEnrolled ? ` • Baki Pengajian: <strong>${rel.uniYearsLeft} tahun</strong>` : ''}<br/>` : ''}
+        🧠 Kepintaran: <strong>${(rel.stats && rel.stats.smarts) ?? 70}%</strong> • ❤️ Kesihatan: <strong>${(rel.stats && rel.stats.health) ?? 80}%</strong>
+      </div>
+    ` : '');
 
     const html = `
       <div class="info-banner">
@@ -881,6 +914,13 @@ window.Modals = {
       bodyHtml: html
     });
 
+    const changeSchoolBtn = document.getElementById('btn-change-child-school');
+    if (changeSchoolBtn) {
+      changeSchoolBtn.addEventListener('click', () => {
+        this.showChildSchoolSelectionModal(relId, () => this.showRelationDetail(relId), false);
+      });
+    }
+
     const switchBtn = document.getElementById('btn-switch-to-child');
     if (switchBtn) {
       switchBtn.addEventListener('click', () => this.showSwitchToChildModal(relId));
@@ -920,6 +960,170 @@ window.Modals = {
     });
 
     document.getElementById('rel-back-btn').addEventListener('click', () => this.showRelationships());
+  },
+
+  // --------------------------------------------------------------------------
+  // 4A-SCH. MODAL PENDAFTARAN SEKOLAH ANAK (UMUR 4–6 TADIKA, 7 RENDAH, 13 MENENGAH)
+  // --------------------------------------------------------------------------
+  showChildSchoolSelectionModal(childId, onDone = null, isMilestonePrompt = true) {
+    const s = GameState.current;
+    if (!s || !s.alive) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child || !window.Relationships) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    Relationships.ensureChildEducationFields(s, child);
+    const stage = Relationships.getSchoolStageForAge(child.age);
+    const options = Relationships.getSchoolOptionsForStage(stage, child);
+    const stageName = stage === 'tadika'
+      ? 'Tadika / Prasekolah (Umur 4–6)'
+      : stage === 'primary'
+      ? 'Sekolah Rendah (Umur 7–12)'
+      : 'Sekolah Menengah (Umur 13–17)';
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+
+    this.open({
+      icon: '🏫',
+      title: '🏫 Pendaftaran Sekolah Anak',
+      subtitle: `${child.name} (Umur ${child.age} tahun) • ${stageName}`,
+      locked: Boolean(isMilestonePrompt),
+      bodyHtml: `
+        <div class="info-banner highlight" style="line-height:1.6;">
+          <strong>👧👦 ${Utils.escapeHtml(child.name)}</strong> kini memasuki peringkat <strong>${stageName}</strong>!<br/>
+          🧠 Kepintaran Semasa: <strong>${smarts}%</strong> • 🌟 Akhlak: <strong>${child.morals ?? 70}%</strong><br/>
+          <small style="opacity:0.85;">Pilih aliran sekolah untuk anak anda. Yuran sekolah akan ditolak secara automatik setiap tahun semasa +UMUR.</small>
+        </div>
+        <div class="action-list">
+          ${options.map(opt => {
+            const feeLocal = opt.feeUsd > 0 ? Utils.usdToLocal(opt.feeUsd, s.countryId) : 0;
+            const feeLabel = feeLocal > 0 ? `${Utils.formatMoney(feeLocal, s.countryId)}/thn` : 'PERCUMA';
+            const isCurrent = child.schoolType === opt.id;
+            return `
+              <button type="button" class="action-item child-school-opt-btn ${isCurrent ? 'highlight' : ''}" data-school-id="${opt.id}" ${opt.locked ? 'disabled' : ''}>
+                <span class="ai-icon">${opt.icon}</span>
+                <span class="ai-content">
+                  <span class="ai-title">${Utils.escapeHtml(opt.label)} ${isCurrent ? '✓' : ''}</span>
+                  <span class="ai-desc">${Utils.escapeHtml(opt.desc)}${opt.lockReason ? `<br/><strong style="color:#dc2626;">🔒 ${Utils.escapeHtml(opt.lockReason)}</strong>` : ''}</span>
+                </span>
+                <span class="ai-right ${feeLocal > 0 ? 'cost' : ''}">${feeLabel}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+        ${!isMilestonePrompt ? `<button type="button" class="ghost-btn" id="btn-school-cancel" style="margin-top:8px;">← Kembali</button>` : ''}
+      `
+    });
+
+    document.querySelectorAll('.child-school-opt-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = Relationships.enrollChildSchool(childId, btn.dataset.schoolId);
+        if (!res.ok) {
+          App.toast(res.msg, 'error');
+          return;
+        }
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, 'success');
+        if (typeof onDone === 'function') onDone(res);
+      });
+    });
+
+    const cancelBtn = document.getElementById('btn-school-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        if (typeof onDone === 'function') onDone();
+        else this.close(true);
+      });
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // 4A-UNI. MODAL PILIHAN UNIVERSITI ANAK PADA UMUR 18 TAHUN
+  // --------------------------------------------------------------------------
+  showChildUniversityModal(childId, onDone = null) {
+    const s = GameState.current;
+    if (!s || !s.alive) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child || !window.Relationships) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const pref = child._uniPref || Relationships.generateChildUniPreference(s, child);
+    child._uniPref = pref;
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+
+    this.open({
+      icon: '🎓',
+      title: `🎓 Masa Depan & Universiti ${child.name}`,
+      subtitle: `${child.name} (Umur 18 Tahun) • Tamat Sekolah Menengah`,
+      locked: true,
+      bodyHtml: `
+        <div class="info-banner highlight" style="line-height:1.65;">
+          <strong>🎓 Hasrat &amp; Pilihan Pengajian ${Utils.escapeHtml(child.name)}</strong><br/>
+          🧠 Kepintaran: <strong>${smarts}%</strong> • 🌟 Akhlak: <strong>${child.morals ?? 70}%</strong> • 🔥 Pemberontakan: <strong>${child.rebelliousness ?? 10}%</strong><br/>
+          Bidang Pilihan Anak: <strong>${Utils.escapeHtml(pref.major.label)}</strong> (${pref.major.years} tahun)<br/>
+          Institusi Sasaran: <strong>${pref.tier.icon} ${Utils.escapeHtml(pref.tier.label)}</strong><br/>
+          Anggaran Yuran: <strong>${fmt(pref.yearlyFeeLocal)}/thn</strong> (Jumlah: ${fmt(pref.totalFeeLocal)})
+        </div>
+
+        <div class="section-heading">Pilih Keputusan Anda Sebagai Ibu Bapa</div>
+        <div class="action-list">
+          <button type="button" class="action-item child-uni-choice-btn" data-decision="sponsor_full">
+            <span class="ai-icon">💰</span>
+            <span class="ai-content">
+              <span class="ai-title">Taja Sepenuhnya</span>
+              <span class="ai-desc">Bayar yuran tahunan di ${Utils.escapeHtml(pref.tier.short)} (${Utils.escapeHtml(pref.major.label)}) • +20% Hubungan &amp; +Gembira</span>
+            </span>
+            <span class="ai-right cost">${fmt(pref.yearlyFeeLocal)}/thn</span>
+          </button>
+
+          <button type="button" class="action-item child-uni-choice-btn" data-decision="scholarship_loan">
+            <span class="ai-icon">📜</span>
+            <span class="ai-content">
+              <span class="ai-title">Galak Mohon Biasiswa / Pinjaman</span>
+              <span class="ai-desc">${smarts >= 80 ? 'Kepintaran >= 80%: Peluang tinggi dapat Biasiswa Penuh!' : 'Jika gagal biasiswa, anak ambil pinjaman pelajaran sendiri'} • Tiada kos kepada ibu bapa</span>
+            </span>
+            <span class="ai-right">Percuma</span>
+          </button>
+
+          <button type="button" class="action-item child-uni-choice-btn" data-decision="suggest_cheaper">
+            <span class="ai-icon">🔄</span>
+            <span class="ai-content">
+              <span class="ai-title">Cadang Universiti / Bidang Lebih Murah</span>
+              <span class="ai-desc">Cadangkan ${Utils.escapeHtml(pref.cheaperMajor.label)} di ${Utils.escapeHtml(pref.cheaperTier.short)} • Kos rendah, risiko anak kecewa (-10 hingga -20% Hubungan)</span>
+            </span>
+            <span class="ai-right cost">${fmt(pref.cheaperFeeLocal)}/thn</span>
+          </button>
+
+          <button type="button" class="action-item child-uni-choice-btn" data-decision="work_immediately">
+            <span class="ai-icon">💼</span>
+            <span class="ai-content">
+              <span class="ai-title">Suruh Terus Bekerja</span>
+              <span class="ai-desc">Anak tidak ke universiti &amp; terus masuk alam pekerjaan (${pref.wantsWorkDirectly ? '-5%' : '-25%'} Hubungan)</span>
+            </span>
+            <span class="ai-right">Terus Kerja</span>
+          </button>
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.child-uni-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = Relationships.resolveChildUniversityChoice(childId, btn.dataset.decision);
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        if (typeof onDone === 'function') onDone(res);
+      });
+    });
   },
 
   // --------------------------------------------------------------------------

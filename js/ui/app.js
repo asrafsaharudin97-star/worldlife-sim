@@ -323,19 +323,40 @@ window.App = {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
-    const { event, died, babyBirth } = Sim.ageUp();
+    const { event, died, babyBirth, childMilestoneQueue } = Sim.ageUp();
     this.renderAll();
 
     if (died) {
       setTimeout(() => Modals.showDeathSummary(), 260);
-    } else if (babyBirth && Modals.showBabyNamingModal) {
+      return;
+    }
+
+    const queue = Array.isArray(childMilestoneQueue) ? [...childMilestoneQueue] : [];
+    const runNextMilestone = () => {
+      if (queue.length > 0) {
+        const item = queue.shift();
+        setTimeout(() => {
+          if (item.type === 'school' && Modals.showChildSchoolSelectionModal) {
+            Modals.showChildSchoolSelectionModal(item.childId, () => runNextMilestone(), true);
+          } else if (item.type === 'university' && Modals.showChildUniversityModal) {
+            Modals.showChildUniversityModal(item.childId, () => runNextMilestone());
+          } else {
+            runNextMilestone();
+          }
+        }, 160);
+        return;
+      }
+      if (event) {
+        setTimeout(() => Modals.showEvent(event), 160);
+      }
+    };
+
+    if (babyBirth && Modals.showBabyNamingModal) {
       setTimeout(() => {
-        Modals.showBabyNamingModal(babyBirth, () => {
-          if (event) setTimeout(() => Modals.showEvent(event), 160);
-        });
+        Modals.showBabyNamingModal(babyBirth, () => runNextMilestone());
       }, 160);
-    } else if (event) {
-      setTimeout(() => Modals.showEvent(event), 160);
+    } else {
+      runNextMilestone();
     }
   },
 

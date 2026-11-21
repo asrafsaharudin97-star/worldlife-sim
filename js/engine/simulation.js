@@ -34,6 +34,7 @@ window.Sim = {
     let priorityMiscarriageEvent = null;
     let priorityTeenEvent = null;
     let babyBirth = null;
+    const childMilestoneQueue = [];
     let totalNpcDeathHappyPenalty = 0;
     let totalNpcDeathStressGain = 0;
 
@@ -45,8 +46,11 @@ window.Sim = {
 
       // Kemas kini kerja anak bila membesar
       if (isChild) {
-        if (rel.age >= 18 && rel.job === 'Pelajar') rel.job = rel.isDelinquent ? 'Penganggur / Berisiko' : 'Belia / Bekerja';
-        else if (rel.age >= 6 && rel.job === 'Bayi') rel.job = 'Pelajar';
+        if (rel.age >= 18 && rel.job === 'Pelajar' && !rel.uniEnrolled) {
+          rel.job = rel.isDelinquent ? 'Penganggur / Berisiko' : 'Belia / Bekerja';
+        } else if (rel.age >= 4 && rel.job === 'Bayi') {
+          rel.job = rel.age <= 6 ? 'Pelajar Tadika' : 'Pelajar';
+        }
       }
 
       const deathInfo = this._rollNpcMortality(rel, isChild);
@@ -135,15 +139,111 @@ window.Sim = {
         rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
       }
 
+      // 1A. PERSEKOLAHAN ANAK (UMUR 4–17) & UNIVERSITI ANAK (UMUR 18–22)
+      if (isChild && window.Relationships && Relationships.ensureChildEducationFields) {
+        if (!rel.stats) rel.stats = { smarts: 65, health: 80 };
+
+        // Gesaan pemilihan sekolah apabila anak mencecah umur 4 (Tadika), 7 (Sekolah Rendah), atau 13 (Sekolah Menengah)
+        if (rel.age === 4) {
+          rel.schoolStage = 'tadika';
+          if (!rel.schoolType || rel.schoolType === 'none' || rel.schoolType === 'not_enrolled') {
+            rel.schoolType = 'tadika_awam';
+            rel.schoolLabel = 'Tadika / Prasekolah (Awam)';
+            rel.yearlySchoolFee = 0;
+          }
+          childMilestoneQueue.push({ type: 'school', childId: rel.id, stage: 'tadika' });
+        } else if (rel.age === 7) {
+          rel.schoolStage = 'primary';
+          // Tetapkan lalai sementara Sekolah Kebangsaan (Awam) sebelum modal pilihan dibuka
+          rel.schoolType = 'sk_awam';
+          rel.schoolLabel = 'Sekolah Rendah (Awam)';
+          rel.yearlySchoolFee = 0;
+          childMilestoneQueue.push({ type: 'school', childId: rel.id, stage: 'primary' });
+        } else if (rel.age === 13) {
+          rel.schoolStage = 'secondary';
+          rel.schoolType = 'smk_awam';
+          rel.schoolLabel = 'SMK / Sekolah Menengah (Awam)';
+          rel.yearlySchoolFee = 0;
+          childMilestoneQueue.push({ type: 'school', childId: rel.id, stage: 'secondary' });
+        } else if (rel.age === 18) {
+          // Anak menamatkan Sekolah Menengah -> cetuskan modal Pilihan Universiti Anak!
+          rel.schoolStage = 'completed';
+          rel.yearlySchoolFee = 0;
+          rel.education = 'high_school';
+          rel._uniPref = Relationships.generateChildUniPreference(s, rel);
+          childMilestoneQueue.push({ type: 'university', childId: rel.id });
+        }
+
+        Relationships.ensureChildEducationFields(s, rel);
+
+        // Pertumbuhan tahunan sekolah (umur 4–17) & penolakan yuran sekolah tahunan
+        if (rel.age >= 4 && rel.age <= 17 && rel.schoolType && rel.schoolType !== 'not_enrolled' && rel.schoolType !== 'none') {
+          const stOpts = Relationships.SCHOOL_OPTIONS[rel.schoolStage] || [];
+          const activeOpt = stOpts.find(o => o.id === rel.schoolType) || stOpts[0];
+          if (activeOpt) {
+            const feeLocal = activeOpt.feeUsd > 0 ? Utils.usdToLocal(activeOpt.feeUsd, s.countryId) : 0;
+            rel.yearlySchoolFee = feeLocal;
+            if (feeLocal > 0) {
+              s.money = (s.money || 0) - feeLocal;
+              GameState.addJournalEntry(
+                `${activeOpt.icon} Membayar yuran tahunan ${activeOpt.label} untuk ${rel.name} (${rel.age} thn): ${Utils.formatMoney(feeLocal, s.countryId)}.`
+              );
+            }
+            const [sMin, sMax] = activeOpt.smartsBonus || [2, 4];
+            const [mMin, mMax] = activeOpt.moralsBonus || [1, 2];
+            rel.stats.smarts = Utils.clamp((rel.stats.smarts ?? 65) + Utils.randInt(sMin, sMax), 0, 100);
+            rel.morals = Utils.clamp((rel.morals ?? 70) + Utils.randInt(mMin, mMax), 0, 100);
+            rel.educationCare = Utils.clamp((rel.educationCare ?? 65) + 4, 0, 100);
+            if (activeOpt.rebelDelta) {
+              rel.rebelliousness = Utils.clamp((rel.rebelliousness ?? 10) + activeOpt.rebelDelta, 0, 100);
+            }
+            if (activeOpt.prestigeBonus && window.Dynasty && Utils.chance(0.4)) {
+              Dynasty.adjustReputation(1);
+            }
+          }
+        }
+
+        // Kemajuan pengajian universiti anak (umur 19–23 jika sedang belajar di universiti)
+        if (rel.age > 18 && rel.uniEnrolled) {
+          const uniFee = Number(rel.yearlySchoolFee) || 0;
+          if (uniFee > 0 && (rel.uniSponsorMode === 'parent' || rel.uniSponsorMode === 'parent_cheaper')) {
+            s.money = (s.money || 0) - uniFee;
+            GameState.addJournalEntry(
+              `🎓 Membayar yuran tahunan universiti (${rel.university} — ${rel.major}) untuk ${rel.name}: ${Utils.formatMoney(uniFee, s.countryId)}.`
+            );
+          }
+          rel.stats.smarts = Utils.clamp((rel.stats.smarts ?? 70) + Utils.randInt(2, 5), 0, 100);
+          const cgpaDelta = ((rel.stats.smarts ?? 70) >= 75 ? Utils.randInt(2, 10) : Utils.randInt(-5, 6)) / 100;
+          rel.currentCgpa = Number(Math.max(2.0, Math.min(4.0, (rel.currentCgpa || 3.2) + cgpaDelta)).toFixed(2));
+          rel.uniYearsLeft = Math.max(0, (rel.uniYearsLeft || 1) - 1);
+
+          if (rel.uniYearsLeft <= 0) {
+            rel.uniEnrolled = false;
+            rel.yearlySchoolFee = 0;
+            rel.schoolStage = 'graduated';
+            rel.education = rel.majorId === 'trades_vocational' ? 'diploma' : 'bachelor';
+            rel.schoolLabel = `Graduan ${rel.university} (${rel.major} • PNGK ${rel.currentCgpa.toFixed(2)})`;
+            const gradJob = rel.uniCareerTitle || 'Eksekutif Muda';
+            rel.job = gradJob;
+            GameState.adjustStats({ happiness: 10 });
+            if (window.Dynasty) Dynasty.adjustReputation(3);
+            GameState.addJournalEntry(
+              `🎓🎉 KONVOKESYEN ANAK! ${rel.name} (${rel.age} thn) telah berjaya bergraduasi dari ${rel.university} dalam bidang ${rel.major} (PNGK ${rel.currentCgpa.toFixed(2)}) dan memulakan kerjaya sebagai ${gradJob}!`,
+              'milestone'
+            );
+          }
+        }
+      }
+
       // 1B. Penjagaan & Didikan Anak (Umur 1–17) + Kesan Pengabaian
       if (isChild && rel.age >= 1 && rel.age <= 17) {
         const caredEdu = Boolean(prevYearlyActions[`parent_${rel.id}_education`]);
         const caredHealth = Boolean(prevYearlyActions[`parent_${rel.id}_health`]);
         const caredMorals = Boolean(prevYearlyActions[`parent_${rel.id}_morals`]);
 
-        if (!caredEdu) rel.educationCare = Utils.clamp((rel.educationCare ?? 65) - Utils.randInt(7, 12), 0, 100);
+        if (!caredEdu) rel.educationCare = Utils.clamp((rel.educationCare ?? 65) - Utils.randInt(5, 9), 0, 100);
         if (!caredHealth) rel.healthCare = Utils.clamp((rel.healthCare ?? 75) - Utils.randInt(6, 10), 0, 100);
-        if (!caredMorals) rel.morals = Utils.clamp((rel.morals ?? 70) - Utils.randInt(7, 12), 0, 100);
+        if (!caredMorals) rel.morals = Utils.clamp((rel.morals ?? 70) - Utils.randInt(6, 10), 0, 100);
 
         const neglected = (rel.educationCare < 35) || (rel.healthCare < 35) || (rel.morals < 35);
         if (neglected) {
@@ -313,7 +413,7 @@ window.Sim = {
     }
 
     GameState.save();
-    return { event, died: false, babyBirth };
+    return { event, died: false, babyBirth, childMilestoneQueue };
   },
 
   computeMiscarriageChance(s, motherAge) {

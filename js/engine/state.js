@@ -561,16 +561,7 @@ window.GameState = {
       infertilityDiagnosed: false,
       maritalStatus: null,
 
-      education: {
-        stage: edStage,
-        schoolName: edStage === 'primary' ? `${city} ${country.education.primary.name}`
-          : edStage === 'secondary' ? `${city} ${country.education.secondary.name}` : null,
-        universityName: null,
-        uniYearsLeft: 0,
-        hasHighSchool: childAge >= 18,
-        hasDegree: childAge >= 23 && Utils.chance(0.5),
-        examGrade: childAge >= 18 ? 'Lulus' : null
-      },
+      education: this._buildChildHandoverEducation(child, city, country, parent),
       job: null,
       peakSalaryUsd: 0,
 
@@ -636,6 +627,87 @@ window.GameState = {
     }
     this.save();
     return state;
+  },
+
+  _buildChildHandoverEducation(child, city, country, parent) {
+    const childAge = child.age || 0;
+    const edStage = child.uniEnrolled && child.uniYearsLeft > 0
+      ? 'university'
+      : child.education === 'bachelor' || child.education === 'diploma'
+        ? 'graduated'
+        : childAge < 4 ? 'infant'
+        : childAge <= 6 ? 'preschool'
+        : childAge <= 12 ? 'primary'
+        : childAge <= 17 ? 'secondary'
+        : 'highschool_done';
+
+    const schoolName = (childAge >= 4 && childAge <= 17 && child.schoolLabel)
+      ? `${child.schoolLabel} (${city})`
+      : edStage === 'preschool' ? `${country.education.preschool.name} ${city}`
+      : edStage === 'primary' ? `${city} ${country.education.primary.name}`
+      : edStage === 'secondary' ? `${city} ${country.education.secondary.name}`
+      : null;
+
+    const cgpa = typeof child.currentCgpa === 'number'
+      ? Number(child.currentCgpa.toFixed(2))
+      : (child.uniEnrolled ? 3.25 : null);
+
+    const hasDeg = child.education === 'bachelor' || (childAge >= 23 && !child.uniEnrolled && child.education === 'bachelor');
+    const eduLevel = child.education === 'bachelor' ? 'bachelor'
+      : child.education === 'diploma' ? 'diploma'
+      : childAge >= 18 ? 'high_school'
+      : 'none';
+
+    const activeStudy = (child.uniEnrolled && child.uniYearsLeft > 0)
+      ? {
+          level: child.majorId === 'trades_vocational' ? 'diploma' : 'bachelor',
+          field: child.majorId || 'business_finance',
+          fieldName: child.major || 'Perniagaan',
+          mode: 'full_time',
+          institution: child.university || (country.education.universities && country.education.universities[0]) || 'Universiti Awam (IPTA)',
+          yearsTotal: child.uniYearsTotal || 3,
+          yearsLeft: child.uniYearsLeft,
+          annualFee: (child.uniSponsorMode === 'scholarship' || child.uniSponsorMode === 'parent' || child.uniSponsorMode === 'parent_cheaper') ? 0 : (child.yearlySchoolFee || 0),
+          fundedByLoan: child.uniSponsorMode === 'loan',
+          fundedByScholarship: child.uniSponsorMode === 'scholarship' || child.uniSponsorMode === 'parent' || child.uniSponsorMode === 'parent_cheaper',
+          gpa: cgpa || 3.25,
+          currentCgpa: cgpa || 3.25,
+          studiedThisYear: true,
+          academicWarningCount: 0
+        }
+      : null;
+
+    const completedDegrees = [];
+    if (child.education === 'bachelor' || child.education === 'diploma') {
+      completedDegrees.push({
+        level: child.education,
+        field: child.majorId || 'business_finance',
+        institution: child.university || 'Universiti',
+        year: (parent && parent.year) || 2026,
+        gpa: cgpa || 3.40
+      });
+    }
+
+    return {
+      stage: edStage,
+      educationLevel: eduLevel,
+      educationField: child.majorId || (hasDeg ? 'business_finance' : null),
+      schoolStage: child.schoolStage || edStage,
+      schoolType: child.schoolType || null,
+      yearlySchoolFee: child.yearlySchoolFee || 0,
+      schoolName,
+      universityName: child.university || null,
+      major: child.major || null,
+      uniYearsLeft: child.uniYearsLeft || 0,
+      hasHighSchool: childAge >= 18,
+      hasDegree: Boolean(hasDeg),
+      examGrade: childAge >= 18 ? 'Lulus' : null,
+      activeStudy,
+      currentCgpa: cgpa,
+      graduatedCgpa: (completedDegrees.length > 0 && cgpa) ? cgpa : null,
+      completedDegrees,
+      educationLoan: child.childStudentLoan || 0
+    };
   },
 
   // Serah Legasi Semasa Hidup — tukar kawalan kepada anak hidup tanpa kematian/Faraid pramatang
@@ -738,10 +810,6 @@ window.GameState = {
     }
 
     const childAge = child.age;
-    const edStage = childAge < 5 ? 'infant'
-      : childAge < 12 ? 'primary'
-      : childAge < 18 ? 'secondary'
-      : 'highschool_done';
 
     const heirReligion = parent.religion || (window.LegalInheritanceEngine
       ? LegalInheritanceEngine.beliefToReligion(parent.belief)
@@ -814,17 +882,7 @@ window.GameState = {
       infertilityDiagnosed: false,
       maritalStatus: null,
 
-      education: {
-        stage: edStage,
-        educationLevel: childAge >= 18 ? 'high_school' : 'none',
-        schoolName: edStage === 'primary' ? `${city} ${country.education.primary.name}`
-          : edStage === 'secondary' ? `${city} ${country.education.secondary.name}` : null,
-        universityName: null,
-        uniYearsLeft: 0,
-        hasHighSchool: childAge >= 18,
-        hasDegree: false,
-        examGrade: childAge >= 18 ? 'Lulus' : null
-      },
+      education: this._buildChildHandoverEducation(child, city, country, parent),
       job: null,
       activeSpecialMode: null,
       peakSalaryUsd: 0,

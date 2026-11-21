@@ -54,8 +54,467 @@ window.Relationships = {
         if (!r.stats || typeof r.stats !== 'object') {
           r.stats = { smarts: Utils.randInt(52, 85), health: Utils.randInt(74, 96) };
         }
+        this.ensureChildEducationFields(s, r);
       }
     }
+  },
+
+  // --------------------------------------------------------------------------
+  // 0A. SKEMA PERSEKOLAHAN (UMUR 4–17) & UNIVERSITI ANAK (UMUR 18–22)
+  // --------------------------------------------------------------------------
+  SCHOOL_OPTIONS: {
+    tadika: [
+      {
+        id: 'tadika_awam',
+        label: 'Tadika / Prasekolah (Awam)',
+        short: 'Tadika Awam',
+        icon: '🎒',
+        feeUsd: 0,
+        smartsBonus: [2, 4],
+        moralsBonus: [1, 2],
+        rebelDelta: -1,
+        desc: 'Prasekolah kerajaan (Percuma / kos amat rendah) • Pertumbuhan asas membaca & mengira'
+      },
+      {
+        id: 'tadika_swasta',
+        label: 'Tadika / Prasekolah (Swasta)',
+        short: 'Tadika Swasta',
+        icon: '🎨',
+        feeUsd: 420,
+        smartsBonus: [4, 7],
+        moralsBonus: [2, 4],
+        rebelDelta: -2,
+        desc: 'Tadika swasta interaktif • +Kepintaran & +Akhlak lebih tinggi'
+      }
+    ],
+    primary: [
+      {
+        id: 'sk_awam',
+        label: 'Sekolah Rendah (Awam)',
+        short: 'Sekolah Kebangsaan (Awam)',
+        icon: '🏫',
+        feeUsd: 0,
+        smartsBonus: [2, 4],
+        moralsBonus: [1, 2],
+        rebelDelta: -1,
+        desc: 'Sekolah Kebangsaan kerajaan (Percuma) • Pertumbuhan Kepintaran standard'
+      },
+      {
+        id: 'sekolah_agama_swasta',
+        label: 'Sekolah Rendah (Agama / Swasta)',
+        short: 'Sekolah Agama / Swasta',
+        icon: '🕌',
+        feeUsd: 850,
+        smartsBonus: [4, 6],
+        moralsBonus: [4, 7],
+        rebelDelta: -4,
+        desc: 'Yuran tahunan sederhana • Meningkatkan +Kepintaran & +Akhlak/Moral'
+      },
+      {
+        id: 'sekolah_antarabangsa',
+        label: 'Sekolah Rendah (Antarabangsa)',
+        short: 'Sekolah Antarabangsa',
+        icon: '🌍',
+        feeUsd: 2600,
+        smartsBonus: [6, 9],
+        moralsBonus: [1, 3],
+        rebelDelta: -2,
+        prestigeBonus: 2,
+        desc: 'Yuran tahunan tinggi • Pertumbuhan +Kepintaran tinggi & lonjakan prestij keluarga'
+      }
+    ],
+    secondary: [
+      {
+        id: 'smk_awam',
+        label: 'SMK / Sekolah Menengah (Awam)',
+        short: 'SMK (Awam)',
+        icon: '🏫',
+        feeUsd: 0,
+        smartsBonus: [2, 4],
+        moralsBonus: [1, 2],
+        rebelDelta: 0,
+        desc: 'Sekolah Menengah Kebangsaan (Percuma) • Pertumbuhan Kepintaran standard'
+      },
+      {
+        id: 'sbp_mrsm',
+        label: 'SMK / Asrama Penuh (SBP / MRSM)',
+        short: 'SBP / MRSM',
+        icon: '🏅',
+        feeUsd: 240,
+        minSmarts: 75,
+        smartsBonus: [6, 9],
+        moralsBonus: [3, 5],
+        rebelDelta: -6,
+        prestigeBonus: 2,
+        desc: 'Syarat Kepintaran >= 75% • Kos rendah, lonjakan kuat +Kepintaran & disiplin tinggi'
+      },
+      {
+        id: 'sekolah_agama_swasta',
+        label: 'Sekolah Menengah (Agama / Swasta)',
+        short: 'Sekolah Agama / Swasta',
+        icon: '🕌',
+        feeUsd: 1100,
+        smartsBonus: [4, 7],
+        moralsBonus: [5, 8],
+        rebelDelta: -5,
+        desc: 'Yuran tahunan sederhana • Mengukuhkan +Kepintaran & +Akhlak/Moral remaja'
+      },
+      {
+        id: 'sekolah_antarabangsa',
+        label: 'Sekolah Menengah (Antarabangsa)',
+        short: 'Sekolah Antarabangsa',
+        icon: '🌍',
+        feeUsd: 3400,
+        smartsBonus: [7, 10],
+        moralsBonus: [1, 3],
+        rebelDelta: -2,
+        prestigeBonus: 3,
+        desc: 'Yuran tahunan tinggi • +Kepintaran tinggi, silibus global & prestij keluarga'
+      }
+    ]
+  },
+
+  CHILD_UNI_MAJORS: [
+    { id: 'medicine',             label: 'Perubatan',             fieldId: 'medicine',          minSmarts: 82, years: 4, feeMult: 1.45, careerTitle: 'Doktor Perubatan' },
+    { id: 'engineering',          label: 'Kejuruteraan',          fieldId: 'engineering',       minSmarts: 72, years: 4, feeMult: 1.18, careerTitle: 'Jurutera' },
+    { id: 'law',                  label: 'Undang-Undang',         fieldId: 'law',               minSmarts: 74, years: 4, feeMult: 1.22, careerTitle: 'Peguam' },
+    { id: 'computer_science',     label: 'Sains Komputer',        fieldId: 'computer_science',  minSmarts: 68, years: 3, feeMult: 1.15, careerTitle: 'Jurutera Perisian' },
+    { id: 'business_finance',     label: 'Perniagaan',            fieldId: 'business_finance',  minSmarts: 55, years: 3, feeMult: 1.05, careerTitle: 'Eksekutif Perniagaan' },
+    { id: 'arts_media',           label: 'Seni / Reka Bentuk',    fieldId: 'arts_media',        minSmarts: 45, years: 3, feeMult: 0.92, careerTitle: 'Pereka Kreatif' },
+    { id: 'trades_vocational',    label: 'Latihan Kemahiran / Terus Bekerja', fieldId: 'trades_vocational', minSmarts: 0, years: 2, feeMult: 0.60, careerTitle: 'Juruteknik Mahir' }
+  ],
+
+  CHILD_UNI_TIERS: {
+    ipta: {
+      id: 'ipta',
+      label: 'Universiti Awam (IPTA)',
+      short: 'IPTA',
+      icon: '🏛️',
+      baseFeeUsd: 1100,
+      minSmarts: 50
+    },
+    ipts: {
+      id: 'ipts',
+      label: 'Universiti Swasta (IPTS)',
+      short: 'IPTS',
+      icon: '🎓',
+      baseFeeUsd: 3200,
+      minSmarts: 42
+    },
+    overseas: {
+      id: 'overseas',
+      label: 'Universiti Luar Negara',
+      short: 'Luar Negara',
+      icon: '✈️',
+      baseFeeUsd: 7500,
+      minSmarts: 80
+    }
+  },
+
+  getSchoolStageForAge(age) {
+    const a = Number(age) || 0;
+    if (a < 4) return 'infant';
+    if (a <= 6) return 'tadika';
+    if (a <= 12) return 'primary';
+    if (a <= 17) return 'secondary';
+    return 'completed';
+  },
+
+  getSchoolOptionsForStage(stage, child) {
+    const list = this.SCHOOL_OPTIONS[stage] || [];
+    const smarts = (child && child.stats && child.stats.smarts) ?? 65;
+    return list.map(opt => ({
+      ...opt,
+      locked: Boolean(opt.minSmarts && smarts < opt.minSmarts),
+      lockReason: (opt.minSmarts && smarts < opt.minSmarts) ? `Perlu Kepintaran >= ${opt.minSmarts}% (Semasa: ${smarts}%)` : null
+    }));
+  },
+
+  ensureChildEducationFields(s, child) {
+    if (!child) return;
+    const cId = (s && s.countryId) || child.countryId || 'MY';
+    const age = Number(child.age) || 0;
+    const expectedStage = this.getSchoolStageForAge(age);
+
+    if (age < 4) {
+      child.schoolStage = 'infant';
+      child.schoolType = 'none';
+      child.schoolLabel = 'Belum Bersekolah (Bayi / Kanak-kanak)';
+      child.yearlySchoolFee = 0;
+    } else if (age >= 4 && age <= 17) {
+      const stageOpts = this.SCHOOL_OPTIONS[expectedStage] || [];
+      const currentValid = stageOpts.find(o => o.id === child.schoolType);
+      if (child.schoolStage !== expectedStage || !currentValid) {
+        child.schoolStage = expectedStage;
+        // Jika umur 4-6 dan belum didaftarkan ke tadika, benarkan status belum daftar atau kekalkan pilihan terdahulu
+        if (expectedStage === 'tadika' && !child.schoolType) {
+          child.schoolType = 'not_enrolled';
+          child.schoolLabel = 'Belum Mendaftar Tadika';
+          child.yearlySchoolFee = 0;
+        } else {
+          // Bawa jenis sekolah setara jika bertukar dari rendah ke menengah (cth: agama/swasta atau antarabangsa)
+          let fallbackOpt = stageOpts[0];
+          if (child.schoolType && stageOpts.some(o => o.id === child.schoolType)) {
+            fallbackOpt = stageOpts.find(o => o.id === child.schoolType);
+          }
+          child.schoolType = fallbackOpt.id;
+          child.schoolLabel = fallbackOpt.label;
+          child.yearlySchoolFee = fallbackOpt.feeUsd > 0 ? Utils.usdToLocal(fallbackOpt.feeUsd, cId) : 0;
+        }
+      } else {
+        child.schoolLabel = currentValid.label;
+        child.yearlySchoolFee = currentValid.feeUsd > 0 ? Utils.usdToLocal(currentValid.feeUsd, cId) : 0;
+      }
+    } else {
+      // Umur >= 18
+      if (child.uniEnrolled && child.uniYearsLeft > 0) {
+        child.schoolStage = 'university';
+      } else if (child.education === 'bachelor' || child.education === 'diploma') {
+        child.schoolStage = 'graduated';
+        child.yearlySchoolFee = 0;
+      } else {
+        child.schoolStage = 'completed';
+        child.yearlySchoolFee = 0;
+      }
+    }
+
+    if (!('university' in child)) child.university = null;
+    if (!('major' in child)) child.major = null;
+    if (!('majorId' in child)) child.majorId = null;
+    if (!('education' in child)) child.education = age >= 18 ? 'high_school' : 'none';
+    if (typeof child.currentCgpa !== 'number') {
+      child.currentCgpa = child.uniEnrolled
+        ? Number((3.0 + (((child.stats && child.stats.smarts) || 65) / 100) * 0.7).toFixed(2))
+        : null;
+    }
+  },
+
+  enrollChildSchool(childId, schoolTypeId) {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada permainan aktif.' };
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child) return { ok: false, msg: 'Anak tidak ditemui.' };
+
+    const stage = this.getSchoolStageForAge(child.age);
+    const stageOpts = this.SCHOOL_OPTIONS[stage] || [];
+    const chosen = stageOpts.find(o => o.id === schoolTypeId);
+    if (!chosen) return { ok: false, msg: 'Pilihan sekolah tidak sah untuk peringkat umur ini.' };
+
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+    if (chosen.minSmarts && smarts < chosen.minSmarts) {
+      return {
+        ok: false,
+        msg: `${child.name} memerlukan Kepintaran sekurang-kurangnya ${chosen.minSmarts}% untuk memasuki ${chosen.label} (Semasa: ${smarts}%).`
+      };
+    }
+
+    const feeLocal = chosen.feeUsd > 0 ? Utils.usdToLocal(chosen.feeUsd, s.countryId) : 0;
+    child.schoolStage = stage;
+    child.schoolType = chosen.id;
+    child.schoolLabel = chosen.label;
+    child.yearlySchoolFee = feeLocal;
+    child.job = stage === 'tadika' ? 'Pelajar Tadika' : 'Pelajar';
+
+    const feeStr = feeLocal > 0 ? `${Utils.formatMoney(feeLocal, s.countryId)}/thn` : 'Percuma';
+    GameState.addJournalEntry(
+      `${chosen.icon} Anda mendaftarkan ${child.name} (${child.age} thn) ke ${chosen.label} (Yuran: ${feeStr}).`,
+      'milestone'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      child,
+      chosen,
+      msg: `${child.name} kini bersekolah di ${chosen.label} (${feeStr})!`
+    };
+  },
+
+  generateChildUniPreference(s, child) {
+    const cId = (s && s.countryId) || child.countryId || 'MY';
+    const smarts = (child && child.stats && child.stats.smarts) ?? 65;
+    const rebel = child.rebelliousness ?? 10;
+    const morals = child.morals ?? 70;
+    const isDelinq = Boolean(child.isDelinquent);
+
+    // Jika Kepintaran rendah (< 45) atau sangat memberontak/delinkuen -> cenderung Latihan Kemahiran / Terus Bekerja
+    let chosenMajor;
+    let wantsWorkDirectly = false;
+
+    if (smarts < 44 || (isDelinq && rebel >= 75 && smarts < 65)) {
+      chosenMajor = this.CHILD_UNI_MAJORS.find(m => m.id === 'trades_vocational');
+      wantsWorkDirectly = smarts < 38 || isDelinq;
+    } else if (smarts >= 84) {
+      const topPool = this.CHILD_UNI_MAJORS.filter(m => ['medicine', 'engineering', 'law', 'computer_science'].includes(m.id));
+      // Deterministic pick based on child id/name charCode or smarts
+      const idx = ((child.name ? child.name.charCodeAt(0) : 0) + smarts) % topPool.length;
+      chosenMajor = topPool[idx];
+    } else if (smarts >= 70) {
+      const midHighPool = this.CHILD_UNI_MAJORS.filter(m => ['engineering', 'law', 'computer_science', 'business_finance'].includes(m.id));
+      const idx = ((child.name ? child.name.charCodeAt(0) : 0) + smarts) % midHighPool.length;
+      chosenMajor = midHighPool[idx];
+    } else if (rebel >= 55 || morals < 50) {
+      chosenMajor = this.CHILD_UNI_MAJORS.find(m => m.id === 'arts_media') || this.CHILD_UNI_MAJORS[4];
+    } else {
+      const stdPool = this.CHILD_UNI_MAJORS.filter(m => ['business_finance', 'computer_science', 'arts_media'].includes(m.id));
+      const idx = ((child.name ? child.name.charCodeAt(0) : 0) + smarts) % stdPool.length;
+      chosenMajor = stdPool[idx];
+    }
+
+    let tierKey = 'ipta';
+    if (wantsWorkDirectly) {
+      tierKey = 'ipta';
+    } else if (smarts >= 85 && (child.schoolType === 'sekolah_antarabangsa' || child.schoolType === 'sbp_mrsm' || smarts >= 90)) {
+      tierKey = 'overseas';
+    } else if (smarts >= 68 && rebel < 55) {
+      tierKey = 'ipta';
+    } else {
+      tierKey = 'ipts';
+    }
+
+    const tier = this.CHILD_UNI_TIERS[tierKey] || this.CHILD_UNI_TIERS.ipta;
+    const yearlyFeeLocal = Utils.usdToLocal(Math.round(tier.baseFeeUsd * (chosenMajor.feeMult || 1.0)), cId);
+
+    // Pilihan lebih murah untuk Pilihan 3 ("Cadang Universiti / Bidang Lebih Murah")
+    const cheaperTier = this.CHILD_UNI_TIERS.ipta;
+    const cheaperMajor = (chosenMajor.id === 'medicine' || chosenMajor.id === 'law' || chosenMajor.id === 'engineering')
+      ? this.CHILD_UNI_MAJORS.find(m => m.id === 'business_finance')
+      : this.CHILD_UNI_MAJORS.find(m => m.id === 'trades_vocational');
+    const cheaperFeeLocal = Utils.usdToLocal(Math.round(cheaperTier.baseFeeUsd * (cheaperMajor.feeMult || 0.8) * 0.75), cId);
+
+    return {
+      wantsWorkDirectly,
+      major: chosenMajor,
+      tier,
+      yearlyFeeLocal,
+      totalFeeLocal: yearlyFeeLocal * (chosenMajor.years || 3),
+      cheaperTier,
+      cheaperMajor,
+      cheaperFeeLocal
+    };
+  },
+
+  resolveChildUniversityChoice(childId, decision) {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada permainan aktif.' };
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child) return { ok: false, msg: 'Anak tidak ditemui.' };
+
+    const pref = child._uniPref || this.generateChildUniPreference(s, child);
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+    const initCgpa = Number(Math.max(2.5, Math.min(3.95, 2.75 + (smarts / 100) * 1.1)).toFixed(2));
+
+    if (decision === 'sponsor_full') {
+      const firstYearFee = pref.yearlyFeeLocal;
+      s.money = (s.money || 0) - firstYearFee;
+      child.closeness = Utils.clamp((child.closeness ?? 75) + 20, 0, 100);
+      child.trust = Utils.clamp((child.trust ?? 75) + 15, 0, 100);
+      child.uniEnrolled = true;
+      child.university = `${pref.tier.label}`;
+      child.uniTier = pref.tier.id;
+      child.major = pref.major.label;
+      child.majorId = pref.major.fieldId;
+      child.uniCareerTitle = pref.major.careerTitle;
+      child.uniYearsTotal = pref.major.years || 3;
+      child.uniYearsLeft = (pref.major.years || 3) - 1; // Tahun pertama dibayar sekarang
+      child.yearlySchoolFee = firstYearFee;
+      child.uniSponsorMode = 'parent';
+      child.education = 'high_school';
+      child.schoolStage = 'university';
+      child.schoolLabel = `${pref.tier.short} (${pref.major.label})`;
+      child.currentCgpa = initCgpa;
+      child.job = `Mahasiswa (${pref.major.label})`;
+      GameState.adjustStats({ happiness: 12 });
+
+      const msg = `💰 Anda menaja sepenuhnya pengajian ${child.name} dalam bidang ${pref.major.label} di ${pref.tier.label} (Yuran: ${Utils.formatMoney(firstYearFee, s.countryId)}/thn • Hubungan +20%).`;
+      GameState.addJournalEntry(msg, 'milestone');
+      GameState.save();
+      return { ok: true, msg };
+    }
+
+    if (decision === 'scholarship_loan') {
+      const scholChance = smarts >= 85 ? 0.82 : smarts >= 80 ? 0.68 : smarts >= 72 ? 0.30 : 0.10;
+      const gotScholarship = Utils.chance(scholChance);
+      child.closeness = Utils.clamp((child.closeness ?? 75) + (gotScholarship ? 10 : 4), 0, 100);
+      child.uniEnrolled = true;
+      child.university = `${pref.tier.label}`;
+      child.uniTier = pref.tier.id;
+      child.major = pref.major.label;
+      child.majorId = pref.major.fieldId;
+      child.uniCareerTitle = pref.major.careerTitle;
+      child.uniYearsTotal = pref.major.years || 3;
+      child.uniYearsLeft = (pref.major.years || 3) - 1;
+      child.yearlySchoolFee = 0; // Kos sifar kepada ibu bapa
+      child.uniSponsorMode = gotScholarship ? 'scholarship' : 'loan';
+      child.childStudentLoan = gotScholarship ? 0 : pref.totalFeeLocal;
+      child.education = 'high_school';
+      child.schoolStage = 'university';
+      child.schoolLabel = `${pref.tier.short} (${pref.major.label} • ${gotScholarship ? 'Biasiswa' : 'Pinjaman'})`;
+      child.currentCgpa = initCgpa;
+      child.job = `Mahasiswa (${pref.major.label})`;
+      GameState.adjustStats({ happiness: gotScholarship ? 14 : 6 });
+
+      const msg = gotScholarship
+        ? `📜🎉 Tahniah! Berkat Kepintaran tinggi (${smarts}%), ${child.name} berjaya meraih Biasiswa Penuh untuk melanjutkan pengajian ${pref.major.label} di ${pref.tier.label} tanpa membebankan kewangan anda!`
+        : `📜 ${child.name} mengambil Pinjaman Pelajaran (${Utils.formatMoney(pref.totalFeeLocal, s.countryId)}) untuk membiayai pengajian ${pref.major.label} di ${pref.tier.label} (Tiada kos kepada anda).`;
+      GameState.addJournalEntry(msg, 'milestone');
+      GameState.save();
+      return { ok: true, gotScholarship, msg };
+    }
+
+    if (decision === 'suggest_cheaper') {
+      const acceptChance = Utils.clamp(0.48 + ((child.closeness ?? 70) - 60) * 0.008 - ((child.rebelliousness ?? 15) * 0.006), 0.25, 0.85);
+      const smoothlyAccepted = Utils.chance(acceptChance);
+      const relDrop = smoothlyAccepted ? -10 : -Utils.randInt(14, 20);
+      child.closeness = Utils.clamp((child.closeness ?? 75) + relDrop, 10, 100);
+
+      const fee = pref.cheaperFeeLocal;
+      s.money = (s.money || 0) - fee;
+      child.uniEnrolled = true;
+      child.university = pref.cheaperTier.label;
+      child.uniTier = pref.cheaperTier.id;
+      child.major = pref.cheaperMajor.label;
+      child.majorId = pref.cheaperMajor.fieldId;
+      child.uniCareerTitle = pref.cheaperMajor.careerTitle;
+      child.uniYearsTotal = pref.cheaperMajor.years || 3;
+      child.uniYearsLeft = (pref.cheaperMajor.years || 3) - 1;
+      child.yearlySchoolFee = fee;
+      child.uniSponsorMode = 'parent_cheaper';
+      child.education = 'high_school';
+      child.schoolStage = 'university';
+      child.schoolLabel = `${pref.cheaperTier.short} (${pref.cheaperMajor.label})`;
+      child.currentCgpa = initCgpa;
+      child.job = `Mahasiswa (${pref.cheaperMajor.label})`;
+
+      const msg = smoothlyAccepted
+        ? `🔄 ${child.name} akur dengan cadangan anda untuk mengambil bidang ${pref.cheaperMajor.label} di ${pref.cheaperTier.label} yang lebih jimat (${Utils.formatMoney(fee, s.countryId)}/thn), walaupun sedikit terkilan (Hubungan ${relDrop}%).`
+        : `🔄😔 ${child.name} berasa kecewa kerana terpaksa melupakan bidang ${pref.major.label} dan beralih ke ${pref.cheaperMajor.label} di ${pref.cheaperTier.label} (${Utils.formatMoney(fee, s.countryId)}/thn • Hubungan ${relDrop}%).`;
+      GameState.addJournalEntry(msg, smoothlyAccepted ? 'normal' : 'warning');
+      GameState.save();
+      return { ok: true, msg };
+    }
+
+    // decision === 'work_immediately'
+    const wantedUni = !pref.wantsWorkDirectly;
+    const relHit = wantedUni ? -25 : -5;
+    child.closeness = Utils.clamp((child.closeness ?? 75) + relHit, 5, 100);
+    child.uniEnrolled = false;
+    child.uniYearsLeft = 0;
+    child.yearlySchoolFee = 0;
+    child.schoolStage = 'completed';
+    child.schoolLabel = 'Tamat Sekolah Menengah (Terus Bekerja)';
+    child.education = 'high_school';
+    const c = Utils.getCountry(s.countryId);
+    const entryJobs = (c && Array.isArray(c.jobs)) ? c.jobs.filter(j => !j.reqDegree) : [];
+    const starterTitle = entryJobs.length > 0 ? Utils.pick(entryJobs).title : 'Pekerja Muda';
+    child.job = starterTitle;
+    if (wantedUni) GameState.adjustStats({ happiness: -6 });
+
+    const msg = wantedUni
+      ? `💼😔 Anda menyuruh ${child.name} melupakan hasrat ke universiti (${pref.major.label}) dan terus bekerja sebagai ${starterTitle}. ${child.name} amat berkecil hati dengan keputusan anda (Hubungan -25%).`
+      : `💼 ${child.name} memilih untuk terus memasuki alam pekerjaan sebagai ${starterTitle} selepas tamat sekolah menengah.`;
+    GameState.addJournalEntry(msg, wantedUni ? 'warning' : 'normal');
+    GameState.save();
+    return { ok: true, msg };
   },
 
   computeCompatibility(s, npcBelief) {
@@ -1078,8 +1537,9 @@ window.Relationships = {
       },
       alive: true,
       isAlive: true,
-      job: (draft.kidAge || 0) < 5 ? 'Bayi' : 'Pelajar'
+      job: (draft.kidAge || 0) < 4 ? 'Bayi' : 'Pelajar'
     };
+    this.ensureChildEducationFields(s, childObj);
 
     s.relationships.push(childObj);
     GameState.adjustStats({ happiness: draft.isAdopted ? 20 : 24 });
@@ -1131,38 +1591,42 @@ window.Relationships = {
         icon: '🧸',
         title: 'Stimulasi Awal & Rangsangan Bayi',
         desc: 'Rangsang perkembangan otak, deria & kemahiran motor bayi',
-        costUsd: 90,
+        costUsd: 75,
+        smartsBoost: [3, 6],
         logFn: (name, costStr) => `🧸 Anda menyediakan aktiviti stimulasi awal & rangsangan minda untuk ${name} (${costStr}). Perkembangan awal bayinya amat memberangsangkan!`,
         toastFn: (name, care) => `Perkembangan awal ${name} meningkat (${care}%)!`
       };
     }
     if (a <= 6) {
       return {
-        icon: '🎨',
-        title: 'Hantar ke Tadika / Prasekolah',
-        desc: 'Bina asas membaca, mengira & kemahiran sosial prasekolah',
-        costUsd: 140,
-        logFn: (name, costStr) => `🎨 Anda menghantar ${name} ke Tadika / Prasekolah (${costStr}). Asas pembelajaran & keyakinan dirinya semakin menyerlah!`,
-        toastFn: (name, care) => `Asas prasekolah ${name} meningkat (${care}%)!`
+        icon: '📖',
+        title: 'Buku Cerita & Latihan Membaca di Rumah',
+        desc: 'Aktiviti tambahan di rumah untuk mengukuhkan asas membaca & mengira',
+        costUsd: 80,
+        smartsBoost: [3, 5],
+        logFn: (name, costStr) => `📖 Anda membeli buku cerita & melatih ${name} membaca di rumah (${costStr}). Asas pembelajarannya semakin kukuh!`,
+        toastFn: (name, care) => `Minat belajar ${name} meningkat (${care}%)!`
       };
     }
     if (a <= 12) {
       return {
         icon: '📚',
-        title: 'Beri Tuisyen & Bimbingan Belajar',
-        desc: 'Tingkatkan Kepintaran & penguasaan subjek sekolah rendah',
-        costUsd: 180,
-        logFn: (name, costStr) => `📚 Anda mendaftarkan ${name} ke kelas tuisyen & bimbingan belajar (${costStr}). Kepintaran & prestasi sekolah rendahnya meningkat!`,
-        toastFn: (name, care) => `Prestasi belajar ${name} meningkat (${care}%)!`
+        title: 'Kelas Tuisyen Tambahan (Pilihan)',
+        desc: 'Tuisyen sampingan luar waktu sekolah (+3 hingga +5% Kepintaran)',
+        costUsd: 110,
+        smartsBoost: [3, 5],
+        logFn: (name, costStr) => `📚 Anda menghantar ${name} ke kelas tuisyen tambahan (${costStr}) sebagai sokongan sampingan kepada pembelajaran sekolah rendahnya.`,
+        toastFn: (name, care) => `Tuisyen tambahan ${name} selesai (${care}%)!`
       };
     }
     return {
-      icon: '🎓',
-      title: 'Tuisyen & Bimbingan Akademik / Kerjaya',
-      desc: 'Persediaan peperiksaan, kepintaran & hala tuju masa depan remaja',
-      costUsd: 220,
-      logFn: (name, costStr) => `🎓 Anda mendaftarkan ${name} ke program tuisyen & bimbingan akademik/kerjaya (${costStr}). Kepintaran & persediaan masa depannya semakin mantap!`,
-      toastFn: (name, care) => `Bimbingan akademik ${name} meningkat (${care}%)!`
+      icon: '📝',
+      title: 'Tuisyen Tambahan Peperiksaan (Pilihan)',
+      desc: 'Kelas tambahan pilihan luar waktu sekolah (+3 hingga +5% Kepintaran)',
+      costUsd: 130,
+      smartsBoost: [3, 5],
+      logFn: (name, costStr) => `📝 Anda mendaftarkan ${name} ke kelas tuisyen tambahan peperiksaan (${costStr}) sebagai latihan sampingan sekolah menengah.`,
+      toastFn: (name, care) => `Tuisyen tambahan ${name} selesai (${care}%)!`
     };
   },
 
@@ -1195,9 +1659,10 @@ window.Relationships = {
       s.money -= cost;
       s.yearlyActions[actKey] = true;
       s.yearlyActions[countKey] = used + 1;
-      child.educationCare = Utils.clamp((child.educationCare ?? 60) + Utils.randInt(14, 22), 0, 100);
-      child.stats.smarts = Utils.clamp((child.stats.smarts ?? 65) + Utils.randInt(5, 10), 0, 100);
-      child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - 4, 0, 100);
+      const [minSm, maxSm] = eduMeta.smartsBoost || [3, 5];
+      child.educationCare = Utils.clamp((child.educationCare ?? 60) + Utils.randInt(12, 18), 0, 100);
+      child.stats.smarts = Utils.clamp((child.stats.smarts ?? 65) + Utils.randInt(minSm, maxSm), 0, 100);
+      child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - 3, 0, 100);
       GameState.addJournalEntry(eduMeta.logFn(child.name, Utils.formatMoney(cost, s.countryId)));
       GameState.save();
       return { ok: true, msg: eduMeta.toastFn(child.name, child.educationCare) };
