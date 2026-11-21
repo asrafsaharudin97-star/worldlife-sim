@@ -84,6 +84,28 @@ window.Sim = {
               : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}.`,
             'warning'
           );
+          if (rel.isFormerPlayerParent && rel.savedEstateNetWorth > 0) {
+            const syariahParent = window.LegalInheritanceEngine
+              && LegalInheritanceEngine.isSyariahApplicable({ religion: rel.savedReligion, countryId: rel.savedCountryId || s.countryId });
+            const kidsN = Math.max(1, rel.savedKidsCount || 1);
+            let frac = 1 / kidsN;
+            if (syariahParent) {
+              if (s.isAdopted) frac = 0.08; // Hibah Anak Angkat
+              else frac = (rel.savedHasSpouse ? 0.875 : 1.0) / kidsN;
+            } else {
+              const netUsd = Utils.localToUsd(rel.savedEstateNetWorth, rel.savedCountryId || s.countryId);
+              const taxR = window.LegalInheritanceEngine ? LegalInheritanceEngine.getCountryEstateTaxRate(rel.savedCountryId || s.countryId, netUsd) : 0;
+              frac = ((1 - taxR) * (rel.savedHasSpouse ? 0.5 : 1.0)) / kidsN;
+            }
+            const shareLocal = Utils.convertMoney(Math.round(rel.savedEstateNetWorth * frac), rel.savedCountryId || s.countryId, s.countryId);
+            if (shareLocal > 0) {
+              s.money = Math.round((s.money || 0) + shareLocal);
+              GameState.addJournalEntry(
+                `📜 Pewarisan Harta Pusaka (${syariahParent ? (s.isAdopted ? 'Hibah Anak Angkat' : 'Faraid') : 'Undang-Undang Sivil'}): Anda menerima bahagian pusaka sebanyak ${Utils.formatMoney(shareLocal, s.countryId)} daripada arwah ${rel.name}.`,
+                'milestone'
+              );
+            }
+          }
           GameState.adjustStats({ happiness: happyDrop });
           GameState.recordCrisis('grief');
 

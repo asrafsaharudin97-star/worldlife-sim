@@ -238,6 +238,32 @@ window.Dynasty = {
     return d.dynastyHistory[0];
   },
 
+  recordLivingHandover(parent, child) {
+    if (!parent || !child) return;
+    const d = this.getData();
+    const c = Utils.getCountry(parent.countryId);
+    const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(parent) : parent.name;
+    const peakNetWorth = Math.max(GameState.getNetWorth(), parent.peakNetWorth || 0);
+    if (!d.dynastyHistory.some(h => h.id === parent.id)) {
+      d.dynastyHistory.unshift({
+        id: parent.id,
+        generation: parent.generation || d.generation || 1,
+        name: titledName,
+        age: parent.age,
+        lifespan: parent.age,
+        yearDied: `${parent.year} (Masih Hidup)`,
+        countryFlag: c.flag,
+        peakNetWorth,
+        peakWealthFormatted: Utils.formatMoney(peakNetWorth, parent.countryId, true),
+        endingTitle: '🔄 Serah Legasi Semasa Hidup',
+        notableEvent: `Menyerahkan kawalan legasi kepada ${child.name} (Gen ${(parent.generation || 1) + 1}) pada usia ${parent.age} tahun.`
+      });
+      if (d.dynastyHistory.length > this.MAX_HISTORY) d.dynastyHistory = d.dynastyHistory.slice(0, this.MAX_HISTORY);
+    }
+    d.generation = Math.max(d.generation || 1, (parent.generation || 1) + 1);
+    this.save();
+  },
+
   // Had rekod ringkas salasilah (cukup untuk 50+ generasi tanpa membebankan storan)
   MAX_HISTORY: 60,
 

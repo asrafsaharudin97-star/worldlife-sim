@@ -638,6 +638,237 @@ window.GameState = {
     return state;
   },
 
+  // Serah Legasi Semasa Hidup — tukar kawalan kepada anak hidup tanpa kematian/Faraid pramatang
+  switchToLivingChild(childId, giftCashLocal = 0) {
+    const parent = this.current;
+    if (!parent || !parent.alive) return null;
+    const child = (parent.relationships || []).find(r =>
+      r.id === childId && r.alive && ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role)
+    );
+    if (!child) return null;
+
+    const cId = child.countryId || parent.countryId;
+    const country = Utils.getCountry(cId);
+    const parentC = Utils.getCountry(parent.countryId);
+    const city = cId === parent.countryId ? parent.city : Utils.pick(country.cities);
+
+    const maxGift = Math.max(0, Math.floor(parent.money || 0));
+    const actualGiftParent = Math.max(0, Math.min(maxGift, Math.round(Number(giftCashLocal) || 0)));
+    const remainingParentNetWorth = Math.max(0, this.getNetWorth() - actualGiftParent);
+    const giftChildLocal = Utils.convertMoney(actualGiftParent, parent.countryId, cId);
+
+    const livingKids = parent.relationships.filter(r =>
+      ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive
+    );
+
+    const remappedRels = [];
+
+    // 1. Pemain terdahulu kekal hidup sebagai NPC Bapa / Ibu dengan baki harta untuk pewarisan kelak
+    remappedRels.push({
+      id: 'rel_former_player_' + Date.now(),
+      name: parent.name,
+      role: parent.gender === 'male' ? 'Bapa' : 'Ibu',
+      category: 'family',
+      gender: parent.gender,
+      age: parent.age,
+      countryId: parent.countryId,
+      closeness: Utils.clamp(child.closeness ?? 85, 20, 100),
+      trust: Utils.clamp(child.trust ?? 85, 20, 100),
+      compatibility: 90,
+      religion: parent.religion,
+      belief: parent.belief || 'unassigned',
+      alive: true,
+      isAlive: true,
+      job: (parent.job && parent.job.title) || 'Pesara / Ibu Bapa',
+      stats: { health: (parent.stats && parent.stats.health) ?? 75, smarts: (parent.stats && parent.stats.smarts) ?? 70 },
+      isFormerPlayerParent: true,
+      savedEstateNetWorth: remainingParentNetWorth,
+      savedCountryId: parent.countryId,
+      savedReligion: parent.religion,
+      savedHasSpouse: Boolean(parent.married && parent.partnerId),
+      savedKidsCount: livingKids.length
+    });
+
+    // 2. Pasangan hidup pemain terdahulu -> Ibu / Bapa NPC
+    const otherParent = (parent.married && parent.partnerId)
+      ? parent.relationships.find(r => r.id === parent.partnerId && r.alive)
+      : null;
+    if (otherParent) {
+      remappedRels.push({
+        id: otherParent.id,
+        name: otherParent.name,
+        role: otherParent.gender === 'female' ? 'Ibu' : 'Bapa',
+        category: 'family',
+        gender: otherParent.gender,
+        age: otherParent.age,
+        countryId: otherParent.countryId || parent.countryId,
+        closeness: Utils.randInt(75, 95),
+        trust: Utils.randInt(75, 95),
+        compatibility: 88,
+        belief: otherParent.belief || parent.belief || 'unassigned',
+        alive: true,
+        isAlive: true,
+        job: otherParent.job || 'Ibu Bapa'
+      });
+    }
+
+    // 3. Anak-anak lain -> Adik-beradik NPC
+    for (const k of livingKids) {
+      if (k.id === child.id) continue;
+      remappedRels.push({
+        id: k.id,
+        name: k.name,
+        role: k.gender === 'male' ? 'Adik/Abang' : 'Adik/Kakak',
+        category: 'family',
+        gender: k.gender,
+        age: k.age,
+        countryId: k.countryId || cId,
+        closeness: Utils.randInt(65, 92),
+        trust: Utils.randInt(65, 90),
+        compatibility: 82,
+        belief: k.belief || parent.belief || 'unassigned',
+        alive: true,
+        isAlive: true,
+        job: k.age >= 22 ? Utils.pick(Utils.getCountry(k.countryId || cId).jobs).title : (k.age < 6 ? 'Kanak-kanak' : 'Pelajar')
+      });
+    }
+
+    if (window.Dynasty && Dynasty.recordLivingHandover) {
+      Dynasty.recordLivingHandover(parent, child);
+    }
+
+    const childAge = child.age;
+    const edStage = childAge < 5 ? 'infant'
+      : childAge < 12 ? 'primary'
+      : childAge < 18 ? 'secondary'
+      : 'highschool_done';
+
+    const heirReligion = parent.religion || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.beliefToReligion(parent.belief)
+      : 'Tiada');
+
+    const state = {
+      id: 'life_' + Date.now(),
+      name: child.name,
+      gender: child.gender,
+      heritageId: country.heritages[0].id,
+      heritageLabel: parent.heritageLabel,
+      isAdopted: Boolean(child.isAdopted),
+      isOutOfWedlock: Boolean(child.isOutOfWedlock),
+      age: childAge,
+      year: parent.year,
+      alive: true,
+      causeOfDeath: null,
+
+      religion: heirReligion,
+      belief: child.belief || parent.belief || (window.LegalInheritanceEngine ? LegalInheritanceEngine.religionToBelief(heirReligion) : 'unassigned'),
+      familyBelief: parent.belief || 'unassigned',
+      devotion: Utils.randInt(35, 65),
+      lastSpiritualAge: -99,
+      spiritualHistory: [],
+      hiddenFlags: {},
+      recentCrises: [],
+
+      birthCountryId: cId,
+      birthCity: city,
+      countryId: cId,
+      city,
+      residencyStatus: 'Citizen',
+      yearsInCurrentCountry: childAge,
+      citizenships: [cId],
+      culturalAdaptation: { [cId]: 100 },
+      passportStamps: [
+        { countryId: cId, city, year: parent.year - childAge, age: 0, type: 'Kelahiran', status: 'Citizen' }
+      ],
+      countriesLivedIn: [cId],
+
+      stats: {
+        happiness: child.isDelinquent ? Utils.randInt(45, 65) : Utils.randInt(68, 88),
+        health: (child.stats && typeof child.stats.health === 'number') ? Utils.clamp(child.stats.health, 25, 100) : Utils.randInt(78, 96),
+        smarts: (child.stats && typeof child.stats.smarts === 'number') ? Utils.clamp(child.stats.smarts, 20, 100) : Utils.randInt(55, 88),
+        looks: Utils.randInt(55, 88)
+      },
+
+      money: giftChildLocal,
+      investments: 0,
+      retirementFund: 0,
+      annualExpensesMultiplier: 1,
+      criminalRecord: child.isDelinquent ? 1 : 0,
+      hasDriverLicense: childAge >= 18,
+      generation: (parent.generation || 1) + 1,
+
+      alignment: {
+        karma: child.isDelinquent ? -30 : ((typeof child.morals === 'number' && child.morals >= 75) ? 20 : 0),
+        fame: 0,
+        peakFame: 0,
+        notoriety: child.isDelinquent ? 25 : 0,
+        stress: child.isDelinquent ? 30 : 10
+      },
+
+      fertility: child.gender === 'female' ? Utils.randInt(58, 96) : null,
+      isInfertile: child.gender === 'female' ? Utils.chance(0.065) : false,
+      menopauseAge: child.gender === 'female' ? Utils.randInt(45, 52) : null,
+      wantsChildren: Utils.chance(0.85),
+      pregnancy: null,
+      conceptionAttempts: 0,
+      infertilityDiagnosed: false,
+      maritalStatus: null,
+
+      education: {
+        stage: edStage,
+        educationLevel: childAge >= 18 ? 'high_school' : 'none',
+        schoolName: edStage === 'primary' ? `${city} ${country.education.primary.name}`
+          : edStage === 'secondary' ? `${city} ${country.education.secondary.name}` : null,
+        universityName: null,
+        uniYearsLeft: 0,
+        hasHighSchool: childAge >= 18,
+        hasDegree: false,
+        examGrade: childAge >= 18 ? 'Lulus' : null
+      },
+      job: null,
+      activeSpecialMode: null,
+      peakSalaryUsd: 0,
+
+      assets: { vehicles: [], properties: [], collectibles: [] },
+      relationships: remappedRels,
+      partnerId: null,
+      married: false,
+
+      yearlyActions: {},
+      seenEventIds: [],
+
+      journal: [
+        {
+          age: childAge,
+          year: parent.year,
+          countryId: cId,
+          city,
+          entries: [
+            {
+              type: 'milestone',
+              text: `🔄 Serah Legasi Generasi ${(parent.generation || 1) + 1}! Anda kini mengambil alih kawalan sebagai ${child.name} (Umur ${childAge}) di ${city}, ${country.name} ${country.flag}. ${parent.name} (${parentC.flag}) masih hidup sebagai ${parent.gender === 'male' ? 'Bapa' : 'Ibu'} anda.`
+            },
+            ...(giftChildLocal > 0 ? [{
+              type: 'culture',
+              text: `🎁 Anda menerima Hadiah Permulaan / Elaun sebanyak ${Utils.formatMoney(giftChildLocal, cId)} daripada ${parent.name}.`
+            }] : [])
+          ]
+        }
+      ]
+    };
+
+    this.current = state;
+    this.ensureUpgradedState();
+    if (window.Dynasty) {
+      Dynasty.checkPrimeGeneration(state.generation, state);
+    }
+    if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
+      ActivitiesDeck.generateYearlyDeck(state);
+    }
+    this.save();
+    return state;
+  },
+
   // Sambung Legasi Keluarga — gunakan anak hidup jika ada, atau pewaris waris terdekat jika tiada anak
   continueFamilyLegacy(childId = null, estateReport = null) {
     const parent = this.current;

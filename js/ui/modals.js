@@ -860,6 +860,16 @@ window.Modals = {
             <span class="ai-right cost">Tamat</span>
           </button>
         ` : ''}
+        ${isChild && rel.alive ? `
+          <button class="action-item" id="btn-switch-to-child" style="background:#f5f3ff;border-color:#c4b5fd;">
+            <span class="ai-icon">🔄</span>
+            <span class="ai-content">
+              <span class="ai-title">Teruskan Sebagai Anak Ini</span>
+              <span class="ai-desc">Serah legasi semasa hidup — kawalan berpindah ke Gen ${(s.generation || 1) + 1} sambil anda kekal hidup sebagai NPC</span>
+            </span>
+            <span class="ai-right" style="color:#6d28d9;">Tukar →</span>
+          </button>
+        ` : ''}
       </div>
       <button class="ghost-btn" id="rel-back-btn">← Kembali ke Hubungan</button>
     `;
@@ -870,6 +880,11 @@ window.Modals = {
       subtitle: `${rel.role} • ${bObj.icon} ${bObj.name} • ${rc.flag} ${rc.name}`,
       bodyHtml: html
     });
+
+    const switchBtn = document.getElementById('btn-switch-to-child');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', () => this.showSwitchToChildModal(relId));
+    }
 
     document.querySelectorAll('.rel-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -905,6 +920,76 @@ window.Modals = {
     });
 
     document.getElementById('rel-back-btn').addEventListener('click', () => this.showRelationships());
+  },
+
+  // --------------------------------------------------------------------------
+  // 4A0. MODAL SERAH LEGASI / TUKAR KE ANAK SEMASA HIDUP
+  // --------------------------------------------------------------------------
+  showSwitchToChildModal(childId) {
+    const s = GameState.current;
+    if (!s || !s.alive) return;
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child) return;
+
+    const maxCash = Math.max(0, Math.floor(s.money || 0));
+    const maxGift = Math.floor(maxCash * 0.5);
+    const defaultGift = Math.floor(maxCash * 0.1);
+
+    this.open({
+      icon: '🔄',
+      title: 'Serah Legasi / Tukar ke Anak',
+      subtitle: `Berpindah ke Generasi ${(s.generation || 1) + 1} (${child.name}, Umur ${child.age})`,
+      bodyHtml: `
+        <div class="info-banner" style="background:#fff7ed;border-color:#fdba74;line-height:1.6;">
+          <strong>⚠️ Pengesahan Serah Legasi Semasa Hidup</strong><br/>
+          Kawalan permainan akan berpindah <strong>secara kekal</strong> kepada anak anda, <strong>${Utils.escapeHtml(child.name)}</strong> (Umur ${child.age} tahun).<br/>
+          Watak semasa anda (<strong>${Utils.escapeHtml(s.name)}</strong>) akan terus hidup sebagai <strong>NPC ${s.gender === 'male' ? 'Bapa' : 'Ibu'}</strong> — tiada kematian, Obituari atau pembahagian Faraid/Pusaka pramatang akan berlaku sekarang.
+        </div>
+
+        ${maxGift > 0 ? `
+          <div class="info-banner highlight" style="line-height:1.6;">
+            <strong>🎁 Hadiah Permulaan / Elaun (Pilihan)</strong><br/>
+            <small style="opacity:0.85;">Berikan sebahagian wang tunai anda (maks. 50% baki tunai) sebagai modal permulaan anak anda sebelum bertukar:</small>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+              <input type="range" id="switch-gift-slider" min="0" max="${maxGift}" step="${Math.max(1, Math.floor(maxGift / 50))}" value="${defaultGift}" style="flex:1;" />
+            </div>
+            <div id="switch-gift-display" style="margin-top:4px;font-weight:700;color:#0f766e;">
+              Hadiah Permulaan: ${Utils.formatMoney(defaultGift, s.countryId)}
+            </div>
+          </div>
+        ` : `<div class="info-banner"><small>Tiada baki tunai tersedia untuk Hadiah Permulaan.</small></div>`}
+
+        <button type="button" class="primary-btn" id="btn-confirm-switch-child" style="background:linear-gradient(135deg,#6d28d9,#4f46e5);">
+          🔄 Sahkan &amp; Teruskan Sebagai ${Utils.escapeHtml(child.name)}
+        </button>
+        <button type="button" class="ghost-btn" id="btn-cancel-switch-child" style="margin-top:8px;">← Kembali</button>
+      `
+    });
+
+    const slider = document.getElementById('switch-gift-slider');
+    const disp = document.getElementById('switch-gift-display');
+    if (slider && disp) {
+      slider.addEventListener('input', (e) => {
+        disp.textContent = `Hadiah Permulaan: ${Utils.formatMoney(Number(e.target.value) || 0, s.countryId)}`;
+      });
+    }
+
+    document.getElementById('btn-confirm-switch-child').addEventListener('click', () => {
+      const giftAmt = slider ? Number(slider.value) || 0 : 0;
+      const next = GameState.switchToLivingChild(childId, giftAmt);
+      if (next) {
+        this.close(true);
+        App.renderAll();
+        App.toast(`🔄 Anda kini bermain sebagai ${next.name} (Gen ${next.generation})!`, 'culture');
+        if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
+          setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
+        }
+      }
+    });
+
+    document.getElementById('btn-cancel-switch-child').addEventListener('click', () => {
+      this.showRelationDetail(childId);
+    });
   },
 
   // --------------------------------------------------------------------------
