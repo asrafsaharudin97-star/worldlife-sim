@@ -671,9 +671,28 @@ window.RelationshipDramaData = {
   },
 
   // --------------------------------------------------------------------------
-  // 5. MODAL BERITA DUKA / KEMATIAN ORANG TERDEKAT
+  // 5. MODAL BERITA DUKA / KEMATIAN ORANG TERDEKAT (KELUARGA TERDEKAT SAHAJA)
   // --------------------------------------------------------------------------
+  CLOSE_FAMILY_ROLES: [
+    'Suami', 'Isteri', 'Ibu', 'Ayah', 'Bapa',
+    'Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter',
+    'Abang', 'Kakak', 'Adik/Abang', 'Adik/Kakak'
+  ],
+
+  isCloseFamilyMember(s, npc) {
+    if (!npc) return false;
+    if (npc._wasSpouse) return true;
+    if (s && s.married && s.partnerId === npc.id) return true;
+    if (npc.category === 'spouse' || npc.category === 'family') {
+      return this.CLOSE_FAMILY_ROLES.includes(npc.role);
+    }
+    return this.CLOSE_FAMILY_ROLES.includes(npc.role);
+  },
+
   buildNpcDeathEvent(s, npc, cause) {
+    // Hanya ahli keluarga terdekat (pasangan, anak, ibu bapa, adik-beradik) membuka modal pengurusan pengebumian penuh
+    if (!this.isCloseFamilyMember(s, npc)) return null;
+
     const funeralCost = Utils.usdToLocal(650, s.countryId);
     const wasSpouse = Boolean(npc._wasSpouse);
     const statusNote = wasSpouse

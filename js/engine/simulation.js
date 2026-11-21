@@ -54,19 +54,11 @@ window.Sim = {
         rel.deathCause = deathInfo.cause;
         const wasSpouse = s.partnerId === rel.id && s.married;
         rel._wasSpouse = wasSpouse;
-
-        const baseDrop = (wasSpouse || isChild) ? Utils.randInt(34, 45) : Utils.randInt(20, 34);
-        const closenessScale = 0.7 + ((rel.closeness ?? 70) / 100) * 0.35;
-        const happyDrop = -Utils.clamp(Math.round(baseDrop * closenessScale), 20, 45);
-
-        GameState.addJournalEntry(
-          wasSpouse
-            ? `🕊️💔 Berita Duka: Pasangan hidup anda, ${rel.name} (${rel.role}, ${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}. Status anda kini ialah ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
-            : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}.`,
-          'warning'
-        );
-        GameState.adjustStats({ happiness: happyDrop });
-        GameState.recordCrisis('grief');
+        const isCloseFamily = wasSpouse
+          || isChild
+          || (window.RelationshipDramaData && RelationshipDramaData.isCloseFamilyMember
+              ? RelationshipDramaData.isCloseFamilyMember(s, rel)
+              : ['Ibu', 'Ayah', 'Bapa', 'Abang', 'Kakak', 'Adik/Abang', 'Adik/Kakak'].includes(rel.role));
 
         if (s.partnerId === rel.id) {
           if (wasSpouse) {
@@ -80,8 +72,35 @@ window.Sim = {
             s.pregnancy = null;
           }
         }
-        if (!priorityNpcDeathEvent && window.RelationshipDramaData && RelationshipDramaData.buildNpcDeathEvent) {
-          priorityNpcDeathEvent = RelationshipDramaData.buildNpcDeathEvent(s, rel, deathInfo.cause);
+
+        if (isCloseFamily) {
+          const baseDrop = (wasSpouse || isChild) ? Utils.randInt(34, 45) : Utils.randInt(20, 34);
+          const closenessScale = 0.7 + ((rel.closeness ?? 70) / 100) * 0.35;
+          const happyDrop = -Utils.clamp(Math.round(baseDrop * closenessScale), 20, 45);
+
+          GameState.addJournalEntry(
+            wasSpouse
+              ? `🕊️💔 Berita Duka: Pasangan hidup anda, ${rel.name} (${rel.role}, ${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}. Status anda kini ialah ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
+              : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}.`,
+            'warning'
+          );
+          GameState.adjustStats({ happiness: happyDrop });
+          GameState.recordCrisis('grief');
+
+          if (!priorityNpcDeathEvent && window.RelationshipDramaData && RelationshipDramaData.buildNpcDeathEvent) {
+            priorityNpcDeathEvent = RelationshipDramaData.buildNpcDeathEvent(s, rel, deathInfo.cause);
+          }
+        } else {
+          // Bukan ahli keluarga (rakan, kenalan, rakan sekerja, bekas pasangan): notis berkabung ringkas sahaja tanpa modal pengebumian keluarga
+          const lightDrop = -Utils.randInt(6, 12);
+          GameState.adjustStats({ happiness: lightDrop });
+          if (s.alignment) {
+            s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + Utils.randInt(2, 5), 0, 100);
+          }
+          GameState.addJournalEntry(
+            `🕊️ Anda berkabung atas pemergian ${rel.name} (${rel.role}, ${rel.age} thn) yang telah meninggal dunia akibat ${deathInfo.cause}.`,
+            'normal'
+          );
         }
         continue;
       }
