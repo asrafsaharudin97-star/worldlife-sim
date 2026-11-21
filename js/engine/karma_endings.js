@@ -775,16 +775,15 @@ window.KarmaEndings = {
   },
 
   getUnlocked() {
-    try {
-      const raw = localStorage.getItem(this.UNLOCKED_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          endings: Array.isArray(parsed.endings) ? parsed.endings : [],
-          modes: Array.isArray(parsed.modes) ? parsed.modes : []
-        };
-      }
-    } catch (e) {}
+    const parsed = window.SafeStorage
+      ? SafeStorage.getJSON(this.UNLOCKED_KEY, null)
+      : (() => { try { return JSON.parse(localStorage.getItem(this.UNLOCKED_KEY) || 'null'); } catch (e) { return null; } })();
+    if (parsed && typeof parsed === 'object') {
+      return {
+        endings: Array.isArray(parsed.endings) ? parsed.endings : [],
+        modes: Array.isArray(parsed.modes) ? parsed.modes : []
+      };
+    }
     return { endings: [], modes: [] };
   },
 
@@ -793,10 +792,15 @@ window.KarmaEndings = {
     if (!unlocked.endings.includes(endingId)) {
       unlocked.endings.push(endingId);
       this._saveUnlocked(unlocked);
+      if (window.Utils && Utils.playTone) Utils.playTone('achievement');
     }
   },
 
   _saveUnlocked(obj) {
+    if (window.SafeStorage) {
+      SafeStorage.setJSON(this.UNLOCKED_KEY, obj);
+      return;
+    }
     try {
       localStorage.setItem(this.UNLOCKED_KEY, JSON.stringify(obj));
     } catch (e) {}

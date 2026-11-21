@@ -234,7 +234,30 @@ window.GameState = {
       s.journal.push(block);
     }
     block.entries.push({ type, text });
-    this.save();
+    this.scheduleSave();
+  },
+
+  // Gabungkan banyak panggilan simpan (cth. berbilang catatan log dalam satu tahun)
+  // kepada satu operasi JSON.stringify sahaja untuk prestasi yang lancar.
+  _saveTimer: null,
+  scheduleSave() {
+    if (typeof setTimeout !== 'function') {
+      this.save();
+      return;
+    }
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this.save();
+    }, 0);
+  },
+
+  flushSave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    return this.save();
   },
 
   getCurrentAdaptation() {
@@ -726,12 +749,20 @@ window.GameState = {
       ribbon,
       causeOfDeath: s.causeOfDeath
     });
-    try {
-      localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history.slice(0, 20)));
-    } catch (e) {}
+    const store = window.SafeStorage;
+    const trimmed = history.slice(0, this.MAX_HISTORY);
+    if (store) {
+      store.setJSON(this.HISTORY_KEY, trimmed, () => trimmed.slice(0, 8));
+    } else {
+      try { localStorage.setItem(this.HISTORY_KEY, JSON.stringify(trimmed)); } catch (e) {}
+    }
   },
 
   getHistory() {
+    if (window.SafeStorage) {
+      const h = SafeStorage.getJSON(this.HISTORY_KEY, []);
+      return Array.isArray(h) ? h : [];
+    }
     try {
       const raw = localStorage.getItem(this.HISTORY_KEY);
       return raw ? JSON.parse(raw) : [];
@@ -740,19 +771,76 @@ window.GameState = {
     }
   },
 
+  // --------------------------------------------------------------------------
+  // HAD MEMORI LOG KEHIDUPAN (maks 250 catatan aktif dalam memori)
+  // --------------------------------------------------------------------------
+  MAX_JOURNAL_ENTRIES: 250,
+  MAX_HISTORY: 20,
+
+  countJournalEntries(s) {
+    if (!s || !Array.isArray(s.journal)) return 0;
+    let n = 0;
+    for (const b of s.journal) n += (b.entries ? b.entries.length : 0);
+    return n;
+  },
+
+  // Buang catatan paling lama (blok tahun terawal dahulu) sehingga jumlah <= max.
+  // Blok tahun semasa (terakhir) sentiasa dikekalkan.
+  trimJournal(s, max = this.MAX_JOURNAL_ENTRIES) {
+    if (!s || !Array.isArray(s.journal)) return 0;
+    let total = this.countJournalEntries(s);
+    let removed = 0;
+    while (total > max && s.journal.length > 1) {
+      const first = s.journal[0];
+      const n = first.entries ? first.entries.length : 0;
+      if (total - n >= max || !first.entries || n === 0) {
+        s.journal.shift();
+        total -= n;
+        removed += n;
+      } else {
+        const drop = total - max;
+        first.entries.splice(0, drop);
+        total -= drop;
+        removed += drop;
+      }
+    }
+    // Kes ekstrem: satu blok tahun sahaja tetapi melebihi had
+    if (total > max && s.journal.length === 1 && s.journal[0].entries) {
+      const drop = total - max;
+      s.journal[0].entries.splice(0, drop);
+      removed += drop;
+    }
+    if (removed > 0) s.journalTrimmedCount = (s.journalTrimmedCount || 0) + removed;
+    return removed;
+  },
+
   save() {
-    if (!this.current) return;
+    if (this._saveTimer && typeof clearTimeout === 'function') {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    if (!this.current) return false;
+    this.trimJournal(this.current);
+    if (window.SafeStorage) {
+      return SafeStorage.setJSON(this.SAVE_KEY, this.current, () => this.current);
+    }
     try {
       localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.current));
-    } catch (e) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   load() {
     try {
-      const raw = localStorage.getItem(this.SAVE_KEY);
-      if (raw) {
-        this.current = JSON.parse(raw);
+      const parsed = window.SafeStorage
+        ? SafeStorage.getJSON(this.SAVE_KEY, null)
+        : JSON.parse(localStorage.getItem(this.SAVE_KEY) || 'null');
+      if (parsed && typeof parsed === 'object') {
+        this.current = parsed;
         this.ensureUpgradedState();
+        this.trimJournal(this.current);
         return this.current;
       }
     } catch (e) {}
@@ -761,8 +849,125 @@ window.GameState = {
 
   clearSave() {
     this.current = null;
+    if (window.SafeStorage) {
+      SafeStorage.remove(this.SAVE_KEY);
+      return;
+    }
     try {
       localStorage.removeItem(this.SAVE_KEY);
     } catch (e) {}
+  },
+
+  // --------------------------------------------------------------------------
+  // EKSPORT & IMPORT SIMPANAN (.json)
+  // --------------------------------------------------------------------------
+  EXPORT_FORMAT: 'worldlife-save',
+  EXPORT_VERSION: 1,
+
+  buildExportBundle() {
+    if (this.current) this.save();
+    const store = window.SafeStorage;
+    const read = (k, fb) => (store ? store.getJSON(k, fb) : fb);
+    return {
+      format: this.EXPORT_FORMAT,
+      version: this.EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      current: this.current ? JSON.parse(JSON.stringify(this.current)) : null,
+      dynasty: window.Dynasty ? JSON.parse(JSON.stringify(Dynasty.getData())) : read('worldlife_dynasty_v1', null),
+      history: this.getHistory(),
+      unlocked: window.KarmaEndings ? KarmaEndings.getUnlocked() : read('worldlife_unlocked_v1', null),
+      settings: { muted: !!window._wlMuted }
+    };
+  },
+
+  // Sahkan bundle sebelum dipulihkan. Pulangkan { ok, msg }
+  validateImportBundle(bundle) {
+    if (!bundle || typeof bundle !== 'object') return { ok: false, msg: 'Fail tidak sah: kandungan bukan objek JSON.' };
+    if (bundle.format !== this.EXPORT_FORMAT) return { ok: false, msg: 'Fail ini bukan fail simpanan WorldLife.' };
+    if (typeof bundle.version !== 'number' || bundle.version > this.EXPORT_VERSION) {
+      return { ok: false, msg: 'Versi fail simpanan tidak disokong.' };
+    }
+    const c = bundle.current;
+    if (c !== null && c !== undefined) {
+      if (typeof c !== 'object') return { ok: false, msg: 'Data watak rosak.' };
+      if (typeof c.name !== 'string' || !c.name) return { ok: false, msg: 'Data watak rosak: nama tiada.' };
+      if (typeof c.age !== 'number' || c.age < 0 || c.age > 150) return { ok: false, msg: 'Data watak rosak: umur tidak sah.' };
+      if (!c.stats || typeof c.stats !== 'object') return { ok: false, msg: 'Data watak rosak: statistik tiada.' };
+      if (!Array.isArray(c.journal)) return { ok: false, msg: 'Data watak rosak: log kehidupan tiada.' };
+      if (!c.countryId || !window.COUNTRIES || !window.COUNTRIES[c.countryId]) {
+        return { ok: false, msg: 'Data watak rosak: negara tidak dikenali.' };
+      }
+    }
+    if (bundle.dynasty != null) {
+      const d = bundle.dynasty;
+      if (typeof d !== 'object' || !Array.isArray(d.dynastyHistory || []) || !Array.isArray(d.primeAchievements || [])) {
+        return { ok: false, msg: 'Data legasi dinasti rosak.' };
+      }
+    }
+    if (bundle.history != null && !Array.isArray(bundle.history)) return { ok: false, msg: 'Data Dewan Kehidupan Lalu rosak.' };
+    return { ok: true, msg: 'Fail simpanan sah.' };
+  },
+
+  importBundle(bundle) {
+    const v = this.validateImportBundle(bundle);
+    if (!v.ok) return v;
+    const store = window.SafeStorage;
+
+    if (bundle.dynasty) {
+      if (window.Dynasty) {
+        Dynasty._cache = Object.assign(Dynasty._defaultData(), bundle.dynasty);
+        Dynasty.save();
+      } else if (store) {
+        store.setJSON('worldlife_dynasty_v1', bundle.dynasty);
+      }
+    }
+    if (Array.isArray(bundle.history) && store) {
+      store.setJSON(this.HISTORY_KEY, bundle.history.slice(0, this.MAX_HISTORY));
+    }
+    if (bundle.unlocked && window.KarmaEndings && KarmaEndings.UNLOCKED_KEY && store) {
+      store.setJSON(KarmaEndings.UNLOCKED_KEY, bundle.unlocked);
+    }
+    if (bundle.settings && typeof bundle.settings.muted === 'boolean' && window.Utils && Utils.setMuted) {
+      Utils.setMuted(bundle.settings.muted);
+    }
+
+    if (bundle.current) {
+      this.current = JSON.parse(JSON.stringify(bundle.current));
+      this.ensureUpgradedState();
+      this.trimJournal(this.current);
+      this.save();
+    } else {
+      this.clearSave();
+    }
+    return { ok: true, msg: 'Simpanan berjaya dipulihkan!' };
   }
 };
+
+// Peringkat pemangkasan kecemasan apabila kuota localStorage penuh
+if (window.SafeStorage) {
+  SafeStorage.registerTrimmer(() => {
+    if (GameState.current) GameState.trimJournal(GameState.current, 120);
+  });
+  SafeStorage.registerTrimmer(() => {
+    if (GameState.current) GameState.trimJournal(GameState.current, 60);
+    const h = GameState.getHistory();
+    if (h.length > 8) {
+      try { localStorage.setItem(GameState.HISTORY_KEY, JSON.stringify(h.slice(0, 8))); } catch (e) {}
+    }
+  });
+  SafeStorage.registerTrimmer(() => {
+    if (GameState.current) {
+      GameState.trimJournal(GameState.current, 25);
+      const s = GameState.current;
+      if (Array.isArray(s.seenEventIds) && s.seenEventIds.length > 150) s.seenEventIds = s.seenEventIds.slice(-150);
+    }
+    if (window.Dynasty && Dynasty._cache && Array.isArray(Dynasty._cache.dynastyHistory) && Dynasty._cache.dynastyHistory.length > 15) {
+      Dynasty._cache.dynastyHistory = Dynasty._cache.dynastyHistory.slice(0, 15);
+      try { localStorage.setItem(Dynasty.STORAGE_KEY, JSON.stringify(Dynasty._cache)); } catch (e) {}
+    }
+  });
+  SafeStorage.registerTrimmer(() => {
+    if (GameState.current) GameState.trimJournal(GameState.current, 8);
+    try { localStorage.setItem(GameState.HISTORY_KEY, '[]'); } catch (e) {}
+  });
+}

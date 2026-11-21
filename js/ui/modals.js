@@ -1093,12 +1093,14 @@ window.Modals = {
         this._migFilter = this._migFilter || { continent: 'ALL', search: '' };
         this._migFilter.search = e.target.value;
         const pos = e.target.selectionStart;
-        this.showActivities('migrate');
-        const nextInput = document.getElementById('mig-search-input');
-        if (nextInput) {
-          nextInput.focus();
-          nextInput.setSelectionRange(pos, pos);
-        }
+        Utils.debounceKey('mig-country-search', () => {
+          this.showActivities('migrate');
+          const nextInput = document.getElementById('mig-search-input');
+          if (nextInput) {
+            nextInput.focus();
+            try { nextInput.setSelectionRange(pos, pos); } catch (err) {}
+          }
+        }, 160);
       });
     }
 
@@ -1252,10 +1254,12 @@ window.Modals = {
       </div>
     ` : '';
 
+    const isMuted = Utils.isMuted ? Utils.isMuted() : !!window._wlMuted;
+
     this.open({
       icon: '🌍',
       title: 'Menu WorldLife',
-      subtitle: 'Laluan Hidup, Legasi & Penamat Rahsia',
+      subtitle: 'Laluan Hidup, Legasi, Tetapan & Simpanan',
       bodyHtml: `
         <div class="action-list">
           <button class="action-item" id="menu-open-legacy">
@@ -1294,6 +1298,36 @@ window.Modals = {
             </span>
           </button>
         </div>
+
+        <div class="section-heading">⚙️ Tetapan Bunyi &amp; Sandaran Data (.json)</div>
+        <div class="action-list">
+          <button class="action-item" id="menu-toggle-sound">
+            <span class="ai-icon">${isMuted ? '🔇' : '🔊'}</span>
+            <span class="ai-content">
+              <span class="ai-title">Kesan Bunyi: ${isMuted ? 'Senyap (Dimatikan)' : 'Aktif'}</span>
+              <span class="ai-desc">Klik untuk ${isMuted ? 'mengaktifkan semula' : 'mematikan'} kesan bunyi sintetizer ringan (0 KB)</span>
+            </span>
+            <span class="ai-right">${isMuted ? 'Hidupkan' : 'Senyapkan'}</span>
+          </button>
+          <button class="action-item" id="menu-export-save">
+            <span class="ai-icon">💾</span>
+            <span class="ai-content">
+              <span class="ai-title">Eksport Save (.json)</span>
+              <span class="ai-desc">Muat turun fail sandaran watak semasa, legasi dinasti &amp; penamat rahsia</span>
+            </span>
+            <span class="ai-right">Muat Turun</span>
+          </button>
+          <button class="action-item" id="menu-import-save">
+            <span class="ai-icon">📂</span>
+            <span class="ai-content">
+              <span class="ai-title">Import Save (.json)</span>
+              <span class="ai-desc">Muat naik &amp; sahkan fail sandaran .json untuk memulihkan permainan</span>
+            </span>
+            <span class="ai-right">Pilih Fail</span>
+          </button>
+          <input type="file" id="menu-import-file-input" accept=".json,application/json" class="hidden" />
+        </div>
+
         ${endingsHtml}
         <div class="section-heading">🏆 Dewan Kehidupan Lalu (${history.length})</div>
         ${histHtml}
@@ -1315,6 +1349,65 @@ window.Modals = {
     });
     document.getElementById('menu-open-passport').addEventListener('click', () => {
       this.showActivities('passport');
+    });
+
+    document.getElementById('menu-toggle-sound').addEventListener('click', () => {
+      const nextMuted = !(Utils.isMuted ? Utils.isMuted() : !!window._wlMuted);
+      if (Utils.setMuted) Utils.setMuted(nextMuted);
+      else window._wlMuted = nextMuted;
+      if (!nextMuted && Utils.playTone) Utils.playTone('success');
+      App.toast(nextMuted ? '🔇 Kesan bunyi dimatikan.' : '🔊 Kesan bunyi diaktifkan!', 'culture');
+      this.showMenu();
+    });
+
+    document.getElementById('menu-export-save').addEventListener('click', () => {
+      const bundle = GameState.buildExportBundle();
+      const jsonStr = JSON.stringify(bundle, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const gen = (bundle.dynasty && bundle.dynasty.generation) || (bundle.current && bundle.current.generation) || 1;
+      const safeName = ((bundle.current && bundle.current.name) || 'worldlife')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      a.href = url;
+      a.download = `worldlife-save-gen${gen}-${safeName || 'backup'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      App.toast('💾 Fail sandaran .json berjaya dimuat turun!', 'success');
+    });
+
+    const importBtn = document.getElementById('menu-import-save');
+    const fileInput = document.getElementById('menu-import-file-input');
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || ''));
+          const res = GameState.importBundle(parsed);
+          if (!res.ok) {
+            App.toast(`❌ Import gagal: ${res.msg}`, 'error');
+            return;
+          }
+          this.close(true);
+          if (GameState.current && GameState.current.alive) {
+            App.showGameScreen();
+            App.renderAll();
+          } else {
+            App.showStartScreen();
+          }
+          App.toast(`✅ ${res.msg}`, 'success');
+        } catch (err) {
+          App.toast('❌ Fail JSON tidak sah atau rosak.', 'error');
+        }
+      };
+      reader.readAsText(file);
     });
   },
 

@@ -124,11 +124,15 @@ window.LegacyModals = {
   },
 
   // --------------------------------------------------------------------------
-  // 2. DEK AKTIVITI RAWAK TAHUNAN (5–7 Aktiviti + Peluang Nadir)
+  // 2. PAPAN AKTIVITI DINAMIK (7–8 Kad, Tenaga 3/3, Cari Idea Lain & Penapis Kategori)
   // --------------------------------------------------------------------------
+  _activeCatFilter: 'ALL',
+
   renderDynamicActivitiesTab(s, c) {
     GameState.ensureUpgradedState();
-    if (!Array.isArray(s.yearlyDeck) || s.yearlyDeck.length === 0) {
+    ActivitiesDeck.ensureActivityState(s);
+
+    if (s.age >= 5 && (!Array.isArray(s.yearlyDeck) || s.yearlyDeck.length === 0)) {
       ActivitiesDeck.generateYearlyDeck(s);
     }
 
@@ -138,46 +142,150 @@ window.LegacyModals = {
       return `<span class="trait-chip" title="${Utils.escapeHtml(t.desc)}">${t.icon} ${Utils.escapeHtml(t.name)}</span>`;
     }).join('');
 
-    const cardsHtml = s.yearlyDeck.map(actId => {
-      const act = ActivitiesDeck.POOL.find(a => a.id === actId);
-      if (!act) return '';
+    const eLeft = s.activityEnergyLeft ?? 3;
+    const eMax = s.activityEnergyMax ?? 3;
+    const rLeft = s.activityRerollsLeft ?? 2;
+    const stageLbl = ActivitiesDeck.getAgeStageLabel(s.age);
+
+    const energyDots = Array.from({ length: eMax }, (_, idx) =>
+      `<span class="energy-pip ${idx < eLeft ? 'full' : 'empty'}">⚡</span>`
+    ).join('');
+
+    const filterDefs = (window.ActivitiesData && ActivitiesData.CATEGORIES) ? ActivitiesData.CATEGORIES : [
+      { id: 'ALL', label: 'Semua', icon: '✨' }
+    ];
+    const curFilter = this._activeCatFilter || 'ALL';
+    const filterDef = filterDefs.find(f => f.id === curFilter) || filterDefs[0];
+
+    const filterPillsHtml = filterDefs.map(f => `
+      <button type="button" class="tab-pill act-cat-filter ${f.id === curFilter ? 'active' : ''}" data-act-cat="${f.id}">
+        ${f.icon} ${Utils.escapeHtml(f.label)}
+      </button>
+    `).join('');
+
+    if (s.age < 5) {
+      return `
+        <div class="info-banner highlight">
+          <strong>👶 Peringkat Bayi &amp; Kanak-Kanak Awal (Umur ${s.age} Tahun)</strong><br/>
+          Papan Aktiviti Dunia Sebenar akan dibuka bermula pada <strong>umur 5 tahun</strong>! Klik butang <strong>+UMUR</strong> untuk membesar.
+          <div class="traits-row" style="margin-top:6px;">${traitsHtml}</div>
+        </div>
+      `;
+    }
+
+    const deckActivities = (s.yearlyDeck || [])
+      .map(id => ActivitiesDeck.POOL.find(a => a.id === id))
+      .filter(Boolean);
+
+    const filtered = deckActivities.filter(act => {
+      if (curFilter === 'ALL') return true;
+      if (filterDef && Array.isArray(filterDef.match)) {
+        return filterDef.match.includes(act.category);
+      }
+      return true;
+    });
+
+    const cardsHtml = filtered.map(act => {
       const done = Boolean(s.yearlyActions['deck_' + act.id]);
-      const costLocal = (s.age < 18 && act.costUsd <= 60) ? 0 : Utils.usdToLocal(act.costUsd || 0, s.countryId);
-      const hasSynergy = act.boostTrait && traits.includes(act.boostTrait);
-      const boostObj = act.boostTrait ? ActivitiesDeck.getTraitObj(act.boostTrait) : null;
+      const noEnergy = !done && eLeft < (act.energyCost || 1);
+      const inPrison = Boolean(s.prison && s.prison.inPrison);
+      const costLocal = ActivitiesDeck.getLocalCost(act, s);
+      const pref = act.preferredTraits || (act.boostTrait ? [act.boostTrait] : []);
+      const matchedTraitId = pref.find(t => traits.includes(t));
+      const boostObj = matchedTraitId ? ActivitiesDeck.getTraitObj(matchedTraitId) : null;
+      const descText = window.ActivitiesData
+        ? ActivitiesData.formatFlavorText(act.desc, s.countryId)
+        : act.desc;
+
+      let rightBadge = '';
+      if (done) {
+        rightBadge = `<span class="act-status-pill done">✓ Sudah Dilakukan</span>`;
+      } else if (costLocal === 0) {
+        rightBadge = `<span class="act-status-pill free">Percuma</span>`;
+      } else {
+        rightBadge = `<span class="act-status-pill cost">${Utils.formatMoney(costLocal, s.countryId)}</span>`;
+      }
 
       return `
-        <button class="action-item deck-act-btn ${act.isRare ? 'rare-activity' : ''}" data-deck-id="${act.id}" ${done || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+        <button type="button" class="action-item deck-act-btn ${act.isRare ? 'rare-activity' : ''} ${done ? 'act-done-card' : ''}" data-deck-id="${act.id}" ${done || noEnergy || inPrison ? 'disabled' : ''}>
           <span class="ai-icon">${act.icon}</span>
           <span class="ai-content">
-            <span class="ai-title">${Utils.escapeHtml(act.title)}</span>
+            <span class="ai-title">
+              ${Utils.escapeHtml(act.title)}
+              ${act.isRare ? '<span class="rare-gold-tag">🌟 PELUANG TERHAD</span>' : ''}
+            </span>
             <span class="ai-desc">
-              <span class="cat-badge ${act.isRare ? 'rare' : ''}">${Utils.escapeHtml(act.cat)}</span>
-              ${hasSynergy && boostObj ? `<span class="cat-badge synergy">${boostObj.icon} Serasi ${boostObj.name}</span>` : ''}
-              <br/>${Utils.escapeHtml(act.desc)}
+              <span class="cat-badge ${act.isRare ? 'rare' : ''}">${Utils.escapeHtml(act.category || act.cat)}</span>
+              ${boostObj ? `<span class="cat-badge synergy">${boostObj.icon} Serasi ${Utils.escapeHtml(boostObj.name)}</span>` : ''}
+              <br/>${Utils.escapeHtml(descText)}
             </span>
           </span>
-          <span class="ai-right ${costLocal > 0 ? 'cost' : ''}">${done ? '✓ Selesai' : (costLocal === 0 ? 'Percuma' : Utils.formatMoney(costLocal, s.countryId))}</span>
+          <span class="ai-right">${rightBadge}</span>
         </button>
       `;
     }).join('');
 
+    const emptyMsg = deckActivities.length === 0
+      ? '<div class="info-banner">Tiada aktiviti untuk umur ini — klik +UMUR untuk melangkah ke tahun seterusnya!</div>'
+      : `<div class="info-banner">Tiada kad dalam kategori <strong>${Utils.escapeHtml(filterDef.label)}</strong> pada dek semasa. Cuba pilih tab <strong>Semua</strong> atau klik <strong>🎲 Cari Idea Lain</strong>!</div>`;
+
     return `
-      <div class="info-banner highlight">
-        <strong>🎲 Dek Aktiviti Rawak Tahun ${s.year} (${s.yearlyDeck.length} Pilihan)</strong><br/>
-        Dek ini dirombak setiap tahun mengikut umur, personaliti &amp; tuah anda. Setiap pilihan mempunyai hasil <em>Kemenangan Besar</em>, <em>Biasa</em> atau <em>Plot Twist</em>!
+      <div class="act-engine-header">
+        <div class="aeh-top">
+          <div>
+            <div class="aeh-title">🌍 Aktiviti Tahun ${s.year} • ${Utils.escapeHtml(stageLbl)}</div>
+            <div class="aeh-sub">${c.flag} ${Utils.escapeHtml(s.city)}, ${Utils.escapeHtml(c.name)} • ${deckActivities.length} Idea Segar</div>
+          </div>
+          <button type="button" class="reroll-idea-btn" id="btn-reroll-activities" ${rLeft <= 0 || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+            🎲 Cari Idea Lain (${rLeft}/2)
+          </button>
+        </div>
+        <div class="aeh-energy-bar">
+          <span class="aeh-energy-lbl">Tenaga Tahun Ini: <strong>${eLeft}/${eMax}</strong></span>
+          <span class="aeh-energy-pips">${energyDots}</span>
+        </div>
         <div class="traits-row" style="margin-top:6px;">${traitsHtml}</div>
       </div>
-      <div class="action-list">${cardsHtml || '<div class="info-banner">Tiada aktiviti sesuai untuk umur anda sekarang — klik +UMUR untuk membesar!</div>'}</div>
+
+      <div class="tab-pills act-filter-bar" style="margin-bottom:10px;">
+        ${filterPillsHtml}
+      </div>
+
+      <div class="action-list">${cardsHtml || emptyMsg}</div>
     `;
   },
 
   bindDynamicActivities(onRefresh) {
+    document.querySelectorAll('.act-cat-filter').forEach(pill => {
+      pill.addEventListener('click', () => {
+        this._activeCatFilter = pill.dataset.actCat || 'ALL';
+        if (typeof onRefresh === 'function') onRefresh();
+      });
+    });
+
+    const rerollBtn = document.getElementById('btn-reroll-activities');
+    if (rerollBtn) {
+      rerollBtn.addEventListener('click', () => {
+        this._activeCatFilter = 'ALL';
+        const res = ActivitiesDeck.rerollDeck();
+        App.toast(res.msg, res.ok ? 'culture' : 'error');
+        if (typeof onRefresh === 'function') onRefresh();
+      });
+    }
+
     document.querySelectorAll('.deck-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const res = ActivitiesDeck.performActivity(btn.dataset.deckId);
-        App.toast(res.msg.slice(0, 96) + (res.msg.length > 96 ? '...' : ''), res.tier === 'win' ? 'success' : res.tier === 'fail' ? 'error' : 'culture');
         App.renderAll();
+
+        // Jika mencetuskan Modal Pertemuan Mini Interaktif (Real-World Plot Twist!)
+        if (res.encounterEvent) {
+          Modals.showEvent(res.encounterEvent);
+          return;
+        }
+
+        const msg = res.msg || '';
+        App.toast(msg.slice(0, 96) + (msg.length > 96 ? '...' : ''), res.tier === 'win' ? 'success' : res.tier === 'fail' ? 'error' : 'culture');
         if (typeof onRefresh === 'function') onRefresh();
       });
     });

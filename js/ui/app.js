@@ -10,6 +10,7 @@ window.App = {
   },
 
   init() {
+    if (Utils.loadMutePref) Utils.loadMutePref();
     this._bindGlobalEvents();
     this._initCreator();
 
@@ -20,7 +21,27 @@ window.App = {
     this.showStartScreen();
   },
 
+  // Pendengar global tunggal (didaftarkan sekali sahaja — tiada pendengar berganda)
+  _bindPerfAndSoundListeners() {
+    if (this._perfBound) return;
+    this._perfBound = true;
+
+    // Satu pendengar klik terwakil untuk bunyi klik halus pada semua butang
+    document.addEventListener('click', (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+      if (btn && !btn.disabled && btn.id !== 'btn-age-up') Utils.playTone('click');
+    }, { passive: true });
+
+    // Pastikan simpanan tertangguh ditulis sebelum tab ditutup / disembunyikan (mudah alih)
+    const flush = () => { if (GameState.current) GameState.flushSave(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+  },
+
   _bindGlobalEvents() {
+    this._bindPerfAndSoundListeners();
     document.getElementById('modal-close').addEventListener('click', () => Modals.close());
     document.getElementById('modal-backdrop').addEventListener('click', (e) => {
       if (e.target.id === 'modal-backdrop') Modals.close();
@@ -91,7 +112,7 @@ window.App = {
     if (searchEl) {
       searchEl.addEventListener('input', (e) => {
         this.creator.search = e.target.value.trim().toLowerCase();
-        this._renderCreatorCountryGrid();
+        Utils.debounceKey('creator-country-search', () => this._renderCreatorCountryGrid(), 160);
       });
     }
 
@@ -193,15 +214,20 @@ window.App = {
         </span>
       </button>
     `).join('');
+    this._countryGridRendered = true;
 
-    grid.querySelectorAll('.country-card-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
+    // Pendengar terwakil tunggal (dipasang sekali sahaja) — bukan 195 pendengar setiap kali dirender
+    if (!grid._delegated) {
+      grid._delegated = true;
+      grid.addEventListener('click', (e) => {
+        const btn = e.target.closest ? e.target.closest('.country-card-opt') : null;
+        if (!btn || !grid.contains(btn)) return;
         this.creator.countryId = btn.dataset.cid;
-        grid.querySelectorAll('.country-card-opt').forEach(b => b.classList.remove('selected'));
+        grid.querySelectorAll('.country-card-opt.selected').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this._syncCreatorCountry();
       });
-    });
+    }
   },
 
   _syncCreatorCountry() {
@@ -251,6 +277,9 @@ window.App = {
     document.getElementById('life-feed-container').classList.add('hidden');
     document.getElementById('game-footer').classList.add('hidden');
 
+    // Bina semula grid 195 negara hanya apabila skrin pencipta watak dibuka
+    if (!this._countryGridRendered) this._renderCreatorCountryGrid();
+
     const saved = GameState.load();
     document.getElementById('btn-continue-life').classList.toggle('hidden', !(saved && saved.alive));
     this._syncCreatorCountry();
@@ -261,11 +290,19 @@ window.App = {
     document.getElementById('game-header').classList.remove('hidden');
     document.getElementById('life-feed-container').classList.remove('hidden');
     document.getElementById('game-footer').classList.remove('hidden');
+
+    // Bebaskan ~195 nod DOM grid negara semasa bermain (jimat memori di peranti mudah alih)
+    const grid = document.getElementById('country-grid');
+    if (grid) grid.innerHTML = '';
+    this._countryGridRendered = false;
+    this._feedLimit = this.FEED_PAGE_SIZE;
+    this._feedSig = '';
   },
 
   handleAgeUp() {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
+    this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
     const { event, died } = Sim.ageUp();
     this.renderAll();
 
@@ -409,20 +446,58 @@ window.App = {
     label.textContent = `${val}%`;
   },
 
-  _renderJournal(s) {
-    const feed = document.getElementById('life-feed');
-    const recent = s.journal.slice(-30);
+  FEED_PAGE_SIZE: 25,
+  _feedLimit: 25,
+  _feedSig: '',
 
-    feed.innerHTML = recent.map(block => {
+  _renderJournal(s, opts = {}) {
+    const feed = document.getElementById('life-feed');
+    const container = document.getElementById('life-feed-container');
+    if (!feed || !Array.isArray(s.journal)) return;
+
+    const limit = this._feedLimit || this.FEED_PAGE_SIZE;
+    const lastBlock = s.journal[s.journal.length - 1];
+    const sig = `${s.id}|${s.journal.length}|${lastBlock ? lastBlock.entries.length : 0}|${limit}|${s.journalTrimmedCount || 0}`;
+    if (sig === this._feedSig && !opts.force) return; // tiada perubahan — elak bina semula DOM
+    this._feedSig = sig;
+
+    // Kumpul blok dari yang terbaru sehingga had catatan dicapai
+    const picked = [];
+    let shown = 0;
+    let totalEntries = 0;
+    for (const b of s.journal) totalEntries += b.entries.length;
+    for (let i = s.journal.length - 1; i >= 0 && shown < limit; i--) {
+      const block = s.journal[i];
+      const room = limit - shown;
+      const entries = block.entries.length > room ? block.entries.slice(-room) : block.entries;
+      picked.unshift({ block, entries, partial: entries.length < block.entries.length });
+      shown += entries.length;
+    }
+    const hiddenInMemory = Math.max(0, totalEntries - shown);
+    const trimmedArchived = s.journalTrimmedCount || 0;
+
+    let html = '';
+    if (hiddenInMemory > 0) {
+      html += `
+        <div class="feed-load-older-wrap">
+          <button type="button" class="feed-load-older" id="btn-feed-load-older">
+            📜 Muat Sejarah Lama (${hiddenInMemory} catatan lagi)
+          </button>
+        </div>`;
+    } else if (trimmedArchived > 0) {
+      html += `<div class="feed-archived-note">🗄️ ${trimmedArchived} catatan terawal telah diarkibkan untuk menjimatkan memori.</div>`;
+    }
+
+    html += picked.map(({ block, entries, partial }) => {
       const bc = Utils.getCountry(block.countryId);
       return `
         <article class="year-block">
           <div class="year-header">
-            <span>Umur: ${block.age} tahun (${block.year})</span>
+            <span>Umur: ${block.age} tahun (${block.year})${partial ? ' • …' : ''}</span>
             <span class="year-location">${bc.flag} ${Utils.escapeHtml(block.city)}, ${bc.name}</span>
           </div>
           <div class="year-entries">
-            ${block.entries.map(e => `
+            ${entries.map(e => `
               <div class="feed-entry ${e.type || 'normal'}">${Utils.escapeHtml(e.text)}</div>
             `).join('')}
           </div>
@@ -430,9 +505,26 @@ window.App = {
       `;
     }).join('');
 
-    const container = document.getElementById('life-feed-container');
+    const prevHeight = container ? container.scrollHeight : 0;
+    const prevTop = container ? container.scrollTop : 0;
+    feed.innerHTML = html;
+
+    const olderBtn = document.getElementById('btn-feed-load-older');
+    if (olderBtn) {
+      olderBtn.addEventListener('click', () => {
+        this._feedLimit = (this._feedLimit || this.FEED_PAGE_SIZE) + this.FEED_PAGE_SIZE;
+        this._renderJournal(GameState.current, { keepScroll: true });
+      }, { once: true });
+    }
+
+    if (!container) return;
     requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
+      if (opts.keepScroll) {
+        // Kekalkan kedudukan bacaan apabila memuatkan sejarah lama di atas
+        container.scrollTop = container.scrollHeight - prevHeight + prevTop;
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
     });
   },
 

@@ -694,9 +694,14 @@ window.PrisonModals = {
       smugSearch.addEventListener('input', (e) => {
         this._smugSearch = e.target.value;
         const pos = e.target.selectionStart;
-        this.showFugitiveHub('smuggle');
-        const next = document.getElementById('smug-search');
-        if (next) { next.focus(); next.setSelectionRange(pos, pos); }
+        Utils.debounceKey('smug-country-search', () => {
+          this.showFugitiveHub('smuggle');
+          const next = document.getElementById('smug-search');
+          if (next) {
+            next.focus();
+            try { next.setSelectionRange(pos, pos); } catch (err) {}
+          }
+        }, 160);
       });
     }
 

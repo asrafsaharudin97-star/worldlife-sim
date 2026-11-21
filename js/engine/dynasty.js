@@ -26,22 +26,24 @@ window.Dynasty = {
 
   getData() {
     if (this._cache) return this._cache;
-    try {
-      const raw = localStorage.getItem(this.STORAGE_KEY);
-      if (raw) {
-        this._cache = Object.assign(this._defaultData(), JSON.parse(raw));
-        return this._cache;
-      }
-    } catch (e) {}
-    this._cache = this._defaultData();
+    const parsed = window.SafeStorage
+      ? SafeStorage.getJSON(this.STORAGE_KEY, null)
+      : (() => { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY) || 'null'); } catch (e) { return null; } })();
+    this._cache = (parsed && typeof parsed === 'object')
+      ? Object.assign(this._defaultData(), parsed)
+      : this._defaultData();
     return this._cache;
   },
 
   save() {
-    if (!this._cache) return;
+    if (!this._cache) return false;
+    if (window.SafeStorage) return SafeStorage.setJSON(this.STORAGE_KEY, this._cache, () => this._cache);
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this._cache));
-    } catch (e) {}
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   resetForFreshDynasty() {
@@ -157,6 +159,7 @@ window.Dynasty = {
         d.familyReputation = Utils.clamp(d.familyReputation + 8, 0, 100);
       }
       this.pendingPrimeAchievement = badge;
+      if (window.Utils && Utils.playTone) Utils.playTone('achievement');
     }
 
     // Terapkan buff stat kekal untuk perdana tinggi (17, 19, 23+)
@@ -181,32 +184,50 @@ window.Dynasty = {
     const d = this.getData();
     const c = Utils.getCountry(s.countryId);
     const ending = window.KarmaEndings ? KarmaEndings.evaluateEnding(s) : { title: 'Jiwa Seimbang', icon: '✨' };
-    let topHighlight = (s.highlights && s.highlights.length > 0)
-      ? s.highlights[s.highlights.length - 1].text
-      : (s.causeOfDeath || 'Menjalani kehidupan penuh warna');
+    const clip = (t, n = 140) => {
+      const str = String(t || '');
+      return str.length > n ? str.slice(0, n - 1) + '…' : str;
+    };
 
-    if (s.fugitive && s.fugitive.aliasName) {
-      topHighlight = `Hidup dalam buangan dengan nama samaran ${s.fugitive.aliasName} (Nama asal: ${s.fugitive.trueName || s.name}) • ${topHighlight}`;
+    // 1–2 sorotan utama sahaja (bukan log penuh tahun demi tahun)
+    const hl = Array.isArray(s.highlights) ? s.highlights.slice(-2).reverse().map(h => clip(h.text || h, 120)) : [];
+    let topHighlight = hl.length > 0 ? hl[0] : (s.causeOfDeath || 'Menjalani kehidupan penuh warna');
+
+    const alias = (s.fugitive && s.fugitive.aliasName) ? s.fugitive.aliasName : null;
+    const trueName = (s.fugitive && s.fugitive.trueName) ? s.fugitive.trueName : s.name;
+    if (alias) {
+      topHighlight = `Hidup dalam buangan dengan nama samaran ${alias} (Nama asal: ${trueName}) • ${topHighlight}`;
     }
+
+    const netWorth = GameState.getNetWorth();
+    const peakNetWorth = Math.max(netWorth, s.peakNetWorth || 0);
 
     // Elak duplikat untuk watak yang sama
     if (!d.dynastyHistory.some(h => h.id === s.id)) {
       d.dynastyHistory.unshift({
         id: s.id,
         generation: s.generation || d.generation || 1,
-        name: (s.fugitive && s.fugitive.trueName) ? `${s.fugitive.trueName} (a.k.a. ${s.fugitive.aliasName})` : s.name,
+        name: alias ? `${trueName} (a.k.a. ${alias})` : s.name,
+        alias,
         age: s.age,
+        lifespan: s.age,
         yearDied: s.year,
         countryFlag: c.flag,
-        peakWealthFormatted: Utils.formatMoney(GameState.getNetWorth(), s.countryId, true),
+        peakNetWorth,
+        peakWealthFormatted: Utils.formatMoney(peakNetWorth, s.countryId, true),
         endingTitle: `${ending.icon} ${ending.title}`,
-        notableEvent: topHighlight,
+        notableEvent: clip(topHighlight, 200),
+        highlights: hl,
         legacyStatusAtDeath: d.legacyStatus
       });
-      if (d.dynastyHistory.length > 30) d.dynastyHistory = d.dynastyHistory.slice(0, 30);
+      if (d.dynastyHistory.length > this.MAX_HISTORY) d.dynastyHistory = d.dynastyHistory.slice(0, this.MAX_HISTORY);
     }
     this.save();
+    return d.dynastyHistory[0];
   },
+
+  // Had rekod ringkas salasilah (cukup untuk 50+ generasi tanpa membebankan storan)
+  MAX_HISTORY: 60,
 
   // --------------------------------------------------------------------------
   // 3. 8 SENARIO SABOTAJ LEGASI (Gen >= 2 atau Reputasi >= 60, 15%/tahun)

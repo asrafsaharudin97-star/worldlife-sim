@@ -137,46 +137,94 @@ window.Utils = {
       .replace(/"/g, '&quot;');
   },
 
+  // --------------------------------------------------------------------------
+  // PENGHAD KADAR (DEBOUNCE) BERKUNCI — untuk carian negara tanpa lag DOM
+  // --------------------------------------------------------------------------
+  _debounceTimers: {},
+  debounceKey(key, fn, wait = 180) {
+    if (this._debounceTimers[key]) clearTimeout(this._debounceTimers[key]);
+    this._debounceTimers[key] = setTimeout(() => {
+      delete this._debounceTimers[key];
+      try { fn(); } catch (e) { if (window.console) console.error(e); }
+    }, wait);
+  },
+
+  // --------------------------------------------------------------------------
+  // KESAN BUNYI RINGAN (Web Audio API — 0 KB fail audio) + TOGOL SENYAP
+  // --------------------------------------------------------------------------
+  MUTE_KEY: 'worldlife_muted_v1',
+
+  loadMutePref() {
+    const v = window.SafeStorage ? SafeStorage.getRaw(this.MUTE_KEY) : null;
+    window._wlMuted = v === '1';
+    return window._wlMuted;
+  },
+
+  setMuted(muted) {
+    window._wlMuted = !!muted;
+    if (window.SafeStorage) SafeStorage.setJSON(this.MUTE_KEY, window._wlMuted ? '1' : '0');
+    if (window._wlMuted && this._audioCtx && this._audioCtx.state === 'running' && this._audioCtx.suspend) {
+      try { this._audioCtx.suspend(); } catch (e) {}
+    }
+    return window._wlMuted;
+  },
+
+  isMuted() {
+    return !!window._wlMuted;
+  },
+
+  _lastToneAt: 0,
+
+  // Jadual nada: [jenis gelombang, [frekuensi...], tempoh setiap nota (s), kelantangan]
+  TONES: {
+    tap:         ['sine', [660], 0.035, 0.025],
+    click:       ['sine', [700], 0.03, 0.022],
+    age:         ['sine', [520, 760], 0.06, 0.06],
+    success:     ['triangle', [587, 880], 0.08, 0.06],
+    culture:     ['triangle', [587, 880], 0.08, 0.06],
+    error:       ['sawtooth', [220, 160], 0.07, 0.04],
+    achievement: ['triangle', [523, 659, 784, 1047], 0.09, 0.06],
+    siren:       ['square', [880, 620, 880, 620], 0.14, 0.03]
+  },
+
   playTone(type = 'tap') {
     try {
       if (window._wlMuted) return;
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
+      const def = this.TONES[type];
+      if (!def) return;
+
+      // Elak bunyi bertindih berlebihan (cth. klik berganda pantas)
+      const nowMs = Date.now();
+      if ((type === 'click' || type === 'tap') && nowMs - this._lastToneAt < 60) return;
+      this._lastToneAt = nowMs;
+
       if (!this._audioCtx) this._audioCtx = new Ctx();
       const ctx = this._audioCtx;
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
 
+      const [wave, freqs, noteLen, vol] = def;
+      const start = ctx.currentTime;
+      const total = freqs.length * noteLen;
+
+      // Satu osilator + satu gain sahaja setiap bunyi; nod diputuskan selepas tamat (tiada kebocoran memori)
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      osc.type = wave;
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      const now = ctx.currentTime;
-      if (type === 'age') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(520, now);
-        osc.frequency.exponentialRampToValueAtTime(760, now + 0.08);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
-        osc.start(now);
-        osc.stop(now + 0.11);
-      } else if (type === 'success' || type === 'culture') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(587, now);
-        osc.frequency.setValueAtTime(880, now + 0.07);
-        gain.gain.setValueAtTime(0.06, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-        osc.start(now);
-        osc.stop(now + 0.18);
-      } else if (type === 'error') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(220, now);
-        osc.frequency.linearRampToValueAtTime(160, now + 0.12);
-        gain.gain.setValueAtTime(0.04, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-        osc.start(now);
-        osc.stop(now + 0.14);
-      }
+      freqs.forEach((f, i) => osc.frequency.setValueAtTime(f, start + i * noteLen));
+      gain.gain.setValueAtTime(vol, start);
+      gain.gain.setValueAtTime(vol, start + Math.max(0, total - noteLen * 0.6));
+      gain.gain.exponentialRampToValueAtTime(0.0008, start + total);
+
+      osc.onended = () => {
+        try { osc.disconnect(); gain.disconnect(); } catch (e) {}
+      };
+      osc.start(start);
+      osc.stop(start + total + 0.02);
     } catch (e) {}
   }
 };

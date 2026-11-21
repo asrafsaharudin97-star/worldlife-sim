@@ -24,6 +24,11 @@ window.Sim = {
       entries: []
     });
 
+    // Jejak harta bersih puncak sepanjang hayat (untuk ringkasan salasilah yang padat)
+    try {
+      s.peakNetWorth = Math.max(s.peakNetWorth || 0, GameState.getNetWorth());
+    } catch (e) {}
+
     // 1. Umur ahli keluarga, pasangan & rakan
     for (const rel of s.relationships) {
       if (!rel.alive) continue;
