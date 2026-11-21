@@ -222,6 +222,57 @@ window.CharacterStatus = {
   // --------------------------------------------------------------------------
   // 3. NAMA PAPARAN LENGKAP DENGAN GELARAN (YAB / YB / Dr. / ALIAS PELARIAN)
   // --------------------------------------------------------------------------
+  evaluatePosthumousDegree(s) {
+    if (!s || s.alive || !s.education) return null;
+    if (s.education.posthumousAward) return s.education.posthumousAward;
+    const st = s.education.activeStudy;
+    if (!st || !['bachelor', 'master', 'phd'].includes(st.level)) return null;
+
+    const fieldName = st.fieldName || 'Pengajian Tinggi';
+    const institution = st.institution || 'Universiti';
+    const baseName = s.name || '';
+    const drName = /^Dr\.\s/i.test(baseName) ? baseName : `Dr. ${baseName}`;
+
+    let award = null;
+    if (st.level === 'phd') {
+      award = {
+        level: 'phd',
+        icon: '🎓',
+        label: 'Anugerah PhD Anumerta',
+        grantsDrTitle: true,
+        fieldName,
+        institution,
+        displayLine: `Anugerah PhD Anumerta — ${drName}`,
+        legacyNote: `Anugerah PhD Anumerta (${fieldName}) dianugerahkan oleh ${institution} sebagai penghormatan atas dedikasi penyelidikan & akademik.`
+      };
+    } else if (st.level === 'master') {
+      award = {
+        level: 'master',
+        icon: '🏛️',
+        label: 'Ijazah Sarjana Anumerta',
+        grantsDrTitle: false,
+        fieldName,
+        institution,
+        displayLine: `Ijazah Sarjana Anumerta (${fieldName})`,
+        legacyNote: `Ijazah Sarjana Anumerta (${fieldName}) dianugerahkan oleh ${institution} atas kesungguhan pengajian sebelum pemergiannya.`
+      };
+    } else {
+      award = {
+        level: 'bachelor',
+        icon: '🎓',
+        label: 'Ijazah Sarjana Muda Anumerta',
+        grantsDrTitle: false,
+        fieldName,
+        institution,
+        displayLine: `Ijazah Sarjana Muda Anumerta (${fieldName})`,
+        legacyNote: `Ijazah Sarjana Muda Anumerta (${fieldName}) dianugerahkan oleh ${institution} atas usaha akademiknya.`
+      };
+    }
+
+    s.education.posthumousAward = award;
+    return award;
+  },
+
   getDisplayNameWithTitles(s) {
     if (!s) return '';
     let baseName = s.name || '';
@@ -234,7 +285,8 @@ window.CharacterStatus = {
       }
     }
 
-    const hasDr = Boolean(s.education && (s.education.hasDoctorateTitle || s.education.educationLevel === 'phd'));
+    const hasPosthumousDr = Boolean(!s.alive && s.education && s.education.posthumousAward && s.education.posthumousAward.grantsDrTitle);
+    const hasDr = Boolean(s.education && (s.education.hasDoctorateTitle || s.education.educationLevel === 'phd' || hasPosthumousDr));
     if (hasDr && !/^Dr\.\s/i.test(baseName)) {
       prefixes.push('Dr.');
     }

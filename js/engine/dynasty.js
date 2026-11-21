@@ -193,12 +193,18 @@ window.Dynasty = {
     const hl = Array.isArray(s.highlights) ? s.highlights.slice(-2).reverse().map(h => clip(h.text || h, 120)) : [];
     let topHighlight = hl.length > 0 ? hl[0] : (s.causeOfDeath || 'Menjalani kehidupan penuh warna');
 
+    const posthumous = (window.CharacterStatus && CharacterStatus.evaluatePosthumousDegree)
+      ? CharacterStatus.evaluatePosthumousDegree(s)
+      : null;
+
     const alias = (s.fugitive && s.fugitive.aliasName) ? s.fugitive.aliasName : null;
     const trueName = (s.fugitive && s.fugitive.trueName) ? s.fugitive.trueName : s.name;
     const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
     const finalOcc = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: 'Tiada Pekerjaan' };
     const peakRole = s.peakRole || finalOcc.title;
-    if (alias) {
+    if (posthumous) {
+      topHighlight = `${posthumous.icon} ${posthumous.legacyNote}`;
+    } else if (alias) {
       topHighlight = `Hidup dalam buangan dengan nama samaran ${alias} (Nama asal: ${trueName}) • ${topHighlight}`;
     } else if (peakRole && peakRole !== 'Tiada Pekerjaan') {
       topHighlight = `Peranan Utama: ${peakRole} • ${topHighlight}`;

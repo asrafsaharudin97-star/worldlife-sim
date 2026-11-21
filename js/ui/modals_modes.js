@@ -268,9 +268,19 @@ window.ModeModals = {
       `;
     }).join('');
 
+    const posthumous = (window.CharacterStatus && CharacterStatus.evaluatePosthumousDegree)
+      ? CharacterStatus.evaluatePosthumousDegree(s)
+      : null;
     const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
     const finalOcc = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: s.job ? s.job.title : 'Tiada Pekerjaan', icon: '💼' };
     const peakRoleText = s.peakRole || finalOcc.title;
+
+    const posthumousHtml = posthumous ? `
+      <div class="info-banner highlight" style="background:#fefce8;border-color:#fde047;margin-bottom:10px;">
+        <strong>${posthumous.icon} ${Utils.escapeHtml(posthumous.displayLine)}</strong><br/>
+        <small>${Utils.escapeHtml(posthumous.legacyNote)}</small>
+      </div>
+    ` : '';
 
     Modals.open({
       icon: ending.icon,
@@ -286,6 +296,8 @@ window.ModeModals = {
           <div class="ribbon-badge">🏆 Gelaran: ${ending.title}</div>
           <div style="font-size:12px;margin-top:8px;opacity:0.92;">${Utils.escapeHtml(ending.desc)}</div>
         </div>
+
+        ${posthumousHtml}
 
         <div class="obituary-box">
           <strong>📰 Bagaimana Dunia Mengingati Anda</strong><br/>
