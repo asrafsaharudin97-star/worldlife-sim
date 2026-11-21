@@ -281,7 +281,11 @@ window.Modals = {
   // --------------------------------------------------------------------------
   // 3. MODAL ASET, PELABURAN & KEWANGAN
   // --------------------------------------------------------------------------
-  showAssets() {
+  showAssets(subTab = null) {
+    if (window.AssetModals && AssetModals.showHub) {
+      AssetModals.showHub(subTab);
+      return;
+    }
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
     const netWorth = GameState.getNetWorth();

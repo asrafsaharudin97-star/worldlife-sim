@@ -342,6 +342,9 @@ window.GameState = {
     if (window.EduCareerEngine && EduCareerEngine.ensureFields) {
       EduCareerEngine.ensureFields(s);
     }
+    if (window.AssetsEngine && AssetsEngine.ensureFields) {
+      AssetsEngine.ensureFields(s);
+    }
     if (window.ModeEngine && ModeEngine.ensureFields) {
       ModeEngine.ensureFields(s);
     }
@@ -397,6 +400,10 @@ window.GameState = {
   getNetWorth() {
     const s = this.current;
     if (!s) return 0;
+    if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
+      const aSum = AssetsEngine.getAssetCashflowSummary(s);
+      return Math.round((s.money || 0) + (s.retirementFund || 0) + aSum.totalAssetValue - aSum.totalDebt);
+    }
     let total = s.money + (s.investments || 0) + s.retirementFund;
     for (const v of s.assets.vehicles) total += v.value;
     for (const p of s.assets.properties) total += p.value;
@@ -545,6 +552,15 @@ window.GameState = {
 
     this.current = state;
     this.ensureUpgradedState();
+    if (window.AssetsEngine && AssetsEngine.transferInheritanceToHeir) {
+      const inh = AssetsEngine.transferInheritanceToHeir(parent, state);
+      if (inh && (inh.props > 0 || inh.vehs > 0 || inh.heirlooms > 0)) {
+        this.addJournalEntry(
+          `🏛️ Pewarisan Aset Keluarga: ${inh.props} Hartanah, ${inh.vehs} Kenderaan & ${inh.heirlooms} Pusaka Keluarga berjaya diwarisi!`,
+          'milestone'
+        );
+      }
+    }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();
       if (bonuses.startingWealthMult && state.money > 0) {
@@ -688,6 +704,15 @@ window.GameState = {
 
     this.current = state;
     this.ensureUpgradedState();
+    if (window.AssetsEngine && AssetsEngine.transferInheritanceToHeir) {
+      const inh = AssetsEngine.transferInheritanceToHeir(parent, state);
+      if (inh && (inh.props > 0 || inh.vehs > 0 || inh.heirlooms > 0)) {
+        this.addJournalEntry(
+          `🏛️ Pewarisan Aset Dinasti: ${inh.props} Hartanah, ${inh.vehs} Kenderaan & ${inh.heirlooms} Pusaka Keluarga diwarisi ke Generasi ${newGen}!`,
+          'milestone'
+        );
+      }
+    }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();
       if (bonuses.startingWealthMult && state.money > 0) {

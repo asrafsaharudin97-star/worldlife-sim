@@ -285,14 +285,8 @@ window.Sim = {
       const livingLocal = Utils.usdToLocal(baseLivingUsd, s.countryId);
       let assetUpkeep = 0;
 
-      for (const v of s.assets.vehicles) {
-        assetUpkeep += v.upkeep;
-        v.value = Math.max(Math.round(v.value * 0.9), 500);
-      }
-      for (const p of s.assets.properties) {
-        assetUpkeep += p.upkeep;
-        p.value = Math.round(p.value * (1 + Utils.randInt(2, 6) / 100));
-      }
+      for (const v of s.assets.vehicles) assetUpkeep += (v.upkeep || 0);
+      for (const p of s.assets.properties) assetUpkeep += (p.upkeep || 0);
 
       if (inc.grossLocal > 0 || s.money > livingLocal) {
         s.money -= (livingLocal + assetUpkeep);
@@ -301,6 +295,11 @@ window.Sim = {
       } else {
         s.money -= Math.round(livingLocal * 0.65);
       }
+    }
+
+    // Kemas kini tahunan Enjin Aset (Trend Pasaran, Pinjaman Bank, Sewa, Penyusutan Kenderaan & Pusaka)
+    if (window.AssetsEngine && AssetsEngine.tickYearlyAssets) {
+      AssetsEngine.tickYearlyAssets(s, c);
     }
 
     if (s.age >= 8 && s.age <= 17 && Utils.chance(0.7)) {

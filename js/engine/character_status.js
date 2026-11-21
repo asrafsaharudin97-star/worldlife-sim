@@ -268,6 +268,19 @@ window.CharacterStatus = {
       breakdown.push({ label: 'Pencen Persaraan', gross: g, net: g, icon: '🌅' });
     }
 
+    // 8) Pendapatan Pasif Aset (Sewa Hartanah & Dividen Pelaburan)
+    if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
+      const aSum = AssetsEngine.getAssetCashflowSummary(s);
+      if (aSum.rentalGross > 0) {
+        grossLocal += aSum.rentalGross;
+        breakdown.push({ label: 'Sewa Hartanah', gross: aSum.rentalGross, net: aSum.rentalGross, icon: '🏠' });
+      }
+      if (aSum.dividendGross > 0) {
+        grossLocal += aSum.dividendGross;
+        breakdown.push({ label: 'Dividen Pelaburan', gross: aSum.dividendGross, net: aSum.dividendGross, icon: '📈' });
+      }
+    }
+
     const netLocal = breakdown.reduce((acc, b) => acc + b.net, 0);
     return { grossLocal, netLocal, taxLocal, retireContribLocal, breakdown };
   },
