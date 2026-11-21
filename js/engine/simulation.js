@@ -437,6 +437,12 @@ window.Sim = {
       if (offerEv) return offerEv;
     }
 
+    // 0A. Risiko Berterusan "Burn Notice" Bekas Perisik (8–12% setahun)
+    if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerBurnNoticeEvent) {
+      const bnEv = SpecialModesEngine.maybeTriggerBurnNoticeEvent(s);
+      if (bnEv) return bnEv;
+    }
+
     // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Jodoh / Ta'aruf
     if (window.SocialMedia) {
       const rfEv = SocialMedia.checkPartnerHiddenTraitEvent(s);
@@ -650,6 +656,12 @@ window.Sim = {
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Anda di dalam penjara — tidak boleh berhijrah secara sah!' };
     if (s.fugitive && s.fugitive.isFugitive) {
       return { ok: false, msg: 'Status PELARIAN! Perjalanan sah disekat — guna Akses Pasaran Gelap → Lari Ke Luar Negara!' };
+    }
+    if (s.spyBurnNotice && s.spyBurnNotice.active && s.spyBurnNotice.travelBlockYears > 0) {
+      return {
+        ok: false,
+        msg: `🕵️ BURN NOTICE AKTIF: Perjalanan luar negara anda disekat oleh agensi risikan (baki ${s.spyBurnNotice.travelBlockYears} tahun)!`
+      };
     }
     if (targetCountryId === s.countryId) return { ok: false, msg: 'Anda sudah menetap di negara ini!' };
 

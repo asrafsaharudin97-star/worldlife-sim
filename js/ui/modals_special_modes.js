@@ -78,7 +78,10 @@ window.SpecialModeModals = {
 
           <div class="cac-bars">
             <div>
-              <div class="ph-bar-lbl"><span>${def.metric1.icon} ${Utils.escapeHtml(def.metric1.label)}</span><strong>${am.metric1}%</strong></div>
+              <div class="ph-bar-lbl">
+                <span>${def.metric1.icon} ${Utils.escapeHtml(def.metric1.label)}</span>
+                <strong>${def.id === 'explorer' ? `${(s.countriesVisited || []).length}/195 Negara (${am.metric1}%)` : `${am.metric1}%`}</strong>
+              </div>
               <div class="mini-track" style="height:7px;"><div class="mini-fill" style="width:${am.metric1}%;background:${m1Color};"></div></div>
             </div>
             <div>
@@ -112,7 +115,7 @@ window.SpecialModeModals = {
         <div class="action-list" style="margin-bottom:12px;">${actionsHtml}</div>
 
         <button type="button" class="ghost-btn" id="btn-sp-exit-prompt" style="border-color:#fca5a5;color:#dc2626;font-weight:800;">
-          🚪 Keluar / Letak Jawatan Daripada ${Utils.escapeHtml(def.shortLabel)}
+          ${def.id === 'royalty' ? '👑 Buang Gelaran Diraja (Renounce Title)' : `🚪 Keluar / Letak Jawatan Daripada ${Utils.escapeHtml(def.shortLabel)}`}
         </button>
       `
     });
@@ -210,6 +213,11 @@ window.SpecialModeModals = {
       btn.addEventListener('click', () => {
         const res = SpecialModesEngine.exitSpecialMode(btn.dataset.choice);
         App.renderAll();
+        if (res.died) {
+          Modals.close(true);
+          if (window.ModeModals && ModeModals.showLegacyObituary) ModeModals.showLegacyObituary();
+          return;
+        }
         if (res.followUpEvent) {
           Modals.showEvent(res.followUpEvent);
           return;

@@ -1,11 +1,20 @@
 /* ==========================================================================
-   WorldLife — Pangkalan Data Mod Khas "Peluang Sekali Seumur Hidup" (Fasa 1: 5 Mod)
+   WorldLife — Pangkalan Data 10 Mod Khas "Peluang Sekali Seumur Hidup"
    1. Politik & Kepimpinan Negara  2. Usahawan & CEO  3. Jerung Pasaran / Trader Pro
    4. Selebriti & Content Creator  5. Atlet Pro & E-Sukan
+   6. Sindiket & Mafia             7. Pemimpin Pertubuhan Rahsia / Kultus
+   8. Perisik Rahsia & Operasi Elit 9. Kerabat Diraja / Royalty
+   10. Pengembara & Pemburu Rekod Dunia
    Bahasa Melayu — Sifar Placeholder
    ========================================================================== */
 
 window.SpecialModesData = {
+  // Negara beraja / monarki berdaulat daripada pangkalan data 195 negara (untuk pencetus Kelahiran Diraja 2–4%)
+  MONARCHY_COUNTRY_IDS: [
+    'MY', 'GB', 'JP', 'TH', 'BN', 'SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'JO', 'MA',
+    'ES', 'SE', 'NO', 'DK', 'NL', 'BE', 'LU', 'MC', 'LI', 'AD', 'KH', 'BT', 'TO', 'SZ', 'LS'
+  ],
+
   MODES: {
     // ========================================================================
     // 1. POLITIK & KEPIMPINAN NEGARA
@@ -334,6 +343,372 @@ window.SpecialModesData = {
             { label: 'Terima cabaran kelab gergasi demi pentas dunia!', hint: 'Prestasi ++, Wang +++, Populariti ++', moneyUsd: 58000, m1: 14, m2: 4, fame: 14, outcome: 'Anda mencipta nama di liga paling kompetitif di dunia!' },
             { label: 'Kekal setia bersama kelab asal sebagai kapten pasukan', hint: 'Karma ++, Reputasi Keluarga ++, Gembira ++', moneyUsd: 22000, m1: 8, m2: -4, karma: 12, rep: 10, happiness: 14, outcome: 'Penyokong menobatkan anda sebagai legenda setia kelab!' },
             { label: 'Gunakan tawaran itu untuk menekan kelab asal naikkan gaji', hint: 'Wang ++, Kepintaran +', moneyUsd: 44000, m1: 6, m2: 0, smarts: 4, outcome: 'Kelab asal bersetuju menaikkan pakej gaji anda secara signifikan.' }
+          ]
+        }
+      ]
+    },
+
+    // ========================================================================
+    // 6. SINDIKET & MAFIA
+    // ========================================================================
+    mafia: {
+      id: 'mafia',
+      icon: '🕶️',
+      title: 'Sindiket & Mafia',
+      shortLabel: 'Mafia',
+      minAge: 18,
+      maxAge: 62,
+      offerHeadline: 'Jemputan Sulit Keluarga Bawah Tanah!',
+      offerPitch: 'Seorang utusan berpakaian sut hitam menyerahkan sekeping kad tanpa nama di sebuah lorong sunyi. Ketua sindiket kota mengenali keberanian anda dan menawarkan tempat dalam keluarga — tetapi ingat, sekali masuk amat sukar untuk keluar!',
+      metric1: { label: 'Hormat Geng',          icon: '🎩', init: 40, dangerHigh: false },
+      metric2: { label: 'Tekanan Polis (Heat)', icon: '🚨', init: 18, dangerHigh: true },
+      ranks: [
+        { title: 'Orang Suruhan',           annualUsd: 42000,  reqYears: 0, reqM1: 0,  prefix: '' },
+        { title: 'Ketua Kawasan',           annualUsd: 105000, reqYears: 2, reqM1: 58, prefix: '' },
+        { title: 'Orang Kanan (Underboss)', annualUsd: 220000, reqYears: 5, reqM1: 72, prefix: '' },
+        { title: 'Ketua Sindiket (Godfather)', annualUsd: 450000, reqYears: 9, reqM1: 86, prefix: '' }
+      ],
+      exitWarning: 'BAHAYA TERTINGGI! Meninggalkan sindiket memerlukan bayaran berat "Wang Cuci Tangan" serta membawa risiko 35–50% diserang hendap (cedera parah, risiko maut di pangkat Godfather, ATAU pembelot melapor kepada polis hingga anda diburu/didakwa di Mahkamah!). Mod Mafia akan dikunci SELAMANYA.',
+      actions: [
+        { id: 'maf_wang_perlindungan', icon: '💵', title: 'Kutip Wang Perlindungan Wilayah', desc: 'Kutip bayaran bulanan daripada kelab malam dan gudang di kawasan jajahan anda.', m1: 9, m2: 10, moneyUsd: 28000, karma: -12, notoriety: 8 },
+        { id: 'maf_cuci_wang',         icon: '🧺', title: 'Operasi Cuci Wang Melalui Perniagaan Sah', desc: 'Salurkan dana gelap melalui rangkaian restoran dan hartanah untuk sejukkan Heat.', m1: 6, m2: -12, moneyUsd: 18000, smarts: 3, karma: -8 },
+        { id: 'maf_buru_pembelot',     icon: '🎯', title: 'Buru Pembelot & Informan Rahsia', desc: 'Kesan kebocoran maklumat dalaman sebelum serbuan polis berlaku.', m1: 12, m2: -8, notoriety: 10, stress: 10, karma: -14 },
+        { id: 'maf_perang_wilayah',    icon: '⚔️', title: 'Serbu Wilayah Sindiket Saingan', desc: 'Rampas laluan penyeludupan utama demi kuasa dan rasa hormat geng.', m1: 15, m2: 18, moneyUsd: 46000, health: -8, notoriety: 15, karma: -18 },
+        { id: 'maf_seludup_pelabuhan', icon: '🚢', title: 'Seludup Kontena Barangan Mewah Di Pelabuhan', desc: 'Uruskan laluan gelap kastam untuk barangan bernilai jutaan.', m1: 10, m2: 12, moneyUsd: 54000, karma: -14, notoriety: 10 },
+        { id: 'maf_rasuah_pegawai',    icon: '🤝', title: 'Bayar Sagu Hati Pegawai Berkuasa', desc: 'Gunakan wang untuk melengahkan siasatan dan memadam jejak sindiket.', m1: 5, m2: -16, moneyUsd: -18000, karma: -12 },
+        { id: 'maf_jamuan_keluarga',   icon: '🍷', title: 'Majlis Makan Malam Tertutup Keluarga', desc: 'Kukuhkan kesetiaan ahli kanan dan selesaikan pertikaian dalaman.', m1: 10, m2: -4, happiness: 6, rep: -2 },
+        { id: 'maf_kasino_bawah_tanah',icon: '🎲', title: 'Buka Kasino VIP Bawah Tanah', desc: 'Tarik hartawan dan tokoh gelap untuk menjana aliran tunai konsisten.', m1: 11, m2: 11, moneyUsd: 62000, karma: -12, notoriety: 9 },
+        { id: 'maf_jaga_komuniti',     icon: '🏘️', title: 'Derma Rahsia Kepada Penduduk Kawasan', desc: 'Bina sokongan penduduk tempatan supaya mereka menutup mulut di depan polis.', m1: 8, m2: -9, moneyUsd: -10000, karma: 6 },
+        { id: 'maf_latih_pengawal',    icon: '🛡️', title: 'Perkukuh Skuad Pengawal Peribadi', desc: 'Latih orang kepercayaan untuk menghadapi serangan balas musuh.', m1: 7, m2: -3, health: 4, moneyUsd: -8000, stress: -5 },
+        { id: 'maf_rampas_lori',       icon: '🚚', title: 'Pintasan Konvoi Barangan Elektronik', desc: 'Operasi kilat tengah malam tanpa meninggalkan saksi.', m1: 9, m2: 14, moneyUsd: 38000, karma: -15, notoriety: 12 },
+        { id: 'maf_runding_damai',     icon: '🕊️', title: 'Sidang Damai Antara 5 Keluarga', desc: 'Bahagikan sempadan operasi secara diplomatik bagi mengelak pertumpahan darah.', m1: 13, m2: -10, smarts: 4, karma: 2 },
+        { id: 'maf_rare_rompakan_abad',icon: '💎', isRare: true, title: '🌟 ROMPAKAN ABAD INI: Bilik Kebal Berlian Antarabangsa!', desc: 'PELUANG EMAS: Operasi berprofil tinggi paling licik dalam sejarah dunia bawah!', m1: 22, m2: 20, moneyUsd: 165000, notoriety: 22, karma: -22, stress: 14 }
+      ],
+      dilemmas: [
+        {
+          id: 'sp_maf_snitch', icon: '🐀', title: 'Dilema Sindiket: Sahabat Lama Jadi Informan Polis!',
+          text: 'Risikan dalaman membuktikan rakan seperjuangan yang membesar bersama anda sedang membekalkan rakaman rahsia kepada detektif.',
+          choices: [
+            { label: 'Beri amaran keras & halau dia jauh ke luar negara', hint: 'Hormat +, Tekanan Polis -, Karma +', m1: 6, m2: -10, karma: 8, outcome: 'Dia melarikan diri dengan ketakutan dan semua rakaman berjaya dimusnahkan.' },
+            { label: 'Umpan dia dengan maklumat palsu untuk kelirukan polis', hint: 'Hormat ++, Tekanan Polis --, Kepintaran ++', m1: 12, m2: -16, smarts: 5, outcome: 'Operasi serbuan polis menemui bilik kosong — kebijaksanaan anda dipuji ketua!' },
+            { label: 'Hapuskan ancaman secara muktamad tanpa belas kasihan', hint: 'Hormat +++, tetapi Tekanan Polis +++ & Karma ---', m1: 18, m2: 20, karma: -28, notoriety: 18, flag: 'mafia_blood', outcome: 'Seluruh dunia bawah gerun mendengar ketegasan anda, namun polis kini memburu anda lebih rapat.' }
+          ]
+        },
+        {
+          id: 'sp_maf_turf_war', icon: '🔥', title: 'Perang Wilayah Meletus Di Pelabuhan!',
+          text: 'Sindiket luar cuba merampas gudang utama anda dan mencabar kepimpinan keluarga di hadapan semua ahli.',
+          choices: [
+            { label: 'Lancar serangan balas taktikal pada waktu subuh', hint: 'Hormat +++, Wang ++, Risiko Cedera & Heat ++', m1: 16, m2: 18, moneyUsd: 45000, health: -10, notoriety: 14, outcome: 'Gudang kembali ke tangan anda — musuh berundur dengan kekalahan teruk!' },
+            { label: 'Tawarkan perkongsian untung 20% demi keamanan jangka panjang', hint: 'Hormat +, Tekanan Polis --, Wang +', m1: 7, m2: -12, moneyUsd: 22000, smarts: 4, outcome: 'Perjanjian damai mengelakkan serbuan besar-besaran pihak berkuasa.' },
+            { label: 'Bocor lokasi gudang musuh kepada polis secara tanpa nama', hint: 'Tekanan Polis -, Hormat ++, Kepintaran +', m1: 10, m2: -8, smarts: 5, karma: -10, outcome: 'Polis menyerbu markas pesaing anda dan anda mengambil alih wilayah mereka dengan mudah!' }
+          ]
+        },
+        {
+          id: 'sp_maf_launder_bank', icon: '🏦', title: 'Tawaran Pengurus Bank Korup!',
+          text: 'Seorang pengurus bank antarabangsa menawarkan saluran cuci wang bernilai jutaan dengan komisen 15%, tetapi audit kewangan mungkin datang bila-bila masa.',
+          choices: [
+            { label: 'Gunakan saluran bank untuk bersihkan semua dana gelap', hint: 'Wang +++, Tekanan Polis --, risiko kecil', m1: 10, m2: -14, moneyUsd: 80000, karma: -14, outcome: 'Akaun sah anda kini berkilat bersih dengan aliran tunai yang kukuh!' },
+            { label: 'Guna hanya separuh & simpan selebihnya dalam aset fizikal', hint: 'Seimbang: Wang ++, Tekanan Polis -', m1: 8, m2: -8, moneyUsd: 40000, smarts: 4, outcome: 'Langkah berhati-hati anda melindungi sindiket daripada risiko audit mengejut.' },
+            { label: 'Tolak tawaran — jangan percaya orang luar!', hint: 'Hormat +, selamat daripada perangkap', m1: 5, m2: -4, karma: 2, outcome: 'Ternyata pengurus bank itu memang di bawah pemantauan agensi kewangan!' }
+          ]
+        },
+        {
+          id: 'sp_maf_racket_shop', icon: '🏪', title: 'Pemilik Kedai Keluarga Enggan Membayar!',
+          text: 'Seorang warga emas pemilik kedai roti di wilayah anda enggan membayar wang perlindungan kerana perniagaannya hampir muflis.',
+          choices: [
+            { label: 'Kecualikan dia & lindungi kedainya secara percuma', hint: 'Karma ++, Tekanan Polis --, Hormat +', m1: 6, m2: -10, karma: 14, rep: 4, outcome: 'Penduduk kawasan menghormati belas ihsan anda dan tidak lagi takut pada nama keluarga.' },
+            { label: 'Beri pinjaman modal kecil untuk bantu kedainya bangkit', hint: 'Wang -, Karma +, Hormat ++', m1: 10, m2: -6, moneyUsd: -8000, karma: 10, outcome: 'Kedainya kembali maju dan dia menjadi sekutu paling setia di jalan itu.' },
+            { label: 'Paksa bayar juga sebagai contoh kepada peniaga lain', hint: 'Wang +, Hormat +, tetapi Karma --- & Heat ++', m1: 8, m2: 14, moneyUsd: 15000, karma: -22, notoriety: 10, outcome: 'Semua kedai kini membayar tepat pada masanya kerana ketakutan, namun aduan polis meningkat.' }
+          ]
+        }
+      ]
+    },
+
+    // ========================================================================
+    // 7. PEMIMPIN PERTUBUHAN RAHSIA / KULTUS
+    // ========================================================================
+    cult: {
+      id: 'cult',
+      icon: '🔮',
+      title: 'Pemimpin Pertubuhan Rahsia / Kultus',
+      shortLabel: 'Kultus',
+      minAge: 20,
+      maxAge: 75,
+      offerHeadline: 'Pengikut Misteri Mengangkat Anda Sebagai Guru!',
+      offerPitch: 'Ucapan karismatik anda tentang "pencerahan jiwa dan kekayaan sejagat" tular dalam sebuah kumpulan eksklusif. Puluhan pengikut kaya kini merayu anda memimpin pertubuhan rahsia mereka!',
+      metric1: { label: 'Kesetiaan Pengikut',       icon: '🕯️', init: 50, dangerHigh: false },
+      metric2: { label: 'Perhatian Pihak Berkuasa', icon: '🚔', init: 14, dangerHigh: true },
+      ranks: [
+        { title: 'Pengasas Komuniti Eksklusif', annualUsd: 48000,  reqYears: 0, reqM1: 0,  prefix: '' },
+        { title: 'Guru Agung',                  annualUsd: 120000, reqYears: 2, reqM1: 60, prefix: '' },
+        { title: 'Pemimpin Markas Terpencil',   annualUsd: 240000, reqYears: 5, reqM1: 74, prefix: '' },
+        { title: 'Ikon Pertubuhan Global',      annualUsd: 420000, reqYears: 9, reqM1: 86, prefix: '' }
+      ],
+      exitWarning: 'Keluar daripada pertubuhan rahsia mencetuskan tindak balas pengikut fanatik — Reputasi Keluarga (-12%) & Karma (-20) merosot mendadak, ditambah risiko tinggi saman penipuan bernilai besar ATAU serbuan polis ke Mahkamah! Mod ini akan dikunci SELAMANYA.',
+      actions: [
+        { id: 'clt_retret_hutan',   icon: '🏕️', title: 'Anjur Retret Pencerahan Di Hutan Terpencil', desc: 'Kumpul pengikut untuk meditasi 7 hari tanpa telefon bimbit.', m1: 12, m2: 5, moneyUsd: 26000, stress: -5 },
+        { id: 'clt_derma_mewah',    icon: '💎', title: 'Kempen "Sumbangan Pembersihan Harta"', desc: 'Galakkan pengikut kaya menderma jam mewah dan dana demi ketenangan jiwa.', m1: -3, m2: 14, moneyUsd: 58000, karma: -16, flag: 'cult_fraud' },
+        { id: 'clt_buku_ajaran',    icon: '📖', title: 'Terbit Buku Falsafah & Rahsia Alam', desc: 'Jual buku kulit keras edisi terhad berharga mahal kepada pengikut baharu.', m1: 10, m2: 2, moneyUsd: 32000, fame: 10, smarts: 3 },
+        { id: 'clt_amal_awam',      icon: '🍲', title: 'Program Dapur Percuma Untuk Imej Awam', desc: 'Tunjukkan sisi kebajikan pertubuhan bagi menenangkan pihak berkuasa.', m1: 6, m2: -14, moneyUsd: -12000, karma: 8, rep: 4 },
+        { id: 'clt_upacara_bulan',  icon: '🌕', title: 'Upacara Lilin Tengah Malam Eksklusif', desc: 'Ritual penuh simbolik dan jubah serba putih yang mengukuhkan kesetiaan.', m1: 13, m2: 6, fame: 6, karma: -6 },
+        { id: 'clt_rekrut_selebriti',icon:'🌟', title: 'Rekrut Selebriti & Jutawan Muda', desc: 'Jemput tokoh terkenal menghadiri sesi VIP tertutup pertubuhan.', m1: 11, m2: 8, moneyUsd: 45000, fame: 14 },
+        { id: 'clt_bina_markas',    icon: '🏛️', title: 'Bina Kompleks Markas Kalis Dunia Luar', desc: 'Beli tanah ladang terpencil dengan pagar keselamatan persendirian.', m1: 14, m2: 12, moneyUsd: -25000, stress: 6 },
+        { id: 'clt_air_berkat',     icon: '🧴', title: 'Jual "Air Tenaga Kosmik" Edisi Khas', desc: 'Air mineral biasa dibungkus dalam botol kristal dengan harga 50 kali ganda.', m1: 4, m2: 12, moneyUsd: 42000, karma: -14, flag: 'cult_fraud' },
+        { id: 'clt_peguam_korporat',icon: '⚖️', title: 'Upah Firma Peguam & Penasihat PR', desc: 'Tepis laporan media penyiasat dan pastikan dokumen pertubuhan nampak sah.', m1: 5, m2: -15, moneyUsd: -22000, smarts: 3 },
+        { id: 'clt_podcast_misteri',icon: '🎙️', title: 'Siri Podcast "Kebangkitan Minda"', desc: 'Tarik ribuan pendengar baharu secara dalam talian dengan nada tenang.', m1: 9, m2: 3, fame: 10, followers: 18000 },
+        { id: 'clt_audit_pengikut', icon: '🔍', title: 'Tapis Pengikut Yang Mula Ragu-Ragu', desc: 'Kenal pasti ahli yang cuba membocorkan rahsia markas kepada wartawan.', m1: 8, m2: -7, karma: -8, stress: 6 },
+        { id: 'clt_rare_ramalan',   icon: '☄️', isRare: true, title: '🌟 FENOMENA GERHANA: Ramalan Kebetulan Anda Jadi Kenyataan!', desc: 'PELUANG EMAS: Pengikut menganggap anda benar-benar berkuasa luar biasa dan sumbangan mencurah!', m1: 24, m2: 10, moneyUsd: 120000, fame: 20, followers: 40000 }
+      ],
+      dilemmas: [
+        {
+          id: 'sp_clt_docu', icon: '🎬', title: 'Dilema Kultus: Kru Dokumentari Mengetuk Pintu Markas!',
+          text: 'Penerbit dokumentari terkenal mahu merakam kehidupan dalam markas anda — mereka terkenal suka mendedahkan sisi pelik pertubuhan rahsia.',
+          choices: [
+            { label: 'Buka pintu & tunjukkan aktiviti yoga, kebun organik & derma sahaja', hint: 'Perhatian Polis --, Populariti ++, Kesetiaan +', m1: 8, m2: -14, fame: 14, smarts: 4, outcome: 'Dokumentari itu memaparkan komuniti anda kelihatan damai dan eksklusif!' },
+            { label: 'Halang masuk dengan pengawal & ancaman saman peguam', hint: 'Kesetiaan ++, tetapi Perhatian Polis ++', m1: 10, m2: 14, karma: -8, outcome: 'Pengikut kagum dengan ketegasan anda, namun pihak berkuasa mula curiga.' },
+            { label: 'Tawarkan mereka pakej VIP "pencerahan percuma" 3 hari', hint: 'Komedi gelap! Peluang wartawan pula terpikat!', m1: 14, m2: -6, fame: 12, moneyUsd: 15000, outcome: 'Salah seorang jurukamera dokumentari itu sendiri akhirnya mendaftar menjadi ahli!' }
+          ]
+        },
+        {
+          id: 'sp_clt_yacht', icon: '🛥️', title: 'Pengikut Hadiahkan Kapal Layar Mewah Kepada "Guru Agung"!',
+          text: 'Sekumpulan ahli jutawan membelikan kapal layar untuk anda, tetapi ahli biasa mula tertanya-tanya mengapa guru hidup terlalu mewah.',
+          choices: [
+            { label: 'Terima & namakannya "Kapal Meditasi Lautan Untuk Semua"', hint: 'Wang +++, Kesetiaan +, Perhatian Polis ++', moneyUsd: 70000, m1: 6, m2: 14, karma: -14, flag: 'cult_fraud', outcome: 'Anda berlayar penuh gaya sambil berkhutbah tentang melepaskan harta duniawi!' },
+            { label: 'Jual kapal layar & bina pusat kebajikan komuniti', hint: 'Kesetiaan +++, Perhatian Polis --, Karma ++', m1: 14, m2: -16, karma: 16, rep: 8, outcome: 'Pengikut makin taksub dengan sifat rendah diri anda dan polis membatalkan siasatan!' },
+            { label: 'Terima secara senyap di bawah nama syarikat luar pesisir', hint: 'Wang ++, Perhatian Polis +', moneyUsd: 55000, m1: 2, m2: 8, karma: -12, flag: 'cult_fraud', outcome: 'Tiada siapa perasan buat masa ini, namun rekod kewangan semakin rumit.' }
+          ]
+        },
+        {
+          id: 'sp_clt_raid_rumor', icon: '🚨', title: 'Khabar Angin Serbuan Pihak Berkuasa Hujung Minggu Ini!',
+          text: 'Seorang bekas ahli yang marah telah membuat laporan penipuan kepada polis tempatan.',
+          choices: [
+            { label: 'Pulangkan sumbangan bekas ahli itu & selesai di luar mahkamah', hint: 'Wang -, Perhatian Polis ---, selamat!', moneyUsd: -24000, m1: 4, m2: -22, karma: 4, outcome: 'Aduan ditarik balik dan markas anda terselamat daripada serbuan.' },
+            { label: 'Pindahkan semua dokumen & anjur "Hari Terbuka Komuniti"', hint: 'Kepintaran ++, Perhatian Polis --, Kesetiaan +', m1: 8, m2: -14, smarts: 5, outcome: 'Apabila pegawai tiba, mereka hanya nampak jamuan teh dan kelas lukisan!' },
+            { label: 'Arahkan pengikut berarak membantah siasatan', hint: 'Kesetiaan ++, tetapi Perhatian Polis +++', m1: 12, m2: 24, fame: 10, karma: -12, outcome: 'Berita utama penuh dengan wajah anda — pihak berkuasa kini membuka fail siasatan penuh!' }
+          ]
+        }
+      ]
+    },
+
+    // ========================================================================
+    // 8. PERISIK RAHSIA & OPERASI ELIT
+    // ========================================================================
+    spy: {
+      id: 'spy',
+      icon: '🕵️',
+      title: 'Perisik Rahsia & Operasi Elit',
+      shortLabel: 'Perisik',
+      minAge: 21,
+      maxAge: 58,
+      offerHeadline: 'Rekrutmen Sulit Agensi Perisikan Negara!',
+      offerPitch: 'Kepintaran dan ketahanan fizikal anda menarik perhatian Pengarah Operasi Khas. Anda ditawarkan identiti rahsia, pasport diplomatik bayangan, dan misi sulit merentasi 195 negara di seluruh dunia!',
+      metric1: { label: 'Kerahsiaan Identiti', icon: '🎭', init: 78, dangerHigh: false },
+      metric2: { label: 'Kepercayaan Agensi',  icon: '🛡️', init: 52, dangerHigh: false },
+      ranks: [
+        { title: 'Ejen Lapangan',      annualUsd: 68000,  reqYears: 0, reqM1: 0,  prefix: '' },
+        { title: 'Ejen Operasi Khas',  annualUsd: 135000, reqYears: 2, reqM1: 60, prefix: '' },
+        { title: 'Komander Misi',      annualUsd: 225000, reqYears: 5, reqM1: 72, prefix: '' },
+        { title: 'Pengarah Risikan',   annualUsd: 360000, reqYears: 9, reqM1: 84, prefix: '' }
+      ],
+      exitWarning: 'Agensi akan mengeluarkan "BURN NOTICE / PEMANTAUAN KETAT" sebaik anda keluar! Anda hilang pelepasan keselamatan & gaji serta-merta, dikenakan sekatan perjalanan sementara (3 tahun), dan berdepan risiko berterusan 8–12% SETIAP TAHUN musuh asing lama menjejak anda! Mod Perisik dikunci SELAMANYA.',
+      actions: [
+        { id: 'spy_misi_asing',     icon: '🌍', title: 'Misi Penyusupan Sulit Luar Negara', desc: 'Terbang dengan identiti palsu ke negara sasaran untuk mengumpul fail rahsia.', m1: -5, m2: 13, moneyUsd: 24000, smarts: 4, stress: 9, foreignMission: true },
+        { id: 'spy_padam_jejak',    icon: '💻', title: 'Padam Jejak Digital & Tukar Identiti Bayangan', desc: 'Bersihkan rekod biometrik dan pasport samaran daripada pangkalan data musuh.', m1: 15, m2: 4, smarts: 4, stress: 5 },
+        { id: 'spy_pintasan_siber', icon: '📡', title: 'Operasi Pintasan Isyarat Satelit', desc: 'Dekod komunikasi sulit sindiket pengganas antarabangsa.', m1: 4, m2: 12, smarts: 6, karma: 6, stress: 7, foreignMission: true },
+        { id: 'spy_latihan_tempur', icon: '🥋', title: 'Latihan Tempur Taktikal & Menembak', desc: 'Kekalkan refleks tahap elit di fasiliti latihan rahsia agensi.', m1: 4, m2: 8, health: 8, stress: -3 },
+        { id: 'spy_ekstraksi_vip',  icon: '🚁', title: 'Misi Menyelamat Sumber Maklumat (VIP)', desc: 'Keluarkan aset risikan dari zon konflik antarabangsa pada waktu malam.', m1: -7, m2: 15, moneyUsd: 32000, karma: 10, health: -4, foreignMission: true },
+        { id: 'spy_ejen_berkembar', icon: '🐍', title: 'Jual Maklumat Sampingan Sebagai Ejen Berkembar', desc: 'Godaan berbahaya! Terima bayaran kripto gergasi daripada agensi asing.', m1: -14, m2: -12, moneyUsd: 95000, karma: -22, flag: 'double_agent', foreignMission: true },
+        { id: 'spy_majlis_diplomat',icon: '🥂', title: 'Penyamaran Di Majlis Gala Diplomatik', desc: 'Pikat sasaran dengan karisma dan curi kod akses secara senyap.', m1: 6, m2: 11, looks: 3, smarts: 3, foreignMission: true },
+        { id: 'spy_sabotaj_senjata',icon: '💣', title: 'Sabotaj Kilang Senjata Haram', desc: 'Lumpuhkan rangkaian penyeludupan senjata sebelum sampai ke pasaran gelap.', m1: -4, m2: 14, karma: 12, rep: 4, stress: 9, foreignMission: true },
+        { id: 'spy_audit_kesetiaan',icon: '🧪', title: 'Lulus Ujian Poligraf & Penilaian Agensi', desc: 'Buktikan kesetiaan mutlak anda kepada ibu pejabat risikan.', m1: 8, m2: 12, stress: 6 },
+        { id: 'spy_rekod_palsu',    icon: '🪪', title: 'Bina Rangkaian Rumah Selamat (Safe House)', desc: 'Sediakan pasport kecemasan dan lokasi persembunyian di benua berbeza.', m1: 12, m2: 5, moneyUsd: -12000, foreignMission: true },
+        { id: 'spy_bongkar_tahi',   icon: '🔎', title: 'Bongkar Pengkhianat Di Dalam Ibu Pejabat', desc: 'Tangkap ejen musuh yang menyusup ke dalam bilik kawalan agensi.', m1: 6, m2: 16, smarts: 5, karma: 8 },
+        { id: 'spy_gajet_rahsia',   icon: '⌚', title: 'Uji Gajet Prototaip Makmal Q-Branch', desc: 'Kuasai jam laser, dron mikro dan peranti penyamaran generasi baharu.', m1: 9, m2: 7, smarts: 5, happiness: 5 },
+        { id: 'spy_rare_krisis_dunia',icon:'☢️', isRare: true, title: '🌟 OPERASI OMEGA: Hentikan Krisis Serangan Siber Global!', desc: 'PELUANG EMAS: Hanya anda berada di lokasi sasaran untuk menyelamatkan jutaan nyawa!', m1: 12, m2: 24, moneyUsd: 110000, karma: 20, rep: 10, stress: 14, foreignMission: true }
+      ],
+      dilemmas: [
+        {
+          id: 'sp_spy_double', icon: '🐍', title: 'Dilema Perisik: Tawaran Ejen Berkembar Di Negara Asing!',
+          text: 'Ketika menjalankan misi sulit di luar negara, ketua risikan musuh mengepung hotel anda — tetapi bukannya menangkap anda, dia menawarkan wang rahsia gergasi untuk maklumat agensi anda.',
+          choices: [
+            { label: 'Berpura-pura setuju & salurkan maklumat palsu kepada mereka!', hint: 'Kepercayaan Agensi +++, Kerahsiaan ++, Kepintaran ++', m1: 12, m2: 16, smarts: 6, karma: 10, outcome: 'Helah berganda anda memperdaya seluruh agensi musuh! Pengarah memuji kebijaksanaan anda.' },
+            { label: 'Lawan jalan keluar & hubungi pasukan ekstraksi kecemasan', hint: 'Kepercayaan ++, Kesihatan -, Kerahsiaan -', m1: -8, m2: 12, health: -10, stress: 10, outcome: 'Anda berjaya lolos dengan aksi mendebarkan melalui bumbung bangunan!' },
+            { label: 'Terima bayaran & jual maklumat sulit agensi sendiri', hint: 'Wang +++, tetapi Kerahsiaan --, Kepercayaan --- & tanda Ejen Berkembar!', moneyUsd: 120000, m1: -16, m2: -22, karma: -26, flag: 'double_agent', outcome: 'Wang besar masuk ke akaun rahsia, tetapi anda kini hidup dalam ketakutan diburu kedua-dua pihak!' }
+          ]
+        },
+        {
+          id: 'sp_spy_cover_blown', icon: '📸', title: 'Wajah Anda Dirakam Kamera Keselamatan Lapangan Terbang!',
+          text: 'Seorang ejen pesaing hampir mengecam identiti sebenar anda semasa pemeriksaan transit antarabangsa.',
+          choices: [
+            { label: 'Aktifkan protokol identiti kecemasan & lenyap di celah orang ramai', hint: 'Kerahsiaan ++, Stres +', m1: 14, m2: 6, smarts: 4, stress: 8, outcome: 'Anda menukar penampilan dalam 90 saat dan hilang tanpa dikesan!' },
+            { label: 'Minta unit siber ibu pejabat memadam rakaman CCTV secara langsung', hint: 'Kerahsiaan +, Kepercayaan +, selamat', m1: 10, m2: 8, outcome: 'Semua rakaman terpadam dalam beberapa saat — identiti anda kekal selamat.' },
+            { label: 'Bersemuka & umpan ejen pesaing itu ke perangkap polis tempatan', hint: 'Kepercayaan ++, Kerahsiaan -, risiko', m1: -6, m2: 14, notoriety: 6, outcome: 'Pesaing anda ditahan pihak berkuasa tempatan manakala anda meneruskan misi!' }
+          ]
+        },
+        {
+          id: 'sp_spy_family_lie', icon: '🏠', title: 'Keluarga Mula Curiga Dengan "Kerja Konsultan" Anda!',
+          text: 'Kekerapan anda hilang tanpa berita membuatkan keluarga mengesyaki anda terlibat dengan sesuatu yang berbahaya.',
+          choices: [
+            { label: 'Cipta cerita lindungan meyakinkan dengan bantuan HR palsu agensi', hint: 'Kerahsiaan ++, Gembira +', m1: 12, m2: 6, happiness: 6, outcome: 'Keluarga anda lega dan menyangka anda hanyalah juruaudit antarabangsa yang sibuk.' },
+            { label: 'Ambil cuti singkat bersama keluarga untuk tenangkan hati mereka', hint: 'Gembira ++, Stres --, Kepercayaan -3', m1: 4, m2: -3, happiness: 14, stress: -12, outcome: 'Momen bersama keluarga memulihkan jiwa anda walaupun misi ditangguh seketika.' },
+            { label: 'Beritahu separuh kebenaran kepada pasangan', hint: 'Gembira +, tetapi Kerahsiaan --- & Kepercayaan --', m1: -18, m2: -12, happiness: 8, outcome: 'Pasangan anda terkejut — agensi memberi amaran keras tentang pelanggaran kerahsiaan!' }
+          ]
+        },
+        {
+          id: 'sp_spy_rogue_target', icon: '🎯', title: 'Arahan Senyap Terhadap Sasaran Yang Rupanya Tidak Bersalah!',
+          text: 'Fail risikan lapangan membuktikan sasaran yang diarahkan untuk ditangkap sebenarnya seorang pemberi maklumat yang cuba mendedahkan rasuah.',
+          choices: [
+            { label: 'Lindungi dia & serahkan bukti sebenar kepada Pengarah Risikan', hint: 'Karma +++, Kepercayaan ++, Reputasi +', m1: 4, m2: 14, karma: 18, rep: 6, outcome: 'Keberanian moral anda membongkar konspirasi dalaman dan menyelamatkan insan tidak bersalah!' },
+            { label: 'Bantu dia melarikan diri dengan identiti baharu secara rahsia', hint: 'Karma ++, tetapi Kepercayaan Agensi --', m1: 6, m2: -12, karma: 14, outcome: 'Dia terselamat, namun ibu pejabat mempertikaikan kegagalan tangkapan anda.' },
+            { label: 'Patuhi arahan tanpa soal demi rekod sempurna', hint: 'Kepercayaan ++, tetapi Karma --- & Stres ++', m1: 4, m2: 12, karma: -20, stress: 14, outcome: 'Misi dicatat berjaya, tetapi rasa bersalah menghantui fikiran anda.' }
+          ]
+        }
+      ]
+    },
+
+    // ========================================================================
+    // 9. KERABAT DIRAJA / ROYALTY
+    // ========================================================================
+    royalty: {
+      id: 'royalty',
+      icon: '👑',
+      title: 'Kerabat Diraja / Royalty',
+      shortLabel: 'Diraja',
+      minAge: 18,
+      maxAge: 65,
+      offerHeadline: 'Jemputan Istana & Ikatan Kerabat Diraja!',
+      offerPitch: 'Karisma dan reputasi anda memikat perhatian kalangan istana! Anda dijemput menyertai lingkungan rasmi Kerabat Diraja — kehidupan penuh kemewahan, protokol ketat, dan tanggungjawab terhadap negara!',
+      metric1: { label: 'Restu Istana & Rakyat', icon: '👑', init: 62, dangerHigh: false },
+      metric2: { label: 'Elaun Diraja',          icon: '💰', init: 60, dangerHigh: false },
+      ranks: [
+        { title: 'Kerabat Muda / Pasangan Diraja', annualUsd: 140000, reqYears: 0, reqM1: 0,  prefix: 'YM' },
+        { title: 'Putera / Puteri',                annualUsd: 280000, reqYears: 3, reqM1: 64, prefix: 'YAM' },
+        { title: 'Pewaris Takhta',                 annualUsd: 480000, reqYears: 7, reqM1: 76, prefix: 'DYTM' },
+        { title: 'Raja / Sultan / Ketua Diraja',   annualUsd: 850000, reqYears: 12, reqM1: 88, prefix: 'DYMM' }
+      ],
+      exitWarning: 'BUANG GELARAN DIRAJA (RENOUNCE TITLE): Anda akan kehilangan Elaun Diraja & segala keistimewaan istana SELAMANYA, hubungan keluarga diraja retak, dan badai media global akan tercetus (sama ada dipuji berani ATAU Reputasi Keluarga merosot!). Mod Diraja dikunci SELAMANYA.',
+      actions: [
+        { id: 'roy_santapan_rakyat', icon: '🤝', title: 'Lawatan Mesra Rakyat & Kampung Pedalaman', desc: 'Mencemar duli menziarahi rakyat jelata serta menghulurkan sumbangan.', m1: 13, m2: 3, karma: 12, fame: 10, rep: 8 },
+        { id: 'roy_yayasan_amal',    icon: '🏥', title: 'Lancar Yayasan Kesihatan & Biasiswa Diraja', desc: 'Biayai hospital kanak-kanak dan pendidikan anak kurang berkemampuan.', m1: 14, m2: -2, moneyUsd: -25000, karma: 15, rep: 10 },
+        { id: 'roy_majlis_istiadat', icon: '🏰', title: 'Hadir Istiadat Rasmi & Jamuan Negara', desc: 'Tampilkan adab, wibawa dan protokol diraja di hadapan duta asing.', m1: 10, m2: 8, fame: 10, looks: 3, stress: 5 },
+        { id: 'roy_diplomasi_raja',  icon: '✈️', title: 'Lawatan Rasmi Ke Istana Negara Sahabat', desc: 'Kukuhkan hubungan diplomatik antara monarki dan ketua negara dunia.', m1: 11, m2: 9, fame: 12, rep: 7, smarts: 3 },
+        { id: 'roy_urus_hartanah',   icon: '🏛️', title: 'Selia Portfolio Harta & Amanah Diraja', desc: 'Optimumkan hasil ladang, pelaburan berdaulat dan elaun rasmi istana.', m1: 4, m2: 14, moneyUsd: 45000, smarts: 4 },
+        { id: 'roy_sukan_polo',      icon: '🐎', title: 'Kejohanan Polo & Ekuestrian Amal Diraja', desc: 'Sertai sukan tradisi bangsawan sambil mengumpul dana kebajikan.', m1: 8, m2: 5, health: 6, fame: 8, happiness: 8 },
+        { id: 'roy_warisan_budaya',  icon: '🎭', title: 'Naungi Seni, Muzium & Warisan Bangsa', desc: 'Pelihara khazanah sejarah dan seni kraf tradisional negara.', m1: 9, m2: 4, karma: 8, rep: 6, happiness: 6 },
+        { id: 'roy_titah_nasional',  icon: '📜', title: 'Titah Khas Perpaduan Nasional', desc: 'Sampaikan amanat penyatuan yang menenangkan ketegangan masyarakat.', m1: 15, m2: 6, fame: 14, rep: 9, karma: 10 },
+        { id: 'roy_beli_istana_mini',icon: '💎', title: 'Anjur Pesta Mewah Tertutup Bangsawan', desc: 'Nikmati kemewahan kelas pertama — namun awas kritikan rakyat jika berlebihan.', m1: -8, m2: 6, happiness: 14, moneyUsd: -18000, fame: 6 },
+        { id: 'roy_bantuan_bencana', icon: '🌧️', title: 'Gerakkan Tabung Kecemasan Diraja', desc: 'Salurkan helikopter dan bekalan makanan terus ke kawasan banjir.', m1: 14, m2: 4, karma: 14, rep: 8, health: -2 },
+        { id: 'roy_pendidikan_elit', icon: '🎓', title: 'Latihan Kepimpinan & Bahasa Diplomatik', desc: 'Kuasai etiket antarabangsa, sejarah perlembagaan dan rundingan.', m1: 7, m2: 5, smarts: 7 },
+        { id: 'roy_rare_pertabalan', icon: '👑', isRare: true, title: '🌟 JUBLI EMAS DIRAJA: Sambutan Mega Seluruh Negara!', desc: 'PELUANG EMAS: Perarakan bersejarah yang disiarkan ke seluruh dunia menaikkan darjat anda!', m1: 22, m2: 16, fame: 25, rep: 14, happiness: 15 }
+      ],
+      dilemmas: [
+        {
+          id: 'sp_roy_paparazzi', icon: '📸', title: 'Dilema Istana: Foto Percutian Peribadi Bocor Ke Tabloid!',
+          text: 'Paparazi merakam gambar santai anda di sebuah pulau mewah ketika ekonomi negara sedang perlahan, mencetuskan perdebatan di media sosial.',
+          choices: [
+            { label: 'Akui kesilapan, potong 20% elaun tahun ini & derma kepada rakyat', hint: 'Restu Rakyat +++, Karma ++, Elaun -8', m1: 16, m2: -8, karma: 16, rep: 10, outcome: 'Kerendahan hati anda menukar kritikan menjadi pujian meluas di seluruh negara!' },
+            { label: 'Keluarkan kenyataan rasmi tenang melalui Pejabat Istana', hint: 'Restu +, protokol terjaga', m1: 6, m2: 2, rep: 2, outcome: 'Isu reda secara profesional dalam masa beberapa hari.' },
+            { label: 'Saman media tabloid & biarkan kritikan berlalu', hint: 'Elaun +, tetapi Restu Rakyat --', m1: -10, m2: 6, happiness: -4, rep: -5, outcome: 'Anda menang saman privasi tetapi sebahagian rakyat masih kurang senang.' }
+          ]
+        },
+        {
+          id: 'sp_roy_protocol', icon: '📜', title: 'Protokol Tradisi Vs Pilihan Hati Moden!',
+          text: 'Majlis Penasihat Istana membantah rancangan anda untuk memodenkan adat istiadat rasmi agar lebih dekat dengan generasi muda.',
+          choices: [
+            { label: 'Gabungkan keagungan tradisi dengan pendekatan digital moden', hint: 'Restu +++, Elaun ++, Kepintaran ++', m1: 14, m2: 8, smarts: 5, fame: 12, outcome: 'Golongan tua dan muda sama-sama terpikat dengan kebijaksanaan pembaharuan anda!' },
+            { label: 'Kekalkan protokol tradisi 100% demi menghormati majlis', hint: 'Elaun ++, Restu Istana +, selamat', m1: 6, m2: 10, rep: 4, outcome: 'Majlis Penasihat Istana amat berpuas hati dan menaikkan peruntukan anda.' },
+            { label: 'Langgar protokol secara terbuka demi kebebasan diri', hint: 'Populariti ++, Gembira ++, tetapi Restu Istana -- & Elaun --', m1: -8, m2: -12, fame: 16, happiness: 12, outcome: 'Media dunia memuji keberanian anda, tetapi suasana di istana menjadi tegang.' }
+          ]
+        },
+        {
+          id: 'sp_roy_allowance_debate', icon: '💰', title: 'Perbahasan Awam Mengenai Bajet Istana!',
+          text: 'Sekumpulan aktivis mempersoalkan kos penyelenggaraan istana dan mencadangkan pengurangan elaun diraja.',
+          choices: [
+            { label: 'Buka sebahagian istana sebagai muzium pelancongan untuk jana hasil negara', hint: 'Restu +++, Elaun ++, Reputasi +++', m1: 16, m2: 10, rep: 10, smarts: 5, outcome: 'Pelancong membanjiri istana — hasil tiket melebihi kos penyelenggaraan!' },
+            { label: 'Bentangkan laporan audit telus sumbangan amal diraja', hint: 'Restu ++, Karma +', m1: 10, m2: 4, karma: 8, outcome: 'Rakyat terkejut melihat besarnya dana kebajikan yang telah disalurkan istana.' },
+            { label: 'Pertahankan peruntukan sedia ada melalui saluran rasmi', hint: 'Elaun +, tetapi Restu -5', m1: -5, m2: 6, outcome: 'Elaun dikekalkan, namun sentimen media sosial kekal berbelah bahagi.' }
+          ]
+        },
+        {
+          id: 'sp_roy_heir_duty', icon: '👑', title: 'Krisis Politik Negara — Rakyat Memandang Ke Arah Istana!',
+          text: 'Kebuntuan politik berlaku dan semua pihak menantikan nasihat bijaksana serta ketenangan daripada keluarga diraja.',
+          choices: [
+            { label: 'Panggil semua pemimpin bermesyuarat & serukan perpaduan adil', hint: 'Restu +++, Reputasi +++, Karma +++', m1: 18, m2: 10, karma: 18, rep: 12, fame: 16, outcome: 'Kebijaksanaan anda meredakan krisis negara dan tercatat dalam buku sejarah!' },
+            { label: 'Kekal berkecuali sepenuhnya & serahkan kepada perlembagaan', hint: 'Restu ++, selamat', m1: 9, m2: 4, karma: 6, outcome: 'Sikap berkecuali anda dihormati sebagai lambang kestabilan negara.' }
+          ]
+        }
+      ]
+    },
+
+    // ========================================================================
+    // 10. PENGEMBARA & PEMBURU REKOD DUNIA
+    // ========================================================================
+    explorer: {
+      id: 'explorer',
+      icon: '🧭',
+      title: 'Pengembara & Pemburu Rekod Dunia',
+      shortLabel: 'Pengembara',
+      minAge: 18,
+      maxAge: 70,
+      offerHeadline: 'Tajaan Ekspedisi Penjelajahan 195 Negara!',
+      offerPitch: 'Semangat kembara dan ketahanan anda memikat saluran dokumentari antarabangsa! Mereka menaja misi seumur hidup anda untuk menjelajah 7 benua, menawan 195 negara, dan memburu pengiktirafan Legenda Dunia / Hadiah Nobel!',
+      metric1: { label: 'Negara Diterokai', icon: '🌍', init: 10, dangerHigh: false },
+      metric2: { label: 'Prestij Global',   icon: '🏆', init: 42, dangerHigh: false },
+      ranks: [
+        { title: 'Penjelajah Bebas',                  annualUsd: 46000,  reqYears: 0, reqM1: 0,  prefix: '' },
+        { title: 'Dokumentaris Dunia',                annualUsd: 110000, reqYears: 2, reqM1: 25, prefix: '' },
+        { title: 'Penakluk 7 Benua',                  annualUsd: 210000, reqYears: 5, reqM1: 50, prefix: '' },
+        { title: 'Legenda Dunia / Calon Hadiah Nobel',annualUsd: 380000, reqYears: 9, reqM1: 75, prefix: '' }
+      ],
+      exitWarning: 'Keluar daripada Mod Pengembara akan mengenakan penalti pecah kontrak penaja ekspedisi, membatalkan semua geran penyelidikan, dan MELUCUTKAN KELAYAKAN Hadiah Nobel / Legenda Dunia SELAMANYA bagi watak ini! Mod Pengembara akan dikunci SELAMANYA.',
+      actions: [
+        { id: 'exp_jelajah_negara',  icon: '✈️', title: 'Ekspedisi Rasmi Ke Negara Baharu', desc: 'Terokai budaya, geografi dan komuniti di negara yang belum pernah anda jejak.', m1: 8, m2: 9, happiness: 8, smarts: 4, exploreCountries: 2 },
+        { id: 'exp_jelajah_serantau',icon: '🗺️', title: 'Jelajah Rentas Sempadan 3 Negara Sekaligus', desc: 'Kembara darat merentasi 3 negara berjiran sambil merakam dokumentari.', m1: 12, m2: 11, health: -3, fame: 8, exploreCountries: 3 },
+        { id: 'exp_puncak_gunung',   icon: '🏔️', title: 'Daki Puncak Tertinggi Benua', desc: 'Tawan puncak bersalji ekstrem untuk mencipta rekod dunia baharu.', m1: 5, m2: 14, health: 5, fame: 12, rep: 6, stress: 7, exploreCountries: 1 },
+        { id: 'exp_rakam_dokumen',   icon: '🎥', title: 'Terbit Dokumentari Eksklusif National Globe', desc: 'Kongsi rakaman flora, fauna dan sejarah dunia kepada jutaan penonton.', m1: 3, m2: 13, moneyUsd: 36000, fame: 14, followers: 22000 },
+        { id: 'exp_selam_lautan',    icon: '🤿', title: 'Ekspedisi Penyelaman Jurang Laut Dalam', desc: 'Kumpul sampel spesies marin nadir bersama saintis oseanografi.', m1: 4, m2: 13, smarts: 6, karma: 6, exploreCountries: 1 },
+        { id: 'exp_hutan_amazon',    icon: '🌿', title: 'Penyelidikan Ekosistem Hutan Hujan Dara', desc: 'Temui spesies tumbuhan perubatan dan dokumentasikan usaha pemuliharaan.', m1: 5, m2: 12, karma: 10, smarts: 5, rep: 5, exploreCountries: 1 },
+        { id: 'exp_kutub_selatan',   icon: '🧊', title: 'Rentas Gurun Ais Antartika / Artik', desc: 'Kaji perubahan iklim global dalam suhu bawah -40°C.', m1: 4, m2: 15, health: -5, fame: 12, karma: 10, rep: 8 },
+        { id: 'exp_ceramah_ted',     icon: '🎤', title: 'Syarahan Global & Pameran Fotografi Dunia', desc: 'Inspirasi universiti antarabangsa dengan kisah kembara anda.', m1: 0, m2: 11, moneyUsd: 28000, fame: 10, smarts: 4 },
+        { id: 'exp_tajaan_jenama',   icon: '🎒', title: 'Tandatangan Penajaan Peralatan Ekspedisi', desc: 'Dapatkan geran kewangan dan kelengkapan kembara canggih percuma.', m1: 0, m2: 6, moneyUsd: 42000, fame: 6 },
+        { id: 'exp_buku_atlas',      icon: '📚', title: 'Tulis Buku Best-Seller "195 Wajah Dunia"', desc: 'Abadikan pengalaman budaya setiap negara yang telah anda jelajahi.', m1: 2, m2: 12, moneyUsd: 38000, fame: 12, smarts: 5 },
+        { id: 'exp_rekod_guinness',  icon: '🏅', title: 'Pecahkan Rekod Dunia Ketahanan Kembara', desc: 'Catat rekod rasmi baharu merentasi lautan atau gurun Sahara.', m1: 6, m2: 15, fame: 14, health: -4, rep: 7, exploreCountries: 2 },
+        { id: 'exp_misi_kemanusiaan',icon: '🤝', title: 'Bawa Bekalan Air Bersih Ke Wilayah Terpencil', desc: 'Gabungkan ekspedisi sains dengan misi kemanusiaan bertaraf Nobel.', m1: 4, m2: 14, karma: 16, rep: 10, exploreCountries: 1 },
+        { id: 'exp_rare_penemuan',   icon: '🏺', isRare: true, title: '🌟 PENEMUAN BERSEJARAH: Kota Purba & Pencalonan Hadiah Nobel!', desc: 'PELUANG EMAS: Penemuan arkeologi & iklim anda menggegarkan seluruh dunia sains!', m1: 10, m2: 26, moneyUsd: 130000, fame: 26, rep: 16, karma: 14, smarts: 8, exploreCountries: 3 }
+      ],
+      dilemmas: [
+        {
+          id: 'sp_exp_blizzard', icon: '🌨️', title: 'Dilema Ekspedisi: Ribut Salji Mengganas 300 Meter Dari Puncak!',
+          text: 'Oksigen semakin tipis dan ribut salji tiba-tiba melanda. Anda hanya 300 meter daripada mencipta rekod dunia, tetapi ahli pasukan mula keletihan.',
+          choices: [
+            { label: 'Batalkan pendakian & selamatkan semua ahli pasukan turun dahulu!', hint: 'Karma +++, Reputasi ++, Prestij +, selamat', m1: 2, m2: 10, karma: 18, rep: 10, health: 4, outcome: 'Kepimpinan berjiwa besar anda dipuji komuniti pendaki dunia — semua pulang selamat!' },
+            { label: 'Berlindung di khemah kecemasan & cuba puncak selepas ribut reda', hint: 'Prestij +++, Kepintaran ++, Kesihatan -6', m1: 5, m2: 18, smarts: 5, health: -6, fame: 14, exploreCountries: 1, outcome: 'Kesabaran taktikal anda membuahkan hasil — bendera anda berkibar di puncak!' },
+            { label: 'Redah ribut seorang diri demi rekod dunia!', hint: 'Prestij +++, tetapi Kesihatan --- & risiko cedera parah', m1: 5, m2: 20, health: -20, fame: 18, karma: -8, outcome: 'Anda mencipta rekod yang mustahil, namun jari anda hampir beku dan terpaksa diterbangkan ke hospital!' }
+          ]
+        },
+        {
+          id: 'sp_exp_artifact', icon: '🏺', title: 'Penemuan Artifak Emas Purba Di Gua Terpencil!',
+          text: 'Pasukan anda menemui artifak tamadun hilang. Pengumpul persendirian menawarkan jutaan secara rahsia, manakala muzium tempatan mahu memuliharanya.',
+          choices: [
+            { label: 'Serahkan 100% kepada muzium negara tuan rumah secara rasmi!', hint: 'Prestij +++, Karma +++, Reputasi Keluarga +++', m1: 4, m2: 18, karma: 20, rep: 14, fame: 16, outcome: 'Anda dianugerahkan pingat penghormatan negara dan semakin hampir dengan pencalonan Nobel!' },
+            { label: 'Bekerjasama dengan universiti antarabangsa untuk pameran jelajah dunia', hint: 'Prestij ++, Wang ++, Kepintaran ++', m1: 4, m2: 14, moneyUsd: 45000, smarts: 6, fame: 12, outcome: 'Pameran jelajah dunia menaikkan nama anda sebagai penyelidik terkemuka!' },
+            { label: 'Jual satu kepingan kecil secara rahsia untuk tampung dana ekspedisi', hint: 'Wang +++, tetapi Karma --- & risiko skandal', moneyUsd: 95000, m1: 0, m2: -10, karma: -22, rep: -8, outcome: 'Dana ekspedisi penuh, namun komuniti arkeologi mula mempertikaikan etika anda.' }
+          ]
+        },
+        {
+          id: 'sp_exp_nobel_forum', icon: '🏅', title: 'Jemputan Forum Sains & Hadiah Nobel Di Stockholm!',
+          text: 'Rekod penjelajahan dan data perubahan iklim anda dari puluhan negara menarik perhatian jawatankuasa antarabangsa.',
+          choices: [
+            { label: 'Buka semua data penyelidikan anda secara percuma kepada dunia!', hint: 'Prestij +++, Karma +++, Reputasi +++, Calon Nobel!', m1: 4, m2: 22, karma: 20, rep: 15, fame: 20, smarts: 6, outcome: 'Tindakan terbuka anda mencetuskan tepukan gemuruh berdiri — nama anda tersenarai dalam calon utama Hadiah Nobel!' },
+            { label: 'Patenkan data & jual lesen kepada syarikat teknologi hijau', hint: 'Wang +++, Prestij +', moneyUsd: 110000, m1: 2, m2: 8, smarts: 4, outcome: 'Anda meraih kekayaan besar untuk membiayai lebih banyak ekspedisi masa depan.' }
+          ]
+        },
+        {
+          id: 'sp_exp_sponsor_clash', icon: '📺', title: 'Penaja Mahu Anda Memalsukan Aksi Bahaya Demi Rating!',
+          text: 'Penerbit TV mahu anda melakonkan adegan "sesat di gurun" supaya tontonan melonjak.',
+          choices: [
+            { label: 'Tolak tegas — dokumentari anda mesti 100% asli dan jujur!', hint: 'Prestij ++, Karma ++, Reputasi +', m1: 4, m2: 12, karma: 12, rep: 8, outcome: 'Keaslian anda membuatkan penonton lebih menghormati integriti setiap episod!' },
+            { label: 'Setuju untuk sedikit drama demi tambahan bajet ekspedisi', hint: 'Wang ++, Populariti +, tetapi Prestij -6', moneyUsd: 48000, m1: 2, m2: -6, fame: 10, karma: -8, outcome: 'Tontonan melonjak tinggi, namun pengkritik menyedari beberapa babak kelihatan dirancang.' }
           ]
         }
       ]

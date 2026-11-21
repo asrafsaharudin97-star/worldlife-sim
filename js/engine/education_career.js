@@ -6,6 +6,23 @@
 
 window.EduCareerEngine = {
   MAX_MARKET_REFRESHES: 2,
+  MAX_APPLICATIONS_YEAR: 5,
+
+  // 12 Senario Penolakan / Ghosting HR Realistik (Tahap 1: Saringan CV)
+  REJECTION_SCENARIOS: [
+    'HR langsung tidak membalas e-mel atau panggilan anda (kena ghosted sepenuhnya!).',
+    'Syarikat mahukan 5 tahun pengalaman kerja walaupun ini hanyalah jawatan junior.',
+    'Syarikat mengumumkan pembekuan pengambilan pekerja (hiring freeze) pada saat akhir.',
+    'Lebih 400+ pemohon lain menghantar CV — permohonan anda tenggelam di dalam sistem ATS.',
+    'HR menyatakan anda "terlalu berkelayakan (overqualified)" untuk bajet gaji jawatan ini.',
+    'Jawatan ini rupa-rupanya telah diisi oleh calon dalaman melalui kabel pengurusan.',
+    'E-mel automatik tiba selepas 3 minggu: "Kami telah memilih calon yang lebih sepadan."',
+    'Bajet jabatan dibekukan secara mengejut akibat penyusunan semula syarikat.',
+    'Pengurus pengambilan pekerja membatalkan kekosongan jawatan selepas anda mengisi borang 10 muka surat.',
+    'HR mendakwa jurang pengalaman anda tidak menepati skop tugasan spesifik mereka.',
+    'Tiada sebarang maklum balas selepas ujian saringan dalam talian selama 2 jam.',
+    'Syarikat mengurangkan jumlah pengambilan tahun ini kerana persaingan pasaran kerja yang sangat sengit.'
+  ],
 
   // --------------------------------------------------------------------------
   // 1. PENYELARASAN MEDAN KEADAAN WATAK (SERASI DENGAN SAVE LAMA)
@@ -57,12 +74,16 @@ window.EduCareerEngine = {
         openings: [],
         recentJobIds: [],
         refreshesLeft: this.MAX_MARKET_REFRESHES,
+        applicationsLeft: this.MAX_APPLICATIONS_YEAR,
+        appliedJobIdsThisYear: [],
         lastMarketYear: -1
       };
     }
     if (!Array.isArray(s.careerMarket.openings)) s.careerMarket.openings = [];
     if (!Array.isArray(s.careerMarket.recentJobIds)) s.careerMarket.recentJobIds = [];
     if (typeof s.careerMarket.refreshesLeft !== 'number') s.careerMarket.refreshesLeft = this.MAX_MARKET_REFRESHES;
+    if (typeof s.careerMarket.applicationsLeft !== 'number') s.careerMarket.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
+    if (!Array.isArray(s.careerMarket.appliedJobIdsThisYear)) s.careerMarket.appliedJobIdsThisYear = [];
   },
 
   // Paparkan gelaran "Dr." pada nama watak yang telah menamatkan PhD
@@ -476,6 +497,8 @@ window.EduCareerEngine = {
 
     if (!opts.isRefresh) {
       cm.refreshesLeft = this.MAX_MARKET_REFRESHES;
+      cm.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
+      cm.appliedJobIdsThisYear = [];
       cm.lastMarketYear = s.year;
       if (cm.openings.length > 0) {
         cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 24);
@@ -532,10 +555,99 @@ window.EduCareerEngine = {
   },
 
   // --------------------------------------------------------------------------
-  // 5. SEMAKAN KELAYAKAN, TEMU DUGA KERJA & KENAIKAN PANGKAT
+  // 5. KUNCI PERANAN KETAT ("WAJIB LETAK JAWATAN DAHULU") & SARINGAN CV REALISTIK
   // --------------------------------------------------------------------------
+  getActiveRoleLock(s) {
+    if (!s) return { locked: false, roleName: '', type: null };
+    if (s.activeSpecialMode && window.SpecialModesEngine) {
+      const info = SpecialModesEngine.getActiveInfo(s);
+      if (info) {
+        return {
+          locked: true,
+          roleName: `${info.rank.title} (${info.def.title})`,
+          shortName: info.def.shortLabel,
+          type: 'special_mode'
+        };
+      }
+    }
+    if (s.job) {
+      return {
+        locked: true,
+        roleName: s.job.title,
+        shortName: s.job.title,
+        type: 'job'
+      };
+    }
+    return { locked: false, roleName: '', type: null };
+  },
+
+  calculateScreeningChance(s, career) {
+    this.ensureFields(s);
+    const ed = s.education;
+    // Peluang asas mengikut peringkat jawatan (TIDAK PERNAH 100%)
+    let base;
+    if (career.isRare || career.baseSalary >= 80000 || career.minEducation === 'phd' || career.minEducation === 'master') {
+      base = Utils.randInt(10, 25); // Senior / Elit / Nadir: 10–25%
+    } else if (career.minEducation !== 'none' || career.baseSalary >= 38000) {
+      base = Utils.randInt(22, 38); // Pertengahan / Profesional: 22–38%
+    } else {
+      base = Utils.randInt(40, 55); // Peringkat Permulaan (Entry-Level): 40–55%
+    }
+
+    let mod = 0;
+
+    // 1) Ijazah / PhD / Bidang Sepadan (+10% hingga +15%)
+    const lvlRank = EducationData.levelRank(ed.educationLevel);
+    const reqRank = EducationData.levelRank(career.minEducation);
+    if (this.isCareerFieldMatched(s, career) && lvlRank >= 2) {
+      mod += (lvlRank >= 4 || lvlRank > reqRank) ? 15 : 10;
+    }
+
+    // 2) Sijil Profesional Sepadan (+8% hingga +12%)
+    const certs = ed.certificates || [];
+    const matchedCerts = (career.preferredCerts || []).filter(cid => certs.includes(cid));
+    if (matchedCerts.length > 0) {
+      mod += matchedCerts.length >= 2 ? 12 : 8;
+    }
+
+    // 3) Kepintaran / Rupa / Pengalaman Tinggi (+5% hingga +12%)
+    let statBoost = 0;
+    if (s.stats.smarts >= 75) statBoost += 5;
+    if (s.stats.smarts >= 90) statBoost += 3;
+    if (s.stats.looks >= 75) statBoost += 2;
+    if ((s.age - 18) >= 6) statBoost += 2;
+    mod += Math.min(12, statBoost);
+
+    // 4) Kemelesetan Ekonomi / Trend Pasaran Menurun (-15%)
+    const mktTrend = (s.assetMarket && s.assetMarket.trend) || '';
+    if (['recession', 'crash', 'bear', 'downturn'].includes(mktTrend)) {
+      mod -= 15;
+    }
+
+    // 5) Reputasi Keluarga Tercemar atau Rekod Jenayah (-15% hingga -40%)
+    const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
+    let penalty = 0;
+    if ((s.criminalRecord || 0) > 0 && !hasCleanId) {
+      penalty += Math.min(35, 15 + (s.criminalRecord * 8));
+    }
+    if (window.Dynasty && Dynasty.getFamilyReputation && Dynasty.getFamilyReputation() < 30) {
+      penalty += 15;
+    }
+    mod -= Math.min(40, penalty);
+
+    // Had ketat antara 5% minimum hingga 85% maksimum
+    return Utils.clamp(base + mod, 5, 85);
+  },
+
   checkJobEligibility(s, career) {
     this.ensureFields(s);
+    const roleLock = this.getActiveRoleLock(s);
+    if (roleLock.locked) {
+      return {
+        ok: false,
+        msg: `🔒 Anda sedang memegang jawatan ${roleLock.roleName}. Anda mesti letak jawatan atau keluar daripada mod semasa terlebih dahulu sebelum boleh memohon pekerjaan lain.`
+      };
+    }
     if (s.prison && s.prison.inPrison) {
       return { ok: false, msg: '⛓️ Anda berada di dalam penjara dan tidak boleh memohon kerja biasa.' };
     }
@@ -561,6 +673,12 @@ window.EduCareerEngine = {
     if (s.education.activeStudy && s.education.activeStudy.mode === 'full_time') {
       return { ok: false, msg: 'Anda sedang belajar Sepenuh Masa! Tamatkan pengajian dahulu atau daftar Separuh Masa untuk bekerja.' };
     }
+    if (s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
+      return { ok: false, msg: '❌ Permohonan anda untuk jawatan ini telah ditolak / tiada maklum balas tahun ini.' };
+    }
+    if (s.careerMarket.applicationsLeft <= 0) {
+      return { ok: false, msg: '⏳ Kuota permohonan kerja tahun ini (5/5) telah habis! Cuba lagi tahun hadapan.' };
+    }
 
     if (!EducationData.hasMinLevel(s.education.educationLevel, career.minEducation)) {
       const req = EducationData.LEVEL_INFO[career.minEducation];
@@ -575,11 +693,6 @@ window.EduCareerEngine = {
       return { ok: false, msg: `Jawatan ini memerlukan bidang pengajian: ${fNames}.` };
     }
 
-    const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
-    if (s.criminalRecord > 0 && !hasCleanId && (career.industry === 'law_gov' || career.baseSalary >= 60000) && Utils.chance(0.6)) {
-      return { ok: false, msg: 'Semakan rekod latar belakang mengesan rekod jenayah anda.' };
-    }
-
     return { ok: true, msg: '' };
   },
 
@@ -592,52 +705,90 @@ window.EduCareerEngine = {
     const elig = this.checkJobEligibility(s, career);
     if (!elig.ok) return elig;
 
-    // Jawatan peringkat pertengahan / tinggi / nadir mencetuskan Modal Temu Duga Kerja!
-    const needsInterview = career.isRare || career.minEducation !== 'none' || career.baseSalary >= 40000;
-    if (needsInterview) {
+    // Tolak kuota permohonan tahunan (5/5)
+    s.careerMarket.applicationsLeft = Math.max(0, s.careerMarket.applicationsLeft - 1);
+
+    // TAHAP 1: SARINGAN CV BERPEMBERAT (5% – 85%, TIDAK PERNAH 100%)
+    const screeningPct = this.calculateScreeningChance(s, career);
+    const shortlisted = Utils.chance(screeningPct / 100);
+
+    if (!shortlisted) {
+      if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
+        s.careerMarket.appliedJobIdsThisYear.push(career.id);
+      }
+      const reason = Utils.pick(this.REJECTION_SCENARIOS);
+      const hapDip = Utils.randInt(2, 4);
+      GameState.adjustStats({ happiness: -hapDip });
+      GameState.addJournalEntry(
+        `📄 Permohonan ditolak (${career.title}): ${reason} (Gembira -${hapDip}%)`,
+        'warning'
+      );
+      GameState.save();
       return {
-        ok: true,
-        interviewEvent: this.buildInterviewEvent(s, career),
-        msg: `Dipanggil ke Temu Duga untuk ${career.title}!`
+        ok: false,
+        rejected: true,
+        screeningPct,
+        msg: `❌ Ditolak / Tiada Maklum Balas (${career.title}): ${reason}`
       };
     }
 
-    return this.hireCharacter(s, career, 20);
+    // TAHAP 2: LULUS SARINGAN CV -> BUKA MODAL TEMU DUGA KERJA KOMPETITIF!
+    GameState.save();
+    return {
+      ok: true,
+      screeningPct,
+      interviewEvent: this.buildInterviewEvent(s, career),
+      msg: `🎉 CV anda disenarai pendek untuk ${career.title}! Bersedia untuk Temu Duga Kerja.`
+    };
   },
 
   buildInterviewEvent(s, career) {
     const q = Utils.pick(CareersData.INTERVIEW_QUESTIONS);
     const salaryLocal = this.getCareerSalaryLocal(s, career, 0);
-    const certs = (s.education && s.education.certificates) || [];
-    let certInterviewBonus = 0;
-    (career.preferredCerts || []).forEach(cid => {
-      if (certs.includes(cid)) {
-        const co = EducationData.CERTIFICATES.find(x => x.id === cid);
-        certInterviewBonus += (co ? co.interviewBonus : 12);
-      }
-    });
-
     const shuffledOpts = [...q.options].sort(() => Math.random() - 0.5);
 
     return {
       id: `interview_${career.id}_${Date.now()}`,
       icon: career.icon,
-      title: `Temu Duga: ${career.title}`,
-      text: `${q.prompt}\n\n(Gaji ditawarkan: ${Utils.formatMoney(salaryLocal, s.countryId)}/thn${certInterviewBonus > 0 ? ` • Bonus Sijil +${certInterviewBonus}%!` : ''})`,
+      title: `Temu Duga Kerja: ${career.title}`,
+      text: `${q.prompt}\n\n(Gaji ditawarkan: ${Utils.formatMoney(salaryLocal, s.countryId)}/thn • Persaingan sengit dengan calon lain!)`,
       choices: shuffledOpts.map(opt => ({
         label: opt.label,
         hint: 'Jawapan temu duga',
         journalType: 'culture',
         customAction: () => {
-          const baseOdds = 52 + ((s.stats.smarts - 50) * 0.45) + ((s.stats.looks - 50) * 0.15) + certInterviewBonus + opt.bonus - (career.isRare ? 12 : 0);
-          const passed = Utils.chance(Utils.clamp(baseOdds, 12, 97) / 100);
-          if (passed) {
+          // Tahap 2 RNG Kompetitif (TIDAK PERNAH 100%):
+          // Jawapan Hebat = 65–80%, Sederhana = 25–40%, Lemah = 5–10%
+          let offerChance;
+          if (opt.bonus >= 15) {
+            offerChance = Utils.randInt(65, 80);
+          } else if (opt.bonus >= 0) {
+            offerChance = Utils.randInt(25, 40);
+          } else {
+            offerChance = Utils.randInt(5, 10);
+          }
+
+          const hired = Utils.chance(offerChance / 100);
+          if (hired) {
             const res = this.hireCharacter(s, career, opt.bonus);
             return { outcome: res.msg, toastType: 'success' };
           }
-          GameState.adjustStats({ happiness: -4 });
+
+          // Gagal temu duga: kunci jawatan untuk tahun ini + pelipur lara +1 Kepintaran sekali-sekala
+          if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
+            s.careerMarket.appliedJobIdsThisYear.push(career.id);
+          }
+          const learned = Utils.chance(0.45);
+          GameState.adjustStats({ happiness: -3, smarts: learned ? 1 : 0 });
+          const failReasons = [
+            `Panel temu duga berpuas hati dengan anda, tetapi syarikat memilih calon dalaman pada saat akhir untuk jawatan ${career.title}.`,
+            `Persaingan sangat ketat! Syarikat memilih calon lain yang menawarkan jangkaan gaji lebih rendah untuk ${career.title}.`,
+            `Selepas seminggu menunggu, HR memaklumkan posisi ${career.title} diberikan kepada calon yang mempunyai lebih banyak pengalaman.`
+          ];
+          const failMsg = Utils.pick(failReasons) + (learned ? ' Pengalaman temu duga tetap mengasah minda anda (Kepintaran +1%).' : '');
+          GameState.save();
           return {
-            outcome: `Panel penemu duga memilih calon lain untuk jawatan ${career.title}. Tingkatkan Kepintaran, Sijil atau cuba lagi!`,
+            outcome: failMsg,
             toastType: 'error'
           };
         }
@@ -669,16 +820,18 @@ window.EduCareerEngine = {
       countryId: s.countryId
     };
 
+    if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
+    if (window.Utils && Utils.playTone) Utils.playTone('achievement');
     GameState.addJournalEntry(
-      `💼 DITERIMA BEKERJA! Anda memulakan tugas sebagai ${rankTitle} di ${s.city}, ${c.name} dengan gaji ${Utils.formatMoney(salaryLocal, s.countryId)}/thn!`,
+      `🎉 TAWARAN KERJA DITERIMA! Anda rasmi memulakan tugas sebagai ${rankTitle} di ${s.city}, ${c.name} dengan gaji ${Utils.formatMoney(salaryLocal, s.countryId)}/thn!`,
       'milestone'
     );
-    GameState.adjustStats({ happiness: 12 });
+    GameState.adjustStats({ happiness: 14 });
     if (career.isRare && window.KarmaEndings) {
       KarmaEndings.addHighlight(career.icon, `Berjaya menyandang kerjaya nadir: ${rankTitle}`);
     }
     GameState.save();
-    return { ok: true, msg: `Tahniah! Anda diterima sebagai ${rankTitle} (${Utils.formatMoney(salaryLocal, s.countryId)}/thn)!` };
+    return { ok: true, msg: `🎉 TAHNIAH! Surat tawaran diterima — anda kini ${rankTitle} dengan gaji ${Utils.formatMoney(salaryLocal, s.countryId)}/thn!` };
   },
 
   networkAtWork() {

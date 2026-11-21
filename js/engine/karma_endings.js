@@ -102,6 +102,11 @@ window.KarmaEndings = {
     { id: 'fund_manager', name: 'Jerung Pasaran', icon: '📈' },
     { id: 'celebrity', name: 'Selebriti & Konten', icon: '🌟' },
     { id: 'athlete', name: 'Atlet Pro & E-Sukan', icon: '🏆' },
+    { id: 'mafia', name: 'Sindiket & Mafia', icon: '🕶️' },
+    { id: 'cult', name: 'Pertubuhan Rahsia / Kultus', icon: '🔮' },
+    { id: 'spy', name: 'Perisik Rahsia', icon: '🕵️' },
+    { id: 'royalty', name: 'Kerabat Diraja', icon: '👑' },
+    { id: 'explorer', name: 'Pengembara & Rekod Dunia', icon: '🧭' },
     { id: 'social', name: 'Laman Sosial / Viral', icon: '📱' }
   ],
 

@@ -212,6 +212,9 @@ window.GameState = {
     }
     this.current = state;
     this.ensureUpgradedState();
+    if (window.SpecialModesEngine && SpecialModesEngine.maybeGrantBirthRoyalty) {
+      SpecialModesEngine.maybeGrantBirthRoyalty(state);
+    }
     if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
       ActivitiesDeck.generateYearlyDeck(state);
     }

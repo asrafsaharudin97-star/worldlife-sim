@@ -106,26 +106,16 @@ window.CareerModals = {
             </span>
             <span class="ai-right">Rundingan</span>
           </button>
-          <button type="button" class="action-item" id="act-toggle-switch-job">
-            <span class="ai-icon">🔄</span>
-            <span class="ai-content">
-              <span class="ai-title">${this._browsingNewJob ? 'Tutup Senarai Tukar Kerja' : 'Tukar Kerja (Lihat Pasaran Kerja)'}</span>
-              <span class="ai-desc">Cari tawaran kerjaya baharu yang lebih lumayan</span>
-            </span>
-            <span class="ai-right">${this._browsingNewJob ? 'Tutup' : 'Teroka →'}</span>
-          </button>
           <button type="button" class="action-item" id="act-quit-job">
             <span class="ai-icon">🚪</span>
             <span class="ai-content">
-              <span class="ai-title">Berhenti Kerja</span>
-              <span class="ai-desc">Letak jawatan untuk rehat atau sambung belajar Sepenuh Masa</span>
+              <span class="ai-title">Letak Jawatan / Berhenti Kerja</span>
+              <span class="ai-desc">Wajib letak jawatan dahulu sebelum boleh memohon pekerjaan lain di Pasaran Kerja</span>
             </span>
-            <span class="ai-right cost">Berhenti</span>
+            <span class="ai-right cost">Letak Jawatan</span>
           </button>
         </div>
       `;
-
-      if (!this._browsingNewJob) return html;
     }
 
     if (s.age < 18) {
@@ -136,7 +126,10 @@ window.CareerModals = {
       EduCareerEngine.generateYearlyJobMarket(s);
     }
 
+    const roleLock = EduCareerEngine.getActiveRoleLock(s);
     const rLeft = s.careerMarket.refreshesLeft ?? 2;
+    const appsLeft = s.careerMarket.applicationsLeft ?? EduCareerEngine.MAX_APPLICATIONS_YEAR;
+    const rejectedIds = s.careerMarket.appliedJobIdsThisYear || [];
     const indFilter = this._industryFilter || 'ALL';
     const openingObjs = s.careerMarket.openings
       .map(id => CareersData.CAREERS.find(x => x.id === id))
@@ -144,12 +137,28 @@ window.CareerModals = {
 
     const filtered = openingObjs.filter(j => indFilter === 'ALL' || j.industry === indFilter);
 
+    // BANNER AMARAN KUNCI PERANAN KETAT ("WAJIB LETAK JAWATAN DAHULU")
+    if (roleLock.locked) {
+      html += `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:10px;">
+          <strong>🔒 WAJIB LETAK JAWATAN DAHULU!</strong><br/>
+          Anda sedang memegang jawatan <strong>${Utils.escapeHtml(roleLock.roleName)}</strong>. Anda mesti letak jawatan atau keluar daripada mod semasa terlebih dahulu sebelum boleh memohon pekerjaan lain.
+          <div style="margin-top:8px;">
+            ${roleLock.type === 'special_mode'
+              ? `<button type="button" class="ghost-btn" id="btn-jump-special-mode-exit" style="border-color:#dc2626;color:#dc2626;font-weight:800;padding:6px 10px;">🚪 Pergi Ke Mod ${Utils.escapeHtml(roleLock.shortName)} Untuk Keluar →</button>`
+              : `<button type="button" class="ghost-btn" id="btn-jump-resign-job" style="border-color:#dc2626;color:#dc2626;font-weight:800;padding:6px 10px;">🚪 Letak Jawatan ${Utils.escapeHtml(roleLock.shortName)} Sekarang</button>`
+            }
+          </div>
+        </div>
+      `;
+    }
+
     html += `
       <div class="act-engine-header" style="margin-top:4px;">
         <div class="aeh-top">
           <div>
             <div class="aeh-title">💼 Pasaran Kerja ${c.name} ${c.flag} (${openingObjs.length} Jawatan Aktif)</div>
-            <div class="aeh-sub">Dirombak secara rawak setiap tahun mengikut kelayakan &amp; industri global</div>
+            <div class="aeh-sub">Kuota Permohonan Tahun Ini: <strong>${appsLeft}/${EduCareerEngine.MAX_APPLICATIONS_YEAR}</strong> • Persaingan realistik!</div>
           </div>
           <button type="button" class="reroll-idea-btn" id="btn-refresh-job-market" ${rLeft <= 0 ? 'disabled' : ''}>
             🔄 Segarkan Pasaran (${rLeft}/2)
@@ -177,12 +186,14 @@ window.CareerModals = {
       const salary = EduCareerEngine.getCareerSalaryLocal(s, j, 0);
       const reqLvl = EducationData.LEVEL_INFO[j.minEducation] || EducationData.LEVEL_INFO.none;
       const hasCertBonus = (j.preferredCerts || []).some(cid => (s.education.certificates || []).includes(cid));
+      const wasRejected = rejectedIds.includes(j.id);
+      const isDisabled = roleLock.locked || wasRejected || appsLeft <= 0;
       const fieldStr = j.requiredFields === 'any'
         ? 'Mana-mana bidang'
         : j.requiredFields.map(fid => (EducationData.getField(fid) || { short: fid }).short).join('/');
 
       html += `
-        <button type="button" class="action-item career-apply-btn ${j.isRare ? 'rare-activity' : ''}" data-career-id="${j.id}">
+        <button type="button" class="action-item career-apply-btn ${j.isRare ? 'rare-activity' : ''} ${wasRejected ? 'act-done-card' : ''}" data-career-id="${j.id}" ${isDisabled ? 'disabled' : ''}>
           <span class="ai-icon">${j.icon}</span>
           <span class="ai-content">
             <span class="ai-title">
@@ -190,13 +201,18 @@ window.CareerModals = {
               ${j.isRare ? '<span class="rare-gold-tag">🌟 HEADHUNTER</span>' : ''}
             </span>
             <span class="ai-desc">
-              ${matched ? '<span class="cat-badge synergy">✓ Sesuai Kelayakan</span>' : `<span class="cat-badge">🔒 ${reqLvl.short}${j.requiredFields !== 'any' ? ` (${fieldStr})` : ''}</span>`}
-              ${hasCertBonus ? '<span class="cat-badge rare">📜 Bonus Sijil!</span>' : ''}
+              ${wasRejected
+                ? '<span class="cat-badge" style="background:#fee2e2;color:#b91c1c;">❌ Ditolak / Tiada Maklum Balas</span>'
+                : (matched ? '<span class="cat-badge synergy">✓ Sesuai Kelayakan</span>' : `<span class="cat-badge">🔒 ${reqLvl.short}${j.requiredFields !== 'any' ? ` (${fieldStr})` : ''}</span>`)
+              }
+              ${hasCertBonus && !wasRejected ? '<span class="cat-badge rare">📜 Bonus Sijil!</span>' : ''}
               <br/>${Utils.escapeHtml(j.desc)}
             </span>
           </span>
           <span class="ai-right">
-            <span class="act-status-pill free">${Utils.formatMoney(salary, s.countryId)}/thn</span>
+            <span class="act-status-pill ${wasRejected ? 'done' : roleLock.locked ? 'cost' : 'free'}">
+              ${wasRejected ? 'Ditolak' : roleLock.locked ? '🔒 Dikunci' : `${Utils.formatMoney(salary, s.countryId)}/thn`}
+            </span>
           </span>
         </button>
       `;
@@ -468,21 +484,26 @@ window.CareerModals = {
         this.showHub('jobs');
       });
 
-      const toggleSwitch = document.getElementById('act-toggle-switch-job');
-      if (toggleSwitch) toggleSwitch.addEventListener('click', () => {
-        this._browsingNewJob = !this._browsingNewJob;
-        this.showHub('jobs');
-      });
-
-      const quitBtn = document.getElementById('act-quit-job');
-      if (quitBtn) quitBtn.addEventListener('click', () => {
-        GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title}.`);
+      const quitJobAction = () => {
+        if (!s.job) return;
+        GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title}.`, 'culture');
         s.job = null;
         this._browsingNewJob = false;
         GameState.save();
         App.renderAll();
-        App.toast('Anda telah berhenti kerja.', 'culture');
+        App.toast('Anda telah meletak jawatan — Pasaran Kerja kini dibuka semula!', 'culture');
         this.showHub('jobs');
+      };
+
+      const quitBtn = document.getElementById('act-quit-job');
+      if (quitBtn) quitBtn.addEventListener('click', quitJobAction);
+
+      const jumpResignBtn = document.getElementById('btn-jump-resign-job');
+      if (jumpResignBtn) jumpResignBtn.addEventListener('click', quitJobAction);
+
+      const jumpSpBtn = document.getElementById('btn-jump-special-mode-exit');
+      if (jumpSpBtn) jumpSpBtn.addEventListener('click', () => {
+        if (window.SpecialModeModals) SpecialModeModals.showDashboard();
       });
 
       const refBtn = document.getElementById('btn-refresh-job-market');

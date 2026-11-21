@@ -1,6 +1,7 @@
 /* ==========================================================================
-   WorldLife — Enjin Mod Khas "Peluang Sekali Seumur Hidup" (Fasa 1)
-   Tiada Menu Statik — Tawaran Rawak Sekali Seumur Hidup, Risiko Keluar Mod,
+   WorldLife — Enjin 10 Mod Khas "Peluang Sekali Seumur Hidup"
+   Tiada Menu Statik — Tawaran Rawak Sekali Seumur Hidup, Kelahiran Diraja,
+   Integrasi 195 Negara (Perisik & Pengembara), Burn Notice, Risiko Keluar Mod,
    Kunci Kekal Sepanjang Hayat & Migrasi Selamat Simpanan Lama (Bahasa Melayu)
    ========================================================================== */
 
@@ -17,6 +18,15 @@ window.SpecialModesEngine = {
     if (!Array.isArray(s.offeredModeIds)) s.offeredModeIds = [];
     if (!Array.isArray(s.exitedModeIds)) s.exitedModeIds = [];
     if (typeof s.formerLeaderPension !== 'number') s.formerLeaderPension = 0;
+    if (!Array.isArray(s.countriesVisited)) {
+      s.countriesVisited = Array.isArray(s.countriesLivedIn) ? [...new Set(s.countriesLivedIn)] : [s.countryId].filter(Boolean);
+    }
+    if (s.countryId && !s.countriesVisited.includes(s.countryId)) {
+      s.countriesVisited.push(s.countryId);
+    }
+    if (!('spyBurnNotice' in s)) s.spyBurnNotice = null;
+    if (typeof s.nobelDisqualified !== 'boolean') s.nobelDisqualified = false;
+    if (typeof s.bornRoyal !== 'boolean') s.bornRoyal = false;
 
     // Migrasi automatik: buang medan 5 mod lama yang telah ditamatkan tanpa ralat
     if (s.modes || s.modeBoards) {
@@ -55,6 +65,10 @@ window.SpecialModesEngine = {
       usd = Math.round(usd * (0.7 + (info.state.metric1 / 100)));
     } else if (info.def.id === 'fund_manager') {
       usd = Math.round(usd * (0.8 + (info.state.metric1 / 120)));
+    } else if (info.def.id === 'royalty') {
+      usd = Math.round(usd * (0.65 + (info.state.metric2 / 110)));
+    } else if (info.def.id === 'explorer') {
+      usd = Math.round(usd * (0.75 + (info.state.metric2 / 120)));
     }
     return usd;
   },
@@ -64,6 +78,70 @@ window.SpecialModesEngine = {
     if (!info || info.def.id !== 'ceo') return 0;
     const baseUsd = 85000 * Math.pow(2.4, info.state.rankIndex || 0) * Math.max(0.3, info.state.metric1 / 50);
     return Utils.usdToLocal(Math.round(baseUsd), s.countryId);
+  },
+
+  // --------------------------------------------------------------------------
+  // 1B. PEMBANTU 195 NEGARA (PERISIK & PENGEMBARA) + KELAHIRAN DIRAJA (2–4%)
+  // --------------------------------------------------------------------------
+  _getAllCountriesList() {
+    if (window.COUNTRIES && typeof window.COUNTRIES === 'object') {
+      return Object.values(window.COUNTRIES);
+    }
+    return [];
+  },
+
+  _pickForeignCountry(s, preferUnvisited = false) {
+    const all = this._getAllCountriesList().filter(c => c && c.id && c.id !== s.countryId);
+    if (all.length === 0) return { id: 'CH', name: 'Switzerland', flag: '🇨🇭' };
+    if (preferUnvisited && Array.isArray(s.countriesVisited)) {
+      const visitedSet = new Set(s.countriesVisited);
+      const unvisited = all.filter(c => !visitedSet.has(c.id));
+      if (unvisited.length > 0) return Utils.pick(unvisited);
+    }
+    return Utils.pick(all);
+  },
+
+  _recordExploredCountries(s, count = 1) {
+    this.ensureFields(s);
+    const newlyDiscovered = [];
+    for (let i = 0; i < count; i++) {
+      const target = this._pickForeignCountry(s, true);
+      if (target && !s.countriesVisited.includes(target.id)) {
+        s.countriesVisited.push(target.id);
+        newlyDiscovered.push(`${target.flag || '🌍'} ${target.name}`);
+      }
+    }
+    if (s.activeSpecialMode && s.activeSpecialMode.modeId === 'explorer') {
+      // Segerakkan metric1 dengan jumlah negara unik daripada 195 negara (60+ negara = 100% tangga pangkat)
+      const pct = Math.min(100, Math.round((s.countriesVisited.length / 60) * 100));
+      s.activeSpecialMode.metric1 = Math.max(s.activeSpecialMode.metric1, pct);
+    }
+    return newlyDiscovered;
+  },
+
+  maybeGrantBirthRoyalty(s, force = false) {
+    if (!s || !window.SpecialModesData) return false;
+    this.ensureFields(s);
+    const monarchies = SpecialModesData.MONARCHY_COUNTRY_IDS || [];
+    if (!monarchies.includes(s.countryId)) return false;
+    // Peluang nadir 3% (dalam julat 2–4%) semasa kelahiran di negara beraja!
+    if (!force && !Utils.chance(0.03)) return false;
+
+    const c = Utils.getCountry(s.countryId);
+    s.bornRoyal = true;
+    this.enterMode(s, 'royalty', { silent: true, startRank: 1 });
+    s.money += Utils.usdToLocal(45000, s.countryId);
+    if (window.Dynasty) Dynasty.adjustReputation(15);
+    if (window.KarmaEndings) {
+      KarmaEndings.adjustAlignment({ fame: 35 });
+      KarmaEndings.addHighlight('👑', `Dilahirkan sebagai Kerabat Diraja di ${c.name}!`);
+    }
+    GameState.addJournalEntry(
+      `👑 KELAHIRAN DIRAJA! Anda ditakdirkan lahir dalam lingkungan istana sebagai Putera/Puteri Kerabat Diraja ${c.name} ${c.flag}!`,
+      'milestone'
+    );
+    GameState.save();
+    return true;
   },
 
   // --------------------------------------------------------------------------
@@ -81,6 +159,7 @@ window.SpecialModesEngine = {
       if (s.offeredModeIds.includes(m.id)) return false;
       if (s.exitedModeIds.includes(m.id)) return false;
       if (s.age < m.minAge || s.age > m.maxAge) return false;
+      if (m.id === 'explorer' && s.nobelDisqualified) return false;
       return true;
     });
     if (eligible.length === 0) return null;
@@ -94,7 +173,27 @@ window.SpecialModesEngine = {
       const neverOffered = s.offeredModeIds.length === 0;
       const prob = (neverOffered && s.age >= 30) ? 0.24 : 0.14;
       if (!Utils.chance(prob)) return null;
-      picked = Utils.pick(eligible);
+
+      // Pemberat pintar mengikut profil watak (Mafia lebih kerap jika karma rendah/rekod jenayah, Perisik jika pintar & sihat, Diraja jarang)
+      const weighted = [];
+      const karma = (s.alignment && s.alignment.karma) || 0;
+      const fame = (s.alignment && s.alignment.fame) || 0;
+      eligible.forEach(m => {
+        let w = 10;
+        if (m.id === 'mafia') {
+          w = (karma <= -10 || (s.criminalRecord || 0) > 0) ? 22 : 4;
+        } else if (m.id === 'spy') {
+          w = (s.stats.smarts >= 65 && s.stats.health >= 65) ? 18 : 5;
+        } else if (m.id === 'royalty') {
+          w = (s.stats.looks >= 75 || fame >= 45) ? 7 : 3;
+        } else if (m.id === 'athlete') {
+          w = s.stats.health >= 70 ? 15 : 8;
+        } else if (m.id === 'celebrity') {
+          w = (s.stats.looks >= 70 || (s.socialMedia && s.socialMedia.followers >= 5000)) ? 16 : 9;
+        }
+        for (let i = 0; i < w; i++) weighted.push(m);
+      });
+      picked = Utils.pick(weighted);
     }
 
     // Rekodkan sebagai sudah ditawarkan dalam hayat ini
@@ -136,7 +235,7 @@ window.SpecialModesEngine = {
     };
   },
 
-  enterMode(s, modeId) {
+  enterMode(s, modeId, opts = {}) {
     this.ensureFields(s);
     const def = this.getModeDef(modeId);
     if (!def) return { ok: false, msg: 'Mod tidak dikenali.' };
@@ -149,11 +248,16 @@ window.SpecialModesEngine = {
     }
     s.retired = false;
 
+    const startRank = Math.max(0, Math.min(def.ranks.length - 1, opts.startRank || 0));
+    const initM1 = modeId === 'explorer'
+      ? Math.max(def.metric1.init, Math.min(100, Math.round((s.countriesVisited.length / 60) * 100)))
+      : def.metric1.init;
+
     s.activeSpecialMode = {
       modeId,
-      rankIndex: 0,
+      rankIndex: startRank,
       yearsInMode: 0,
-      metric1: def.metric1.init,
+      metric1: initM1,
       metric2: def.metric2.init,
       recentActionIds: [],
       currentBoard: [],
@@ -167,10 +271,12 @@ window.SpecialModesEngine = {
 
     if (window.KarmaEndings) {
       KarmaEndings.markModeVisited(modeId);
-      KarmaEndings.addHighlight(def.icon, `Menyambut Peluang Sekali Seumur Hidup: ${def.title}`);
+      if (!opts.silent) {
+        KarmaEndings.addHighlight(def.icon, `Menyambut Peluang Sekali Seumur Hidup: ${def.title}`);
+      }
     }
     if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
-    if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+    if (!opts.silent && window.Utils && Utils.playTone) Utils.playTone('achievement');
     GameState.save();
     return { ok: true, msg: `Mod ${def.title} diaktifkan!` };
   },
@@ -294,6 +400,19 @@ window.SpecialModesEngine = {
 
   _applyEffects(s, def, am, eff) {
     const notes = [];
+    if (eff.foreignMission) {
+      const target = this._pickForeignCountry(s, false);
+      if (target) {
+        if (!s.countriesVisited.includes(target.id)) s.countriesVisited.push(target.id);
+        notes.push(`Lokasi Misi: ${target.flag || '🌍'} ${target.name}`);
+      }
+    }
+    if (eff.exploreCountries && eff.exploreCountries > 0) {
+      const found = this._recordExploredCountries(s, eff.exploreCountries);
+      if (found.length > 0) {
+        notes.push(`Terokai: ${found.join(', ')} (${s.countriesVisited.length}/195 negara)`);
+      }
+    }
     if (eff.m1) {
       am.metric1 = Utils.clamp(am.metric1 + eff.m1, 0, 100);
       notes.push(`${def.metric1.label} ${eff.m1 >= 0 ? '+' : ''}${eff.m1}%`);
@@ -319,11 +438,12 @@ window.SpecialModesEngine = {
     if (eff.looks) statDelta.looks = eff.looks;
     if (Object.keys(statDelta).length > 0) GameState.adjustStats(statDelta);
 
-    if (window.KarmaEndings && (eff.karma || eff.fame || eff.stress)) {
+    if (window.KarmaEndings && (eff.karma || eff.fame || eff.stress || eff.notoriety)) {
       KarmaEndings.adjustAlignment({
         karma: eff.karma || 0,
         fame: eff.fame || 0,
-        stress: eff.stress || 0
+        stress: eff.stress || 0,
+        notoriety: eff.notoriety || 0
       });
     }
     if (eff.rep && window.Dynasty) {
@@ -359,6 +479,15 @@ window.SpecialModesEngine = {
   },
 
   tickYearlySpecialMode(s) {
+    this.ensureFields(s);
+    // Kurangkan tempoh sekatan perjalanan Burn Notice walaupun mod Perisik sudah keluar
+    if (s.spyBurnNotice && s.spyBurnNotice.active && s.spyBurnNotice.travelBlockYears > 0) {
+      s.spyBurnNotice.travelBlockYears -= 1;
+      if (s.spyBurnNotice.travelBlockYears === 0) {
+        GameState.addJournalEntry('🕵️ Sekatan perjalanan rasmi Burn Notice telah tamat, namun pemantauan & risiko musuh asing lama masih berterusan!', 'culture');
+      }
+    }
+
     const info = this.getActiveInfo(s);
     if (!info) return;
     const { def, state: am } = info;
@@ -374,7 +503,53 @@ window.SpecialModesEngine = {
       am.metric1 = Math.max(10, am.metric1 - 14);
       if (window.Dynasty) Dynasty.adjustReputation(-5);
       GameState.addJournalEntry('🔥 SERANGAN CANCEL CULTURE! Beberapa penaja menggantung kempen anda — Populariti merosot!', 'warning');
+    } else if (def.id === 'mafia' && am.metric2 >= 80 && Utils.chance(0.35)) {
+      GameState.adjustStats({ health: -12, happiness: -10 });
+      GameState.addJournalEntry('🚨 SERBUAN KILAT POLIS! Salah satu gudang sindiket anda dirampas — anda nyaris lolos!', 'warning');
+    } else if (def.id === 'cult' && am.metric2 >= 80 && Utils.chance(0.35)) {
+      const fine = Utils.usdToLocal(25000, s.countryId);
+      s.money -= fine;
+      GameState.addJournalEntry(`🚔 SIASATAN PIHAK BERKUASA! Anda terpaksa membayar kos guaman kecemasan ${Utils.formatMoney(fine, s.countryId)} bagi menepis serbuan markas!`, 'warning');
     }
+  },
+
+  // Risiko berterusan 8–12% SETIAP TAHUN selepas keluar Mod Perisik (Burn Notice)
+  maybeTriggerBurnNoticeEvent(s, force = false) {
+    if (!s || !s.spyBurnNotice || !s.spyBurnNotice.active) return null;
+    if (s.prison && s.prison.inPrison) return null;
+    const prob = s.spyBurnNotice.yearlyAmbushRisk || 0.10;
+    if (!force && !Utils.chance(prob)) return null;
+
+    const enemyCountry = this._pickForeignCountry(s, false);
+    const bribeCost = Utils.usdToLocal(18000, s.countryId);
+    return {
+      id: `burn_notice_ambush_${s.age}_${Date.now()}`,
+      icon: '🕵️',
+      title: '🚨 AMARAN BURN NOTICE: Musuh Risikan Lama Menjejak Anda!',
+      text: `Seorang ejen pembalas dendam daripada operasi silam anda di ${enemyCountry.flag || '🌍'} ${enemyCountry.name} berjaya mengesan lokasi anda tanpa perlindungan agensi!`,
+      choices: [
+        {
+          label: 'Hadapi & patahkan serangan hendap dengan kemahiran tempur lama',
+          hint: 'Risiko cedera (-12 hingga -26 Kesihatan), selamat tanpa bayar wang',
+          journalType: 'warning',
+          customAction: () => {
+            const dmg = Utils.randInt(12, 26);
+            GameState.adjustStats({ health: -dmg, happiness: -8 });
+            return { outcome: `Pertempuran sengit berlaku! Anda menewaskan penyerang itu tetapi mengalami kecederaan (Kesihatan -${dmg}%).`, toastType: 'error' };
+          }
+        },
+        {
+          label: `Bayar broker maklumat bawah tanah (${Utils.formatMoney(bribeCost, s.countryId)}) untuk lenyapkan jejak`,
+          hint: 'Selamat secara fizikal, kos wang',
+          journalType: 'culture',
+          customAction: (st) => {
+            st.money -= bribeCost;
+            GameState.adjustStats({ happiness: -4 });
+            return { outcome: `Anda menukar lokasi dan memadam jejak digital tepat pada waktunya (-${Utils.formatMoney(bribeCost, st.countryId)}).`, toastType: 'culture' };
+          }
+        }
+      ]
+    };
   },
 
   // --------------------------------------------------------------------------
@@ -479,6 +654,103 @@ window.SpecialModesEngine = {
         msg = `Anda meninggalkan kelab sebelum kontrak tamat — yuran tebus kontrak -${Utils.formatMoney(buyout, s.countryId)} & populariti merosot.`;
         GameState.addJournalEntry(`🏅 ${msg}`, 'warning');
       }
+    } else if (def.id === 'mafia') {
+      // BAHAYA TERTINGGI: Wang Cuci Tangan berat + 35–50% serangan balas / pembelot ke polis
+      const tribute = Utils.usdToLocal(35000 + (am.rankIndex * 28000), s.countryId);
+      s.money -= tribute;
+      const ambushChance = 0.35 + (am.rankIndex * 0.05); // 35% -> 50% di pangkat Godfather
+      msg = `Anda membayar "Wang Cuci Tangan" sebanyak ${Utils.formatMoney(tribute, s.countryId)} untuk meninggalkan sindiket.`;
+      if (Utils.chance(ambushChance)) {
+        const roll = Math.random();
+        if (am.rankIndex >= 3 && roll < 0.14) {
+          // Risiko maut kecil di pangkat Godfather
+          GameState.addJournalEntry(`🕶️ SERANGAN BALAS MAUT SINDIKET! Bekas pengikut yang marah melepaskan tembakan hendap sebaik anda meninggalkan markas.`, 'warning');
+          s.exitedModeIds.push('mafia');
+          s.activeSpecialMode = null;
+          if (window.Sim && Sim.triggerDeath) {
+            Sim.triggerDeath('Serangan Hendap Balas Dendam Sindiket Mafia');
+          } else {
+            s.alive = false;
+            s.causeOfDeath = 'Serangan Hendap Balas Dendam Sindiket Mafia';
+          }
+          GameState.save();
+          return { ok: true, msg: 'Anda terkorban dalam serangan balas dendam sindiket!', died: true };
+        } else if (roll < 0.58) {
+          const dmg = Utils.randInt(28, 44);
+          GameState.adjustStats({ health: -dmg, happiness: -16 });
+          msg += ` AMARAN: Skuad pembunuh sindiket menyerang hendap anda di jalan raya (Kesihatan -${dmg}%) — anda nyaris maut!`;
+        } else if (window.PrisonFugitive) {
+          msg += ' Seorang ahli sindiket yang berdendam membocorkan fail jenayah anda kepada polis — anda diheret ke Mahkamah!';
+          followUpEvent = PrisonFugitive.buildCourtTrialEvent({
+            crimeLabel: 'Konspirasi Jenayah Terancang & Sindiket Mafia',
+            minYears: 4,
+            maxYears: 12,
+            security: 'max',
+            heat: 70
+          });
+        }
+      } else {
+        msg += ' Anda bernasib baik — keluarga sindiket menghormati bayaran anda dan melepaskan anda hidup-hidup!';
+      }
+      GameState.addJournalEntry(`🕶️ ${msg}`, 'warning');
+    } else if (def.id === 'cult') {
+      // Tindak balas pengikut fanatik: Reputasi & Karma merosot + risiko tinggi saman penipuan / serbuan polis
+      if (window.Dynasty) Dynasty.adjustReputation(-12);
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -20, fame: -10 });
+      msg = 'Anda membubarkan kepimpinan pertubuhan rahsia. Pengikut fanatik meradang — Reputasi Keluarga -12% & Karma -20!';
+      const risk = (am.flags.cult_fraud || am.metric2 >= 40) ? 0.80 : 0.55;
+      if (Utils.chance(risk)) {
+        if (Utils.chance(0.55) || !window.PrisonFugitive) {
+          const lawsuit = Utils.usdToLocal(40000 + (am.rankIndex * 18000), s.countryId);
+          s.money -= lawsuit;
+          msg += ` Bekas pengikut memfailkan saman penipuan sivil bernilai ${Utils.formatMoney(lawsuit, s.countryId)}!`;
+        } else {
+          msg += ' Pihak berkuasa melancarkan serbuan ke atas markas & mendakwa anda di Mahkamah!';
+          followUpEvent = PrisonFugitive.buildCourtTrialEvent({
+            crimeLabel: 'Penipuan Dana Pertubuhan Rahsia',
+            minYears: 2,
+            maxYears: 7,
+            security: 'medium',
+            heat: 50
+          });
+        }
+      }
+      GameState.addJournalEntry(`🔮 ${msg}`, 'warning');
+    } else if (def.id === 'spy') {
+      // BURN NOTICE / PEMANTAUAN KETAT
+      s.spyBurnNotice = {
+        active: true,
+        travelBlockYears: 3,
+        yearlyAmbushRisk: am.flags.double_agent ? 0.12 : 0.10
+      };
+      msg = 'AGENSI MENGELUARKAN "BURN NOTICE / PEMANTAUAN KETAT"! Pelepasan keselamatan & gaji ditarik balik, sekatan perjalanan luar negara 3 tahun dikenakan, dan musuh asing lama berisiko 10% setahun menjejak anda!';
+      GameState.addJournalEntry(`🕵️ ${msg}`, 'warning');
+    } else if (def.id === 'royalty') {
+      // BUANG GELARAN / RENOUNCE TITLE
+      // Retakkan hubungan keluarga diraja
+      (s.relationships || []).forEach(r => {
+        if (r.alive && (r.category === 'family' || r.category === 'spouse')) {
+          r.closeness = Utils.clamp((r.closeness || 50) - 20, 5, 100);
+        }
+      });
+      if (Utils.chance(0.50)) {
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: 12 });
+        if (window.Dynasty) Dynasty.adjustReputation(4);
+        GameState.adjustStats({ happiness: 8 });
+        msg = 'Anda rasmi MEMBUANG GELARAN DIRAJA! Elaun & keistimewaan istana luput selamanya dan hubungan keluarga retak, namun media dunia memuji keberanian anda memilih hidup bebas (+4% Reputasi)!';
+      } else {
+        if (window.Dynasty) Dynasty.adjustReputation(-10);
+        GameState.adjustStats({ happiness: -10 });
+        msg = 'Anda rasmi MEMBUANG GELARAN DIRAJA! Elaun & keistimewaan istana luput selamanya, hubungan keluarga retak, dan badai media mengkritik keputusan anda (-10% Reputasi Keluarga)!';
+      }
+      GameState.addJournalEntry(`👑 ${msg}`, 'milestone');
+    } else if (def.id === 'explorer') {
+      // Penalti pecah kontrak penaja + lucut kelayakan Hadiah Nobel / Legenda Dunia selamanya
+      const penalty = Utils.usdToLocal(18000 + (am.rankIndex * 12000), s.countryId);
+      s.money -= penalty;
+      s.nobelDisqualified = true;
+      msg = `Anda menamatkan ekspedisi lebih awal — penalti pecah kontrak penaja -${Utils.formatMoney(penalty, s.countryId)}, semua geran dibatalkan, dan kelayakan Hadiah Nobel / Legenda Dunia dilucutkan SELAMANYA bagi hayat ini.`;
+      GameState.addJournalEntry(`🧭 ${msg}`, 'warning');
     }
 
     // Kunci mod ini SELAMANYA bagi watak ini!
