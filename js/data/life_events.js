@@ -132,6 +132,31 @@ window.LIFE_EVENTS = {
     if (countryId === 'GB' || countryId === 'AU' || countryId === 'US') {
       return Utils.pick(['christianity', 'christianity', 'agnostic', 'atheist', 'spiritual', 'islam', 'hinduism']);
     }
+
+    const c = window.COUNTRIES && window.COUNTRIES[countryId];
+    const cg = c && c.cultureGroup;
+    if (cg === 'malay_sea' || cg === 'arabic_me' || cg === 'south_asian_muslim' || cg === 'persian_turkic') {
+      if (countryId === 'IL') return Utils.pick(['spiritual', 'agnostic', 'islam', 'christianity']);
+      if (countryId === 'LB') return Utils.pick(['islam', 'christianity', 'islam']);
+      return Utils.chance(0.88) ? 'islam' : Utils.pick(['christianity', 'spiritual', 'agnostic']);
+    }
+    if (cg === 'south_asian') {
+      if (countryId === 'LK' || countryId === 'BT') return Utils.chance(0.78) ? 'buddhism' : 'hinduism';
+      return Utils.chance(0.74) ? 'hinduism' : Utils.pick(['islam', 'christianity', 'buddhism']);
+    }
+    if (cg === 'east_asian_cn') return Utils.pick(['buddhism', 'spiritual', 'agnostic', 'atheist']);
+    if (cg === 'thai_sea') return Utils.chance(0.82) ? 'buddhism' : Utils.pick(['islam', 'christianity', 'spiritual']);
+    if (cg === 'vietnamese') return Utils.pick(['buddhism', 'spiritual', 'agnostic', 'christianity']);
+    if (cg === 'latin_american' || cg === 'filipino' || cg === 'southern_europe' || cg === 'pacific_islander') {
+      return Utils.chance(0.84) ? 'christianity' : Utils.pick(['agnostic', 'spiritual']);
+    }
+    if (cg === 'western_europe' || cg === 'nordic' || cg === 'slavic_east_eu' || cg === 'anglosphere') {
+      return Utils.pick(['christianity', 'christianity', 'agnostic', 'atheist', 'spiritual', 'islam']);
+    }
+    if (cg === 'west_african' || cg === 'east_african' || cg === 'southern_african') {
+      if (['SN', 'ML', 'NE', 'GM', 'GN', 'SO', 'DJ', 'KM', 'TD'].includes(countryId)) return 'islam';
+      return Utils.pick(['christianity', 'islam', 'christianity', 'spiritual']);
+    }
     return Utils.pick(['islam', 'christianity', 'buddhism', 'hinduism', 'spiritual', 'agnostic', 'unassigned']);
   },
 

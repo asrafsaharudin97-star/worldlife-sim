@@ -695,6 +695,7 @@ window.ModeModals = {
           ${Utils.escapeHtml(ending.publicMemory)}<br/>
           <div style="margin-top:6px;"><strong>❤️ Ingatan Keluarga:</strong> ${Utils.escapeHtml(KarmaEndings.getFamilyMemory(s))}</div>
         </div>
+        ${window.Quotes ? Quotes.renderQuoteCard(Quotes.getContextualQuoteForState(s), 'Kata Hikmah Buat Perjalanan Anda') : ''}
 
         <div class="summary-grid">
           <div class="summary-stat">

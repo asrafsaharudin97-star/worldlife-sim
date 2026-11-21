@@ -102,6 +102,10 @@ window.LegacyModals = {
           ` : ''}
           ${traitsHtml}
         </div>
+        ${window.Quotes ? Quotes.renderQuoteCard(
+          Quotes.getByCategory(d.legacyStatus === 'Tarnished' ? 'tarnished' : (d.legacyStatus === 'Redeemed' || Dynasty.isPrime(d.generation) ? 'redeemed_or_prime' : 'new_life')),
+          d.legacyStatus === 'Tarnished' ? 'Renungan Saat Diuji' : 'Falsafah Dinasti'
+        ) : ''}
 
         ${activeBonuses.length > 0 ? `
           <div class="section-heading">🧬 Bonus Darah Dinasti Aktif (${activeBonuses.length})</div>

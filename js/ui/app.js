@@ -57,25 +57,64 @@ window.App = {
   },
 
   _initCreator() {
-    const grid = document.getElementById('country-grid');
-    grid.innerHTML = Object.values(window.COUNTRIES).map(c => `
-      <button type="button" class="country-card-opt ${c.id === this.creator.countryId ? 'selected' : ''}" data-cid="${c.id}">
-        <span class="cc-flag">${c.flag}</span>
-        <span>
-          <span class="cc-name">${c.name}</span>
-          <span class="cc-curr">${c.currency.code} • ${c.currency.symbol.trim()}</span>
-        </span>
-      </button>
-    `).join('');
+    this.creator.continent = 'ALL';
+    this.creator.search = '';
 
-    grid.querySelectorAll('.country-card-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.creator.countryId = btn.dataset.cid;
-        grid.querySelectorAll('.country-card-opt').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        this._syncCreatorCountry();
+    // Papar kata-kata hikmah "new_life" pada skrin permulaan
+    const quoteWrap = document.getElementById('start-quote-wrap');
+    if (quoteWrap && window.Quotes) {
+      quoteWrap.innerHTML = Quotes.renderQuoteCard(Quotes.getByCategory('new_life'), 'Inspirasi Permulaan');
+    }
+
+    // Penapis Benua
+    const contWrap = document.getElementById('continent-filters');
+    const continents = window.WORLD_CONTINENTS || [{ id: 'ALL', label: 'Semua' }];
+    if (contWrap) {
+      contWrap.innerHTML = continents.map(ct => `
+        <button type="button" class="tab-pill cont-pill ${ct.id === 'ALL' ? 'active' : ''}" data-cont="${ct.id}">${ct.label}</button>
+      `).join('');
+      contWrap.querySelectorAll('.cont-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          this.creator.continent = pill.dataset.cont;
+          contWrap.querySelectorAll('.cont-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+          this._renderCreatorCountryGrid();
+        });
       });
-    });
+    }
+
+    // Carian pantas negara / benua
+    const searchEl = document.getElementById('country-search');
+    if (searchEl) {
+      searchEl.addEventListener('input', (e) => {
+        this.creator.search = e.target.value.trim().toLowerCase();
+        this._renderCreatorCountryGrid();
+      });
+    }
+
+    // Butang Negara Rawak
+    const randCountryBtn = document.getElementById('btn-random-country');
+    if (randCountryBtn) {
+      randCountryBtn.addEventListener('click', () => {
+        const all = Object.values(window.COUNTRIES);
+        const picked = Utils.pick(all);
+        if (!picked) return;
+        this.creator.countryId = picked.id;
+        this.creator.continent = 'ALL';
+        this.creator.search = '';
+        if (searchEl) searchEl.value = '';
+        if (contWrap) {
+          contWrap.querySelectorAll('.cont-pill').forEach(p => p.classList.toggle('active', p.dataset.cont === 'ALL'));
+        }
+        this._renderCreatorCountryGrid();
+        this._syncCreatorCountry();
+        const selEl = document.querySelector(`#country-grid .country-card-opt[data-cid="${picked.id}"]`);
+        if (selEl) selEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        this.toast(`🎲 Negara rawak terpilih: ${picked.flag} ${picked.name}!`, 'culture');
+      });
+    }
+
+    this._renderCreatorCountryGrid();
 
     document.querySelectorAll('#gender-toggle .pill-opt').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -120,6 +159,48 @@ window.App = {
     this._syncCreatorCountry();
   },
 
+  _renderCreatorCountryGrid() {
+    const grid = document.getElementById('country-grid');
+    if (!grid) return;
+    const q = this.creator.search || '';
+    const cont = this.creator.continent || 'ALL';
+
+    const list = Object.values(window.COUNTRIES)
+      .filter(c => {
+        if (cont !== 'ALL' && c.continent !== cont) return false;
+        if (q) {
+          const hay = `${c.name} ${c.id} ${c.continent || ''} ${c.currencyCode || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (list.length === 0) {
+      grid.innerHTML = `<div class="info-banner" style="grid-column:1/-1;">Tiada negara ditemui untuk carian "${Utils.escapeHtml(q)}".</div>`;
+      return;
+    }
+
+    grid.innerHTML = list.map(c => `
+      <button type="button" class="country-card-opt ${c.id === this.creator.countryId ? 'selected' : ''}" data-cid="${c.id}">
+        <span class="cc-flag">${c.flag}</span>
+        <span>
+          <span class="cc-name">${Utils.escapeHtml(c.name)}</span>
+          <span class="cc-curr">${c.currency.code} • ${c.currency.symbol.trim()}</span>
+        </span>
+      </button>
+    `).join('');
+
+    grid.querySelectorAll('.country-card-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.creator.countryId = btn.dataset.cid;
+        grid.querySelectorAll('.country-card-opt').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this._syncCreatorCountry();
+      });
+    });
+  },
+
   _syncCreatorCountry() {
     const c = Utils.getCountry(this.creator.countryId);
     this.applyCountryTheme(c.id);
@@ -128,10 +209,19 @@ window.App = {
     sel.innerHTML = c.heritages.map(h => `<option value="${h.id}">${h.label}</option>`).join('');
     this.creator.heritageId = c.heritages[0].id;
 
+    const econTier = (c.salaryMultiplier || 0.5) >= 1.1 ? 'Tinggi' : (c.salaryMultiplier || 0.5) >= 0.5 ? 'Sederhana' : 'Membangun';
+    const healthTier = (c.healthcareQuality && c.healthcareQuality.tier) || c.healthcare.type;
+
     document.getElementById('country-preview').innerHTML = `
-      <strong>${c.flag} Pratonton Budaya ${c.name}</strong> — ${Utils.escapeHtml(c.tagline)}
-      <div class="preview-tags">
-        ${c.highlights.map(t => `<span class="preview-tag">${Utils.escapeHtml(t)}</span>`).join('')}
+      <strong>${c.flag} ${Utils.escapeHtml(c.name)}</strong> <small style="opacity:0.75;">(${c.continent || 'Dunia'})</small>
+      <div class="preview-tags" style="margin-top:6px;">
+        <span class="preview-tag">💱 ${c.currency.code} (${c.currency.symbol.trim()})</span>
+        <span class="preview-tag">💰 Ekonomi: ${econTier}</span>
+        <span class="preview-tag">🧾 Cukai: ${Math.round((c.taxRate || 0) * 100)}%</span>
+        <span class="preview-tag">🏥 ${Utils.escapeHtml(healthTier)}</span>
+        <span class="preview-tag">🎓 Pend: ${c.educationQuality || 75}%</span>
+        <span class="preview-tag">🛡️ Selamat: ${c.safetyIndex || 70}%</span>
+        <span class="preview-tag">❤️ Hayat: ${c.baseLifeExpectancy || c.lifeExpectancy} thn</span>
       </div>
     `;
 

@@ -801,55 +801,83 @@ window.Modals = {
         contentHtml += `
           <div class="info-banner highlight">
             ✈️ <strong>Hijrah Dibuka Pada Umur 18 Tahun!</strong><br/>
-            Apabila cukup 18 tahun, anda boleh berhijrah ke mana-mana negara. Mata wang anda akan ditukar secara automatik, dan seluruh budaya, kerja, rumah, perayaan &amp; gaya hidup akan bertukar mengikut negara baru!
+            Apabila cukup 18 tahun, anda boleh berhijrah ke mana-mana daripada <strong>195 negara di dunia</strong>. Mata wang anda akan ditukar secara automatik!
           </div>
         `;
       } else {
+        this._migFilter = this._migFilter || { continent: 'ALL', search: '' };
+        const conts = window.WORLD_CONTINENTS || [{ id: 'ALL', label: 'Semua' }];
+        const q = (this._migFilter.search || '').toLowerCase();
+        const cont = this._migFilter.continent || 'ALL';
+
         contentHtml += `
           <div class="info-banner highlight">
-            ✈️ <strong>Berhijrah dari ${c.flag} ${c.name}</strong><br/>
-            Simpanan anda (${Utils.formatMoney(s.money, s.countryId)}) akan ditukar ke mata wang negara baru dan seluruh budaya permainan akan berubah sebaik anda tiba!
+            ✈️ <strong>Berhijrah dari ${c.flag} ${c.name} ke 195 Negara</strong><br/>
+            Simpanan anda (${Utils.formatMoney(s.money, s.countryId)}) akan ditukar ke mata wang negara destinasi!
+          </div>
+          <div class="country-picker-head" style="margin-bottom:6px;">
+            <input type="text" id="mig-search-input" class="input-field" value="${Utils.escapeHtml(this._migFilter.search || '')}" placeholder="🔍 Cari negara destinasi (cth: Switzerland, Brazil, Jepun)..." style="flex:1;" />
+            <button type="button" id="btn-mig-random" class="random-country-btn">🎲 Rawak</button>
+          </div>
+          <div class="tab-pills" style="margin-bottom:8px;">
+            ${conts.map(ct => `<button type="button" class="tab-pill mig-cont-pill ${ct.id === cont ? 'active' : ''}" data-mcont="${ct.id}">${ct.label}</button>`).join('')}
           </div>
         `;
 
-        const others = Object.values(window.COUNTRIES).filter(x => x.id !== s.countryId);
-        others.forEach(dest => {
-          const isCit = s.citizenships.includes(dest.id);
-          const costLocal = Sim.getMigrationCostLocal(dest.id);
-          const afterCost = Math.max(0, s.money - costLocal);
-          const converted = Utils.convertMoney(afterCost, s.countryId, dest.id);
-          const closeNote = c.closeCultures && c.closeCultures.includes(dest.id) ? '🤝 Budaya Serumpun' : '🌍 Pengembaraan Baru';
+        const others = Object.values(window.COUNTRIES)
+          .filter(x => {
+            if (x.id === s.countryId) return false;
+            if (cont !== 'ALL' && x.continent !== cont) return false;
+            if (q && !`${x.name} ${x.id} ${x.continent || ''} ${x.currencyCode || ''}`.toLowerCase().includes(q)) return false;
+            return true;
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
 
-          contentHtml += `
-            <div class="migration-card">
-              <div class="mig-head">
-                <div class="mig-title">${dest.flag} ${dest.name} ${isCit ? '<span class="residency-badge citizen">Warganegara</span>' : ''}</div>
-                <span style="font-size:12px;font-weight:800;color:#dc2626;">Kos: ${Utils.formatMoney(costLocal, s.countryId)}</span>
+        const shown = others.slice(0, 35);
+        if (shown.length === 0) {
+          contentHtml += `<div class="info-banner">Tiada negara sepadan dengan carian anda.</div>`;
+        } else {
+          if (others.length > shown.length) {
+            contentHtml += `<div style="font-size:11.5px;color:#64748b;margin-bottom:6px;">Memaparkan ${shown.length} daripada ${others.length} negara — gunakan kotak carian atau penapis benua di atas.</div>`;
+          }
+          shown.forEach(dest => {
+            const isCit = s.citizenships.includes(dest.id);
+            const costLocal = Sim.getMigrationCostLocal(dest.id);
+            const afterCost = Math.max(0, s.money - costLocal);
+            const converted = Utils.convertMoney(afterCost, s.countryId, dest.id);
+            const econTier = (dest.salaryMultiplier || 0.5) >= 1.1 ? 'Ekonomi Tinggi' : (dest.salaryMultiplier || 0.5) >= 0.5 ? 'Sederhana' : 'Membangun';
+
+            contentHtml += `
+              <div class="migration-card">
+                <div class="mig-head">
+                  <div class="mig-title">${dest.flag} ${Utils.escapeHtml(dest.name)} ${isCit ? '<span class="residency-badge citizen">Warganegara</span>' : ''}</div>
+                  <span style="font-size:12px;font-weight:800;color:#dc2626;">Kos: ${Utils.formatMoney(costLocal, s.countryId)}</span>
+                </div>
+                <div class="mig-tags">
+                  <span class="mig-tag">💱 ${dest.currency.code}</span>
+                  <span class="mig-tag">💰 ${econTier}</span>
+                  <span class="mig-tag">🧾 Cukai ${Math.round((dest.taxRate || 0) * 100)}%</span>
+                  <span class="mig-tag">🛡️ ${dest.safetyIndex || 70}%</span>
+                </div>
+                <div class="mig-rate">
+                  Anggaran baki selepas tiba: <strong>${Utils.formatMoney(converted, dest.id)}</strong>
+                </div>
+                <div class="mig-actions">
+                  ${isCit ? `
+                    <button class="btn-sm primary mig-go-btn" style="grid-column:span 2;" data-dest="${dest.id}" data-visa="work">
+                      ✈️ Pulang ke ${Utils.escapeHtml(dest.name)} (Tanpa Visa!)
+                    </button>
+                  ` : `
+                    <button class="btn-sm primary mig-go-btn" data-dest="${dest.id}" data-visa="work">💼 Visa Kerja</button>
+                    <button class="btn-sm secondary mig-go-btn" data-dest="${dest.id}" data-visa="${s.education.hasDegree ? 'investor' : 'student'}">
+                      ${s.education.hasDegree ? '💎 Visa Pelabur' : '🎓 Visa Pelajar'}
+                    </button>
+                  `}
+                </div>
               </div>
-              <div style="font-size:12px;color:#475569;">${Utils.escapeHtml(dest.tagline)}</div>
-              <div class="mig-tags">
-                <span class="mig-tag">💱 ${dest.currency.code}</span>
-                <span class="mig-tag">🏥 ${dest.healthcare.type.split(' ')[0]}</span>
-                <span class="mig-tag">${closeNote}</span>
-              </div>
-              <div class="mig-rate">
-                Anggaran baki selepas tiba: <strong>${Utils.formatMoney(converted, dest.id)}</strong>
-              </div>
-              <div class="mig-actions">
-                ${isCit ? `
-                  <button class="btn-sm primary mig-go-btn" style="grid-column:span 2;" data-dest="${dest.id}" data-visa="work">
-                    ✈️ Pulang ke ${dest.name} (Tanpa Visa!)
-                  </button>
-                ` : `
-                  <button class="btn-sm primary mig-go-btn" data-dest="${dest.id}" data-visa="work">💼 Visa Kerja</button>
-                  <button class="btn-sm secondary mig-go-btn" data-dest="${dest.id}" data-visa="${s.education.hasDegree ? 'investor' : 'student'}">
-                    ${s.education.hasDegree ? '💎 Visa Pelabur' : '🎓 Visa Pelajar'}
-                  </button>
-                `}
-              </div>
-            </div>
-          `;
-        });
+            `;
+          });
+        }
       }
     } else if (activeSubTab === 'passport') {
       const birthC = Utils.getCountry(s.birthCountryId);
@@ -1053,6 +1081,41 @@ window.Modals = {
         App.renderAll();
         App.toast(`Percutian indah ke ${home.name}!`, 'success');
         this.showActivities('culture');
+      });
+    }
+
+    const migSearch = document.getElementById('mig-search-input');
+    if (migSearch) {
+      migSearch.addEventListener('input', (e) => {
+        this._migFilter = this._migFilter || { continent: 'ALL', search: '' };
+        this._migFilter.search = e.target.value;
+        const pos = e.target.selectionStart;
+        this.showActivities('migrate');
+        const nextInput = document.getElementById('mig-search-input');
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.setSelectionRange(pos, pos);
+        }
+      });
+    }
+
+    document.querySelectorAll('.mig-cont-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        this._migFilter = this._migFilter || { continent: 'ALL', search: '' };
+        this._migFilter.continent = pill.dataset.mcont;
+        this.showActivities('migrate');
+      });
+    });
+
+    const migRand = document.getElementById('btn-mig-random');
+    if (migRand) {
+      migRand.addEventListener('click', () => {
+        const others = Object.values(window.COUNTRIES).filter(x => x.id !== s.countryId);
+        const picked = Utils.pick(others);
+        if (picked) {
+          this._migFilter = { continent: 'ALL', search: picked.name };
+          this.showActivities('migrate');
+        }
       });
     }
 

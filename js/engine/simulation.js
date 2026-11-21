@@ -644,16 +644,19 @@ window.Sim = {
     if (!alreadyCitizen) {
       if (visaType === 'work') {
         statusLabel = 'Work Visa';
-        approvalChance = (s.education.hasDegree ? 0.88 : 0.58) + (s.stats.smarts - 50) * 0.004;
+        const destStrictness = ((toC.salaryMultiplier || 0.7) * 0.14) + (((toC.safetyIndex || 70) - 60) * 0.002);
+        const wealthBoost = Utils.localToUsd(GameState.getNetWorth(), s.countryId) >= 25000 ? 0.08 : 0;
+        approvalChance = (s.education.hasDegree ? 0.88 : 0.58) + (s.stats.smarts - 50) * 0.004 + wealthBoost - destStrictness;
       } else if (visaType === 'student') {
         statusLabel = 'Student Visa';
-        approvalChance = 0.9;
+        approvalChance = 0.88 - Math.max(0, ((toC.educationQuality || 75) - 85) * 0.006);
       } else if (visaType === 'investor') {
         const netUsd = Utils.localToUsd(GameState.getNetWorth(), s.countryId);
-        if (netUsd < 150000) {
+        const reqUsd = Math.round(90000 + (toC.salaryMultiplier || 0.7) * 80000);
+        if (netUsd < reqUsd) {
           return {
             ok: false,
-            msg: `Visa Pelabur memerlukan nilai harta sekurang-kurangnya ${Utils.formatMoney(Utils.usdToLocal(150000, s.countryId), s.countryId)}.`
+            msg: `Visa Pelabur ke ${toC.name} memerlukan nilai harta sekurang-kurangnya ${Utils.formatMoney(Utils.usdToLocal(reqUsd, s.countryId), s.countryId)}.`
           };
         }
         statusLabel = 'Investor Visa';
