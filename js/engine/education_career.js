@@ -84,6 +84,15 @@ window.EduCareerEngine = {
     if (typeof s.careerMarket.refreshesLeft !== 'number') s.careerMarket.refreshesLeft = this.MAX_MARKET_REFRESHES;
     if (typeof s.careerMarket.applicationsLeft !== 'number') s.careerMarket.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
     if (!Array.isArray(s.careerMarket.appliedJobIdsThisYear)) s.careerMarket.appliedJobIdsThisYear = [];
+
+    if (typeof s.totalYearsWorked !== 'number') {
+      s.totalYearsWorked = (s.job && typeof s.job.years === 'number') ? s.job.years : 0;
+    }
+    if (typeof s.isRetired !== 'boolean') s.isRetired = Boolean(s.retired);
+    if (typeof s.retired !== 'boolean') s.retired = Boolean(s.isRetired);
+    if (typeof s.pensionAnnual !== 'number') s.pensionAnnual = 0;
+    if (!Array.isArray(s.careerHistory)) s.careerHistory = [];
+    if (typeof s.mandatoryRetirementAge !== 'number') s.mandatoryRetirementAge = 60;
   },
 
   // Paparkan gelaran "Dr." pada nama watak yang telah menamatkan PhD
@@ -889,6 +898,8 @@ window.EduCareerEngine = {
       countryId: s.countryId
     };
 
+    s.retired = false;
+    s.isRetired = false;
     if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
     if (window.Utils && Utils.playTone) Utils.playTone('achievement');
     GameState.addJournalEntry(
@@ -950,5 +961,140 @@ window.EduCareerEngine = {
     );
     GameState.save();
     return { ok: true, msg: `🏆 Naik pangkat ke ${newTitle} (+${bump}% gaji)!` };
+  },
+
+  // --------------------------------------------------------------------------
+  // 6. SISTEM BERSARA & PENCEN ("BERSARA & PENCEN")
+  // --------------------------------------------------------------------------
+  canRetire(s = GameState.current) {
+    if (!s || !s.job) return { ok: false, reason: 'Anda tidak memegang pekerjaan aktif.' };
+    this.ensureFields(s);
+    const totalYrs = Math.max(s.totalYearsWorked || 0, s.job.years || 0);
+    if (s.age >= 55 || totalYrs >= 20) {
+      return { ok: true, totalYrs };
+    }
+    return {
+      ok: false,
+      totalYrs,
+      reason: `Layak bersara penuh pada umur 55+ tahun atau 20+ tahun berkhidmat (Kini: Umur ${s.age}, ${totalYrs} tahun berkhidmat).`
+    };
+  },
+
+  retireFromJob(s = GameState.current, { isMandatory = false } = {}) {
+    if (!s || !s.job) return { ok: false, msg: 'Tiada pekerjaan aktif untuk bersara.' };
+    this.ensureFields(s);
+    const elig = this.canRetire(s);
+    if (!isMandatory && !elig.ok) {
+      return { ok: false, msg: elig.reason };
+    }
+
+    const c = Utils.getCountry(s.countryId);
+    const jobTitle = s.job.title;
+    const jobIcon = s.job.icon || '💼';
+    const finalSalary = s.job.salary || 0;
+    const jobYrs = s.job.years || 0;
+    const totalYrs = Math.max(s.totalYearsWorked || 0, jobYrs);
+
+    // 1. Bayar keluar simpanan persaraan (KWSP/EPF) + ganjaran perkhidmatan
+    const epfLumpSum = Math.max(0, Math.round(s.retirementFund || 0));
+    const gratuity = Math.round(finalSalary * Math.min(1.5, totalYrs * 0.04));
+    const totalLumpSum = epfLumpSum + gratuity;
+    s.money = Math.round((s.money || 0) + totalLumpSum);
+    s.retirementFund = 0;
+
+    // 2. Pencen Tahunan Berulang (jika umur >= 55 dan >= 15 tahun bekerja: 30%–60% gaji akhir)
+    let pensionAnnual = s.pensionAnnual || 0;
+    let pensionPct = 0;
+    if (s.age >= 55 && totalYrs >= 15) {
+      pensionPct = Math.min(60, Math.max(30, 30 + Math.round((totalYrs - 15) * 1.5)));
+      const rawPension = Math.round(finalSalary * (pensionPct / 100));
+      const maxCap = Utils.usdToLocal(180000, s.countryId);
+      pensionAnnual = Math.min(maxCap, rawPension);
+      s.pensionAnnual = Math.max(s.pensionAnnual || 0, pensionAnnual);
+    }
+
+    // 3. Rekod dalam Sejarah Kerjaya
+    s.careerHistory.unshift({
+      title: jobTitle,
+      icon: jobIcon,
+      years: jobYrs,
+      totalYearsWorked: totalYrs,
+      finalSalary,
+      lumpSumPaid: totalLumpSum,
+      pensionAnnual: s.pensionAnnual || 0,
+      yearRetired: s.year,
+      ageRetired: s.age,
+      countryId: s.countryId
+    });
+
+    // 4. Kemas kini status Pesara & kurangkan stres
+    s.job = null;
+    s.retired = true;
+    s.isRetired = true;
+    if (s.alignment) {
+      s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - 18, 0, 100);
+    }
+    GameState.adjustStats({ happiness: 14 });
+    if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
+
+    const schemeName = c.retirementScheme || 'Tabung Persaraan';
+    const pensionNote = s.pensionAnnual > 0
+      ? ` Anda turut menerima Pencen Tahunan sebanyak ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn (${pensionPct}% gaji akhir) sepanjang hayat!`
+      : '';
+
+    GameState.addJournalEntry(
+      `🏖️ BERSARA RASMI: Selepas ${totalYrs} tahun berkhidmat, anda bersara daripada jawatan ${jobTitle} pada usia ${s.age} tahun. Bayaran sekali gus (${schemeName} + Ganjaran) berjumlah ${Utils.formatMoney(totalLumpSum, s.countryId)} telah dikreditkan ke akaun anda.${pensionNote}`,
+      'milestone'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      lumpSum: totalLumpSum,
+      pensionAnnual: s.pensionAnnual || 0,
+      msg: `🏖️ Selamat bersara! ${Utils.formatMoney(totalLumpSum, s.countryId)} dikreditkan${s.pensionAnnual > 0 ? ` + Pencen ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn` : ''}!`
+    };
+  },
+
+  checkMandatoryRetirementEvent(s = GameState.current) {
+    if (!s || !s.job || (s.prison && s.prison.inPrison)) return null;
+    this.ensureFields(s);
+    // Langkau persaraan wajib bagi pemilik perniagaan/CEO/ahli politik dalam Mod Khas
+    if (s.activeSpecialMode && ['politics', 'ceo'].includes(s.activeSpecialMode.modeId)) return null;
+
+    const targetAge = Math.max(60, s.mandatoryRetirementAge || 60);
+    if (s.age < targetAge) return null;
+
+    const jobTitle = s.job.title;
+    const totalYrs = Math.max(s.totalYearsWorked || 0, s.job.years || 0);
+    const canExtend = s.age < 65;
+
+    return {
+      id: `mandatory_retire_${s.age}_${Date.now()}`,
+      icon: '🏖️',
+      title: 'Umur Persaraan Rasmi',
+      text: `Anda telah mencapai usia ${s.age} tahun sebagai ${jobTitle} (${totalYrs} tahun berkhidmat). Mengikut polisi perkhidmatan, anda telah tiba pada umur persaraan wajib.${canExtend ? ' Pihak pengurusan menawarkan pilihan untuk bersara penuh dengan ganjaran & pencen, atau memohon sambungan kontrak jangka pendek (2 tahun).' : ' Anda telah mencapai had maksimum umur perkhidmatan (65 tahun) untuk bersara rasmi.'}`,
+      choices: [
+        {
+          label: '🏖️ Bersara Rasmi Sekarang (Terima Simpanan & Pencen)',
+          hint: 'Keluarkan simpanan persaraan sekali gus + pencen tahunan (jika layak)',
+          customAction: (state) => {
+            const res = this.retireFromJob(state, { isMandatory: true });
+            return { outcome: res.msg, toastType: 'success' };
+          }
+        },
+        ...(canExtend ? [{
+          label: '📝 Mohon Sambung Kontrak (2 Tahun Lagi)',
+          hint: 'Teruskan bekerja & kumpul caruman persaraan sehingga umur ' + Math.min(65, s.age + 2) + ' tahun',
+          customAction: (state) => {
+            state.mandatoryRetirementAge = Math.min(65, state.age + 2);
+            if (state.job) state.job.performance = Utils.clamp((state.job.performance || 70) + 4, 0, 100);
+            return {
+              outcome: `Permohonan sambungan kontrak anda sebagai ${jobTitle} diluluskan sehingga umur ${state.mandatoryRetirementAge} tahun!`,
+              toastType: 'culture'
+            };
+          }
+        }] : [])
+      ]
+    };
   }
 };

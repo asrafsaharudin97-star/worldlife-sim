@@ -433,9 +433,16 @@ window.Sim = {
       if (usdGross > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdGross);
     }
 
+    if ((s.retired || s.isRetired) && !s.job && (s.pensionAnnual || 0) > 0 && !(s.prison && s.prison.inPrison)) {
+      GameState.addJournalEntry(
+        `🏖️ Pencen Persaraan tahunan anda berjumlah ${Utils.formatMoney(s.pensionAnnual, s.countryId)} telah dikreditkan secara automatik ke akaun tunai anda.`
+      );
+    }
+
     if (s.job && !(s.prison && s.prison.inPrison)) {
       s.job.years += 1;
-      const retireContrib = Math.round(s.job.salary * 0.09);
+      s.totalYearsWorked = (s.totalYearsWorked || 0) + 1;
+      const retireContrib = Math.round(s.job.salary * 0.12);
 
       let promoted = false;
       if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(0.45)) {
@@ -467,7 +474,7 @@ window.Sim = {
       }
     }
 
-    if (s.age === 60 && s.retirementFund > 0) {
+    if (s.age === 60 && s.retirementFund > 0 && !s.job) {
       s.money += s.retirementFund;
       GameState.addJournalEntry(
         `🏦 Anda mengeluarkan simpanan persaraan ${c.retirementScheme} berjumlah ${Utils.formatMoney(s.retirementFund, s.countryId)}!`,
@@ -584,12 +591,13 @@ window.Sim = {
       s.socialMedia.followers += passive;
     }
 
-    // 4. Penyejukan semula jadi Haba Polis & Stres
+    // 4. Penyejukan semula jadi Haba Polis & Stres (pesara mendapat pengurangan stres tambahan)
     if (s.alignment.notoriety > 0) {
       s.alignment.notoriety = Math.max(0, s.alignment.notoriety - Utils.randInt(2, 5));
     }
-    if (s.alignment.stress > 15) {
-      s.alignment.stress = Math.max(10, s.alignment.stress - Utils.randInt(2, 5));
+    const stressCool = (s.retired || s.isRetired) ? Utils.randInt(4, 8) : Utils.randInt(2, 5);
+    if (s.alignment.stress > 10) {
+      s.alignment.stress = Math.max(5, s.alignment.stress - stressCool);
     }
 
     // 5. Kesan Stres Melampau (Burnout)
@@ -614,6 +622,12 @@ window.Sim = {
     if (s.age < 5) return null;
     if (s.prison && s.prison.inPrison) {
       return (window.PrisonFugitive && PrisonFugitive.pickPrisonEvent) ? PrisonFugitive.pickPrisonEvent(s) : null;
+    }
+
+    // 000. Gesaan Persaraan Wajib (Umur 60–65 bagi pekerjaan standard)
+    if (window.EduCareerEngine && EduCareerEngine.checkMandatoryRetirementEvent) {
+      const retEv = EduCareerEngine.checkMandatoryRetirementEvent(s);
+      if (retEv) return retEv;
     }
 
     // 00. Kejutan Masa Silam (1–2% peluang nadir bagi IDENTITI BAHARU)

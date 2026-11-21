@@ -69,18 +69,31 @@ window.CareerModals = {
       </div>
     `;
 
+    if ((s.isRetired || s.retired) && !s.job) {
+      html += `
+        <div class="info-banner" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-color:#6ee7b7;margin-bottom:10px;">
+          <strong>🏖️ Status Semasa: Pesara Rasmi</strong><br/>
+          Tempoh Kerjaya: <strong>${s.totalYearsWorked || 0} tahun</strong> • Pencen Tahunan: <strong>${s.pensionAnnual > 0 ? `${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn` : 'Tiada (Kumpulan Wang dikeluarkan penuh)'}</strong><br/>
+          <small style="opacity:0.85;">Sebagai pesara, stres tahunan anda lebih rendah. Anda masih bebas mengambil Kursus Profesional, melabur, atau kembali bekerja (pencen dijeda sementara jika bekerja penuh masa).</small>
+        </div>
+      `;
+    }
+
     if (s.job) {
       const ladder = Array.isArray(s.job.ladder) ? s.job.ladder : [s.job.title];
       const rankIdx = s.job.rankIndex || 0;
       const nextRank = ladder[rankIdx + 1] || null;
       const pct = Math.round(((rankIdx + 1) / ladder.length) * 100);
+      const totalYrs = Math.max(s.totalYearsWorked || 0, s.job.years || 0);
+      const retElig = EduCareerEngine.canRetire(s);
 
       html += `
         <div class="career-active-card">
           <div class="cac-top">
             <div>
               <div class="cac-title">${s.job.icon || '💼'} ${Utils.escapeHtml(s.job.title)}</div>
-              <div class="cac-sub">Gaji: <strong>${Utils.formatMoney(s.job.salary, s.countryId)}/thn</strong> • Cukai ${Math.round((c.taxRate || 0) * 100)}% • Tempoh: ${s.job.years} thn</div>
+              <div class="cac-sub">Gaji: <strong>${Utils.formatMoney(s.job.salary, s.countryId)}/thn</strong> • Cukai ${Math.round((c.taxRate || 0) * 100)}% • Tempoh: ${s.job.years} thn (Jumlah Kerjaya: ${totalYrs} thn)</div>
+              <div class="cac-sub" style="margin-top:2px;color:#059669;">🏦 Tabung Persaraan (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong> (+12%/thn)</div>
             </div>
             <span class="cat-badge synergy">Pangkat ${rankIdx + 1}/${ladder.length}</span>
           </div>
@@ -121,6 +134,14 @@ window.CareerModals = {
               <span class="ai-desc">Berunding dengan majikan untuk naik gaji (+6–14%)</span>
             </span>
             <span class="ai-right">Rundingan</span>
+          </button>
+          <button type="button" class="action-item" id="act-retire-job" ${retElig.ok ? '' : 'style="opacity:0.75;"'}>
+            <span class="ai-icon">🏖️</span>
+            <span class="ai-content">
+              <span class="ai-title">Bersara (Pencen)</span>
+              <span class="ai-desc">${retElig.ok ? `Layak bersara penuh! Keluarkan Tabung ${Utils.formatMoney(s.retirementFund || 0, s.countryId)} + Ganjaran${s.age >= 55 && totalYrs >= 15 ? ' & Pencen Tahunan (30%–60% gaji)' : ''}` : `Syarat: Umur 55+ (kini ${s.age}) atau 20+ tahun bekerja (kini ${totalYrs} thn)`}</span>
+            </span>
+            <span class="ai-right" style="color:${retElig.ok ? '#059669' : '#64748b'};font-weight:700;">${retElig.ok ? 'Bersara' : 'Belum Layak'}</span>
           </button>
           <button type="button" class="action-item" id="act-quit-job">
             <span class="ai-icon">🚪</span>
@@ -464,6 +485,32 @@ window.CareerModals = {
       });
     }
 
+    const chList = Array.isArray(s.careerHistory) ? s.careerHistory : [];
+    html += `<div class="section-heading">🏖️ Rekod Kerjaya &amp; Persaraan (${chList.length})</div>`;
+    html += `
+      <div class="info-banner" style="background:#f8fafc;">
+        Jumlah Tahun Bekerja: <strong>${s.totalYearsWorked || 0} tahun</strong> •
+        Tabung Persaraan (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong> •
+        Pencen Tahunan: <strong>${(s.pensionAnnual || 0) > 0 ? `${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn` : 'Tiada'}</strong>
+      </div>
+    `;
+    if (chList.length > 0) {
+      chList.forEach(ch => {
+        const yrsRole = ch.years ?? ch.yearsInRole ?? 0;
+        const retAge = ch.ageRetired ?? ch.retiredAge ?? s.age;
+        const retYear = ch.yearRetired ?? ch.retiredYear ?? s.year;
+        const lump = ch.lumpSumPaid ?? ch.totalLumpSum ?? 0;
+        const stLabel = ch.status || (lump > 0 || ch.pensionAnnual > 0 ? 'Bersara' : 'Tamat');
+        html += `
+          <div class="info-banner">
+            <strong>${stLabel === 'Bersara' ? '🏖️' : '💼'} ${Utils.escapeHtml(ch.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(stLabel)}</span><br/>
+            Tempoh: ${yrsRole} thn • Gaji Akhir: ${Utils.formatMoney(ch.finalSalary || 0, s.countryId)}/thn • Umur ${retAge} (${retYear})
+            ${(ch.pensionAnnual > 0 || lump > 0) ? `<br/><small style="color:#059669;font-weight:700;">${ch.pensionAnnual > 0 ? `Pencen: ${Utils.formatMoney(ch.pensionAnnual, s.countryId)}/thn • ` : ''}Ganjaran &amp; Tabung: ${Utils.formatMoney(lump, s.countryId)}</small>` : ''}
+          </div>
+        `;
+      });
+    }
+
     return html;
   },
 
@@ -506,8 +553,32 @@ window.CareerModals = {
         this.showHub('jobs');
       });
 
+      const retireBtn = document.getElementById('act-retire-job');
+      if (retireBtn) retireBtn.addEventListener('click', () => {
+        const res = EduCareerEngine.retireFromJob(s);
+        App.toast(res.msg, res.ok ? 'gold' : 'error');
+        if (res.ok) {
+          this._browsingNewJob = false;
+          App.renderAll();
+          this.showHub('jobs');
+        }
+      });
+
       const quitJobAction = () => {
         if (!s.job) return;
+        if (!Array.isArray(s.careerHistory)) s.careerHistory = [];
+        s.careerHistory.push({
+          title: s.job.title,
+          careerId: s.job.careerId || s.job.id || 'job',
+          yearsInRole: s.job.years || 0,
+          totalYearsWorked: s.totalYearsWorked || s.job.years || 0,
+          finalSalary: s.job.salary || 0,
+          retiredAge: s.age,
+          retiredYear: s.year,
+          pensionAnnual: 0,
+          totalLumpSum: 0,
+          status: 'Letak Jawatan'
+        });
         GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title}.`, 'culture');
         s.job = null;
         this._browsingNewJob = false;

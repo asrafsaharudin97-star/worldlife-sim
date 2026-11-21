@@ -101,7 +101,7 @@ window.CharacterStatus = {
     }
 
     // KEUTAMAAN 5: PESARA (Retired)
-    if (s.retired) {
+    if (s.retired || s.isRetired) {
       return {
         title: 'Pesara',
         category: 'retired',
@@ -156,11 +156,11 @@ window.CharacterStatus = {
       return { grossLocal: 0, netLocal: 0, taxLocal: 0, retireContribLocal: 0, breakdown: [] };
     }
 
-    // 1) Gaji Kerjaya Rasmi
+    // 1) Gaji Kerjaya Rasmi (~12% caruman KWSP/EPF ke retirementFund)
     if (s.job && s.job.salary > 0) {
       const g = Math.round(s.job.salary);
       const t = Math.round(g * taxRate);
-      const ret = Math.round(g * 0.09);
+      const ret = Math.round(g * 0.12);
       grossLocal += g;
       taxLocal += t;
       retireContribLocal += ret;
@@ -195,8 +195,8 @@ window.CharacterStatus = {
       breakdown.push({ label: 'Tajaan & Iklan Media Sosial', gross: g, net: g, icon: '📱' });
     }
 
-    // 5) Pencen Persaraan (jika bersara)
-    if (s.retired && s.pensionAnnual > 0) {
+    // 5) Pencen Persaraan (dibayar apabila bersara & tiada kerja aktif supaya tiada pertindihan gaji+pencen)
+    if ((s.retired || s.isRetired) && !s.job && s.pensionAnnual > 0) {
       const g = Math.round(s.pensionAnnual);
       grossLocal += g;
       breakdown.push({ label: 'Pencen Persaraan', gross: g, net: g, icon: '🌅' });
@@ -316,14 +316,19 @@ window.CharacterStatus = {
       }
     } else if (transition === 'enter_career') {
       s.retired = false;
+      s.isRetired = false;
     } else if (transition === 'quit_job') {
       s.job = null;
     } else if (transition === 'retire') {
-      const inc = this.getTotalAnnualIncome(s);
-      s.pensionAnnual = Math.max(Utils.usdToLocal(6000, s.countryId), Math.round(inc.grossLocal * 0.35));
-      s.job = null;
-      s.retired = true;
-      GameState.addJournalEntry(`🌅 Anda memilih untuk bersara dengan pencen ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn!`, 'milestone');
+      if (window.EduCareerEngine && EduCareerEngine.retireFromJob) {
+        EduCareerEngine.retireFromJob(s);
+      } else {
+        const inc = this.getTotalAnnualIncome(s);
+        s.pensionAnnual = Math.max(Utils.usdToLocal(6000, s.countryId), Math.round(inc.grossLocal * 0.35));
+        s.job = null;
+        s.retired = true;
+        s.isRetired = true;
+      }
     }
 
     this.recordPeakRole(s);
