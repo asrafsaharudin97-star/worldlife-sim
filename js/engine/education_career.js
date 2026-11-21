@@ -140,7 +140,14 @@ window.EduCareerEngine = {
     const ed = s.education;
     const prog = EducationData.PROGRAMS.find(p => p.id === level);
     if (!prog) return { ok: false, reason: 'Program tidak dikenali.' };
-    if (s.prison && s.prison.inPrison) return { ok: false, reason: 'Anda berada di dalam penjara.' };
+    if (s.fugitive && s.fugitive.isFugitive) {
+      return { ok: false, reason: 'Pendaftaran fizikal disekat ketika berstatus Pelarian — risiko tinggi dikesan & ditangkap polis.' };
+    }
+    if (s.prison && s.prison.inPrison) {
+      if (level !== 'high_school') {
+        return { ok: false, reason: 'Pengajian tinggi (Diploma/Ijazah/Master/PhD) tidak tersedia di dalam penjara. Sertai Program Pemulihan & Kemahiran Penjara (Kelas Dewasa / Sijil Vokasional).' };
+      }
+    }
     if (ed.activeStudy) return { ok: false, reason: 'Anda sedang mengikuti pengajian aktif sekarang.' };
     if (s.age < prog.minAge) return { ok: false, reason: `Umur minimum ialah ${prog.minAge} tahun.` };
     if (prog.exactLevelOnly && ed.educationLevel !== prog.exactLevelOnly) {
@@ -393,11 +400,23 @@ window.EduCareerEngine = {
   // --------------------------------------------------------------------------
   // 3. SIJIL PROFESIONAL & KEMAHIRAN BERASASKAN BIDANG
   // --------------------------------------------------------------------------
+  isPrisonRehabCourse(cert) {
+    if (!cert) return false;
+    return cert.group === 'Asas & Vokasional' || (cert.minEducation === 'none' && (cert.costUsd || 0) <= 1000);
+  },
+
   checkCertificateEligibility(s, cert) {
     this.ensureFields(s);
     const ed = s.education;
+    if (s.fugitive && s.fugitive.isFugitive) {
+      return { ok: false, reason: 'Pendaftaran kursus disekat ketika berstatus Pelarian — risiko tinggi dikesan & ditangkap polis.' };
+    }
     if (!cert.noAgeLimit && s.age < 17) return { ok: false, reason: 'Dibuka bermula umur 17 tahun.' };
-    if (s.prison && s.prison.inPrison) return { ok: false, reason: 'Tidak tersedia ketika di dalam penjara.' };
+    if (s.prison && s.prison.inPrison) {
+      if (!this.isPrisonRehabCourse(cert)) {
+        return { ok: false, reason: 'Hanya Program Pemulihan & Kemahiran Penjara (kursus asas/vokasional) dibenarkan ketika di dalam penjara.' };
+      }
+    }
     if (ed.certificates.includes(cert.id)) return { ok: false, reason: 'Sudah Dimiliki' };
 
     if (!EducationData.hasMinLevel(ed.educationLevel, cert.minEducation)) {
@@ -458,7 +477,8 @@ window.EduCareerEngine = {
     const elig = this.checkCertificateEligibility(s, cert);
     if (!elig.ok) return { ok: false, msg: elig.reason };
 
-    const costLocal = Utils.usdToLocal(cert.costUsd, s.countryId);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    const costLocal = inPrison ? 0 : Utils.usdToLocal(cert.costUsd, s.countryId);
     if (s.money < costLocal) {
       return { ok: false, msg: `Yuran kursus & pensijilan ialah ${Utils.formatMoney(costLocal, s.countryId)}.` };
     }
@@ -477,6 +497,17 @@ window.EduCareerEngine = {
     if (Utils.chance(passChance)) {
       s.education.certificates.push(cert.id);
       GameState.adjustStats({ smarts: Utils.randInt(4, 7), happiness: 11 });
+      if (inPrison && s.prison) {
+        const behavGain = Utils.randInt(8, 12);
+        s.prison.behavior = Utils.clamp((s.prison.behavior ?? 60) + behavGain, 0, 100);
+        if (s.alignment) s.alignment.karma = Utils.clamp((s.alignment.karma || 0) + 5, -100, 100);
+        GameState.addJournalEntry(
+          `⛓️📜 PROGRAM PEMULIHAN PENJARA: Anda menamatkan ${cert.icon} ${cert.title} di dalam penjara! Rekod Kelakuan +${behavGain}% (${s.prison.behavior}%) — peluang parol meningkat.`,
+          'milestone'
+        );
+        GameState.save();
+        return { ok: true, msg: `Lulus Program Pemulihan Penjara: ${cert.title} (Kelakuan ${s.prison.behavior}% • Peluang Parol +)!` };
+      }
       if (window.Dynasty) Dynasty.adjustReputation(2);
       if (window.Utils && Utils.playTone) Utils.playTone('achievement');
       GameState.addJournalEntry(
@@ -487,6 +518,9 @@ window.EduCareerEngine = {
       return { ok: true, msg: `Tahniah! Memperoleh ${cert.title} (+${cert.salaryBonusPct}% bonus gaji)!` };
     } else {
       GameState.adjustStats({ smarts: 2, happiness: -4 });
+      if (inPrison && s.prison) {
+        s.prison.behavior = Utils.clamp((s.prison.behavior ?? 60) + 3, 0, 100);
+      }
       GameState.addJournalEntry(
         `📜 Anda tidak sempat mencapai markah lulus untuk pensijilan ${cert.title} kali ini, namun ilmu kursus meningkatkan Kepintaran (+2%).`,
         'warning'
