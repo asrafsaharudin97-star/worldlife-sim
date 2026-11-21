@@ -60,7 +60,12 @@ window.Sim = {
     }
 
     // 4. Perayaan & penyesuaian budaya tempatan
-    this._processCultureAndFestivals(s, c);
+    if (!s.prison.inPrison) {
+      this._processCultureAndFestivals(s, c);
+    }
+
+    // 4B. Penjara, Pendapatan 5 Mod Khas, Laman Sosial & Penyelarasan Stres/Haba Polis
+    this._processModesAndAlignment(s, c);
 
     // 5. Perubahan statistik semula jadi & ketahanan rohani
     if (s.age > 55) {
@@ -311,6 +316,65 @@ window.Sim = {
     return null;
   },
 
+  _processModesAndAlignment(s, c) {
+    // 1. Hukuman Penjara
+    if (s.prison && s.prison.inPrison) {
+      s.prison.yearsLeft = Math.max(0, (s.prison.yearsLeft || 1) - 1);
+      if (s.prison.yearsLeft <= 0) {
+        s.prison.inPrison = false;
+        s.alignment.notoriety = Math.max(0, s.alignment.notoriety - 20);
+        GameState.adjustStats({ happiness: 14 });
+        GameState.addJournalEntry('🔓 Anda tamat menjalani hukuman penjara dan melangkah keluar sebagai insan bebas! Masa untuk memulakan bab baru.', 'milestone');
+      } else {
+        GameState.adjustStats({ happiness: -4, health: -2 });
+        GameState.addJournalEntry(`⛓️ Menjalani hukuman di penjara (${s.prison.yearsLeft} tahun lagi). Buka tab 🎭 5 Mod untuk Program Keinsafan, Parol atau Bolos.`, 'warning');
+      }
+      return;
+    }
+
+    // 2. Pendapatan tahunan Mod Khas (Mafia, Artis, Pelakon, Politik)
+    if (s.modes.mafia.active && window.UnderworldModes) {
+      const r = UnderworldModes.MAFIA_RANKS[s.modes.mafia.rankIndex] || UnderworldModes.MAFIA_RANKS[0];
+      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
+      s.money += pay;
+    }
+    if (s.modes.artist.active && window.FameModes) {
+      const r = FameModes.ARTIST_RANKS[s.modes.artist.rankIndex] || FameModes.ARTIST_RANKS[0];
+      const pay = Utils.usdToLocal(Math.round(r.annualUsd * (s.modes.artist.contractType === 'predatory' ? 0.6 : 1)), s.countryId);
+      s.money += pay;
+    }
+    if (s.modes.actor.active && window.FameModes) {
+      const r = FameModes.ACTOR_RANKS[s.modes.actor.rankIndex] || FameModes.ACTOR_RANKS[0];
+      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
+      s.money += pay;
+    }
+    if (s.modes.politic.active && window.FameModes) {
+      const r = FameModes.POLITIC_RANKS[s.modes.politic.rankIndex] || FameModes.POLITIC_RANKS[0];
+      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
+      s.money += pay;
+    }
+
+    // 3. Pertumbuhan pasif Laman Sosial
+    if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers > 0) {
+      const passive = Math.round(s.socialMedia.followers * Utils.randInt(2, 6) / 100);
+      s.socialMedia.followers += passive;
+    }
+
+    // 4. Penyejukan semula jadi Haba Polis & Stres
+    if (s.alignment.notoriety > 0) {
+      s.alignment.notoriety = Math.max(0, s.alignment.notoriety - Utils.randInt(2, 5));
+    }
+    if (s.alignment.stress > 15) {
+      s.alignment.stress = Math.max(10, s.alignment.stress - Utils.randInt(2, 5));
+    }
+
+    // 5. Kesan Stres Melampau (Burnout)
+    if (s.alignment.stress >= 85) {
+      GameState.adjustStats({ health: -8, happiness: -10 });
+      GameState.addJournalEntry('🧠 Tekanan mental (Stres) anda berada pada tahap kritikal! Luangkan masa berehat atau tenangkan jiwa.', 'warning');
+    }
+  },
+
   _pickWeighted(pool) {
     if (!pool || !pool.length) return null;
     const total = pool.reduce((acc, item) => acc + (item.weight || 10), 0);
@@ -324,6 +388,29 @@ window.Sim = {
 
   _pickYearlyEvent(s, c) {
     if (s.age < 5) return null;
+    if (s.prison && s.prison.inPrison) return null;
+
+    // 0. Peristiwa Khusus Dunia Bawah (Serbuan Pasukan Khas / Omertà) & Mod Kemasyhuran (Kontrak / Siasatan Politik)
+    if (window.UnderworldModes) {
+      const uwEv = UnderworldModes.pickUnderworldEvent(s);
+      if (uwEv) return uwEv;
+    }
+    if (window.FameModes) {
+      const fmEv = FameModes.pickFameModeEvent(s);
+      if (fmEv) return fmEv;
+    }
+
+    // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Jodoh / Ta'aruf
+    if (window.SocialMedia) {
+      const rfEv = SocialMedia.checkPartnerHiddenTraitEvent(s);
+      if (rfEv) return rfEv;
+    }
+
+    // 0C. Arka Cerita Cliffhanger "Wow" & Ujian Karma (Good vs Bad Trials)
+    if (window.KarmaEndings) {
+      const kaEv = KarmaEndings.pickKarmaOrArcEvent(s, c);
+      if (kaEv) return kaEv;
+    }
 
     // 1. KESAN RAMA-RAMA (Akibat Tersembunyi 3–15 tahun kemudian)
     if (window.LIFE_EVENTS && window.LIFE_EVENTS.butterflyEffects && s.hiddenFlags) {

@@ -273,6 +273,29 @@ window.GameState = {
     if (!Array.isArray(s.spiritualHistory)) s.spiritualHistory = [];
     if (!s.hiddenFlags || typeof s.hiddenFlags !== 'object') s.hiddenFlags = {};
     if (!Array.isArray(s.recentCrises)) s.recentCrises = [];
+
+    if (!s.alignment || typeof s.alignment !== 'object') {
+      s.alignment = { karma: 0, fame: 0, peakFame: 0, notoriety: 0, stress: 10 };
+    }
+    if (!s.socialMedia || typeof s.socialMedia !== 'object') {
+      s.socialMedia = { hasAccount: false, platforms: [], followers: 0, posts: 0, viralHits: 0, cancelledCount: 0 };
+    }
+    if (!s.prison || typeof s.prison !== 'object') {
+      s.prison = { inPrison: false, yearsLeft: 0, totalServed: 0, crimeName: null };
+    }
+    if (!s.modes || typeof s.modes !== 'object') {
+      s.modes = {
+        crime: { opsSuccess: 0, heistsDone: 0 },
+        mafia: { active: false, syndicateName: null, rankIndex: 0, respect: 0 },
+        artist: { active: false, rankIndex: 0, skill: 0, releases: 0, awards: 0, contractType: null },
+        actor: { active: false, rankIndex: 0, skill: 0, films: 0, awards: 0 },
+        politic: { active: false, rankIndex: 0, approval: 40, faction: null, policiesPassed: 0, corruptionCount: 0 }
+      };
+    }
+    if (!s.activeArcs || typeof s.activeArcs !== 'object') s.activeArcs = {};
+    if (!Array.isArray(s.highlights)) s.highlights = [];
+    if (!Array.isArray(s.modesVisited)) s.modesVisited = [];
+
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
     }
@@ -472,11 +495,16 @@ window.GameState = {
     };
 
     this.current = state;
+    this.ensureUpgradedState();
     this.save();
     return state;
   },
 
   computeRibbon(s) {
+    if (window.KarmaEndings && KarmaEndings.evaluateEnding) {
+      const end = KarmaEndings.evaluateEnding(s);
+      return { name: end.title, icon: end.icon, desc: end.desc };
+    }
     const netUsd = Utils.localToUsd(this.getNetWorth(), s.countryId);
     const countriesCount = s.countriesLivedIn.length;
     const citizenCount = s.citizenships.length;

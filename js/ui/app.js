@@ -29,6 +29,15 @@ window.App = {
     document.getElementById('btn-menu').addEventListener('click', () => Modals.showMenu());
     document.getElementById('btn-passport').addEventListener('click', () => Modals.showActivities('passport'));
     document.getElementById('char-avatar').addEventListener('click', () => Modals.showActivities('passport'));
+    document.getElementById('btn-open-modes').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive) ModeModals.showLifeModes('crime');
+    });
+    document.getElementById('btn-open-social').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
+    });
+    document.getElementById('prison-alert-bar').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive) ModeModals.showLifeModes('crime');
+    });
 
     document.getElementById('btn-age-up').addEventListener('click', () => this.handleAgeUp());
 
@@ -236,6 +245,34 @@ window.App = {
       document.getElementById('adaptation-fill').style.width = `${adapt}%`;
     } else {
       adaptWrap.classList.add('hidden');
+    }
+
+    // Bar Karma, Populariti, Haba Polis, Stres & Penjara
+    GameState.ensureUpgradedState();
+    const a = s.alignment;
+    const kInfo = window.KarmaEndings ? KarmaEndings.getKarmaLabel(a.karma) : { icon: '⚖️' };
+    const pillKarma = document.getElementById('pill-karma');
+    const pillFame = document.getElementById('pill-fame');
+    const pillHeat = document.getElementById('pill-heat');
+    const pillStress = document.getElementById('pill-stress');
+    const prisonBar = document.getElementById('prison-alert-bar');
+    if (pillKarma) pillKarma.textContent = `${kInfo.icon} ${a.karma >= 0 ? '+' : ''}${a.karma}`;
+    if (pillFame) pillFame.textContent = `⭐ ${a.fame}%`;
+    if (pillHeat) {
+      pillHeat.textContent = `🚔 ${a.notoriety}%`;
+      pillHeat.classList.toggle('danger', a.notoriety >= 50);
+    }
+    if (pillStress) {
+      pillStress.textContent = `🧠 ${a.stress}%`;
+      pillStress.classList.toggle('danger', a.stress >= 75);
+    }
+    if (prisonBar) {
+      if (s.prison && s.prison.inPrison) {
+        prisonBar.classList.remove('hidden');
+        prisonBar.textContent = `⛓️ DI PENJARA (Baki ${s.prison.yearsLeft} thn) — Klik untuk Parol / Taubat / Bolos`;
+      } else {
+        prisonBar.classList.add('hidden');
+      }
     }
 
     this._renderStat('happiness', s.stats.happiness);

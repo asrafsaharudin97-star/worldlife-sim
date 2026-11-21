@@ -54,6 +54,19 @@
           <div id="adaptation-fill" class="mini-fill" style="width: 20%"></div>
         </div>
       </div>
+
+      <!-- Bar Karma, Populariti, Haba Polis & Stres + Pintasan Mod Hidup -->
+      <div id="alignment-strip" class="alignment-strip">
+        <span class="align-pill" id="pill-karma" title="Karma (Baik vs Korup)">⚖️ 0</span>
+        <span class="align-pill" id="pill-fame" title="Populariti">⭐ 0%</span>
+        <span class="align-pill" id="pill-heat" title="Haba Polis">🚔 0%</span>
+        <span class="align-pill" id="pill-stress" title="Stres / Tekanan">🧠 10%</span>
+        <button id="btn-open-modes" class="quick-hub-btn" type="button">🎭 5 Mod</button>
+        <button id="btn-open-social" class="quick-hub-btn" type="button">📱 Sosial</button>
+      </div>
+      <button id="prison-alert-bar" class="prison-alert-bar hidden" type="button">
+        ⛓️ ANDA DI PENJARA — Klik untuk urus Parol / Taubat / Bolos
+      </button>
     </header>
 
     <!-- Jurnal Kehidupan -->
@@ -190,8 +203,13 @@
   <script defer src="js/data/life_events.js"></script>
   <script defer src="js/engine/utils.js"></script>
   <script defer src="js/engine/state.js"></script>
+  <script defer src="js/engine/karma_endings.js"></script>
   <script defer src="js/engine/relationships.js"></script>
+  <script defer src="js/data/social_media.js"></script>
+  <script defer src="js/data/modes_underworld.js"></script>
+  <script defer src="js/data/modes_fame.js"></script>
   <script defer src="js/engine/simulation.js"></script>
+  <script defer src="js/ui/modals_modes.js"></script>
   <script defer src="js/ui/modals.js"></script>
   <script defer src="js/ui/app.js"></script>
 </body>

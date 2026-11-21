@@ -532,6 +532,10 @@ window.Modals = {
     const loveBtn = document.getElementById('btn-find-love');
     if (loveBtn) {
       loveBtn.addEventListener('click', () => {
+        if (window.ModeModals && ModeModals.showSocialHub) {
+          ModeModals.showSocialHub('dating');
+          return;
+        }
         const res = Sim.meetLocalDate();
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
@@ -1152,8 +1156,12 @@ window.Modals = {
   // --------------------------------------------------------------------------
   showMenu() {
     const history = GameState.getHistory();
+    const unlocked = window.KarmaEndings ? KarmaEndings.getUnlocked() : { endings: [], modes: [] };
+    const totalEndings = window.KarmaEndings ? KarmaEndings.ENDINGS_CATALOG.length : 12;
+    const totalModes = window.KarmaEndings ? KarmaEndings.MODES_LIST.length : 6;
+
     let histHtml = history.length === 0
-      ? `<div class="info-banner">Belum ada rekod kehidupan tamat. Jalani kehidupan penuh untuk kumpul reben legasi!</div>`
+      ? `<div class="info-banner">Belum ada rekod kehidupan tamat. Jalani kehidupan penuh untuk membuka penamat rahsia!</div>`
       : history.map(h => `
           <div class="info-banner">
             <strong>${h.ribbon.icon} ${Utils.escapeHtml(h.name)}</strong> — Umur ${h.age} thn • <strong>${h.ribbon.name}</strong><br/>
@@ -1161,12 +1169,43 @@ window.Modals = {
           </div>
         `).join('');
 
+    const endingsHtml = window.KarmaEndings ? `
+      <div class="section-heading">🗝️ Penamat Rahsia (${unlocked.endings.length}/${totalEndings}) • Mod Dicuba (${unlocked.modes.length}/${totalModes})</div>
+      <div class="endings-grid">
+        ${KarmaEndings.ENDINGS_CATALOG.map(e => {
+          const has = unlocked.endings.includes(e.id);
+          return `<div class="ending-chip ${has ? 'unlocked' : 'locked'}"><span>${has ? e.icon : '🔒'}</span><span>${has ? e.title : 'Penamat Rahsia'}</span></div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
     this.open({
       icon: '🌍',
       title: 'Menu WorldLife',
-      subtitle: 'Urus Kehidupan & Dewan Legasi',
+      subtitle: 'Laluan Hidup, Legasi & Penamat Rahsia',
       bodyHtml: `
         <div class="action-list">
+          <button class="action-item" id="menu-open-modes">
+            <span class="ai-icon">🎭</span>
+            <span class="ai-content">
+              <span class="ai-title">Laluan Hidup &amp; 5 Mod Khas</span>
+              <span class="ai-desc">Jenayah, Mafia, Artis, Pelakon &amp; Politik</span>
+            </span>
+          </button>
+          <button class="action-item" id="menu-open-social">
+            <span class="ai-icon">📱</span>
+            <span class="ai-content">
+              <span class="ai-title">Laman Sosial, Viral &amp; Platform Jodoh</span>
+              <span class="ai-desc">Bina pengikut, kerjaya viral &amp; cari pasangan</span>
+            </span>
+          </button>
+          <button class="action-item" id="menu-open-passport">
+            <span class="ai-icon">🛂</span>
+            <span class="ai-content">
+              <span class="ai-title">Lihat Pasport, Profil &amp; Kepercayaan</span>
+              <span class="ai-desc">Semak negara, cop pasport &amp; perjalanan rohani</span>
+            </span>
+          </button>
           <button class="action-item" id="menu-new-life">
             <span class="ai-icon">✨</span>
             <span class="ai-content">
@@ -1174,19 +1213,19 @@ window.Modals = {
               <span class="ai-desc">Pilih negara lahir, latar belakang budaya &amp; nama baru</span>
             </span>
           </button>
-          <button class="action-item" id="menu-open-passport">
-            <span class="ai-icon">🛂</span>
-            <span class="ai-content">
-              <span class="ai-title">Lihat Pasport &amp; Cop</span>
-              <span class="ai-desc">Semak setiap negara yang pernah anda diami</span>
-            </span>
-          </button>
         </div>
+        ${endingsHtml}
         <div class="section-heading">🏆 Dewan Kehidupan Lalu (${history.length})</div>
         ${histHtml}
       `
     });
 
+    document.getElementById('menu-open-modes').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive && window.ModeModals) ModeModals.showLifeModes('crime');
+    });
+    document.getElementById('menu-open-social').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive && window.ModeModals) ModeModals.showSocialHub('social');
+    });
     document.getElementById('menu-new-life').addEventListener('click', () => {
       this.close(true);
       App.showStartScreen();
@@ -1200,6 +1239,10 @@ window.Modals = {
   // 7. RINGKASAN AKHIR HAYAT & SAMBUNG SEBAGAI ANAK
   // --------------------------------------------------------------------------
   showDeathSummary() {
+    if (window.ModeModals && ModeModals.showLegacyObituary) {
+      ModeModals.showLegacyObituary();
+      return;
+    }
     const s = GameState.current;
     const ribbon = GameState.computeRibbon(s);
     const c = Utils.getCountry(s.countryId);
