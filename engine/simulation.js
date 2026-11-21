@@ -1,0 +1,932 @@
+/* ==========================================================================
+   WorldLife — Enjin Simulasi Utama (Umur, Budaya, Kerjaya & Hijrah)
+   Bahasa Melayu
+   ========================================================================== */
+
+window.Sim = {
+  ageUp() {
+    const s = GameState.current;
+    if (!s || !s.alive) return { event: null, died: false };
+
+    s.age += 1;
+    s.year += 1;
+    s.yearsInCurrentCountry += 1;
+    s.yearlyActions = {};
+
+    const c = Utils.getCountry(s.countryId);
+
+    s.journal.push({
+      age: s.age,
+      year: s.year,
+      countryId: s.countryId,
+      city: s.city,
+      entries: []
+    });
+
+    // 1. Umur ahli keluarga & rakan
+    for (const rel of s.relationships) {
+      if (!rel.alive) continue;
+      rel.age += 1;
+      if (rel.age > 74 && Utils.chance((rel.age - 72) * 0.025)) {
+        rel.alive = false;
+        GameState.addJournalEntry(
+          `💔 ${rel.role} anda, ${rel.name}, telah meninggal dunia dengan tenang pada usia ${rel.age} tahun.`,
+          'warning'
+        );
+        GameState.adjustStats({ happiness: -18 });
+        if (s.partnerId === rel.id) {
+          s.partnerId = null;
+          s.married = false;
+        }
+      } else if (rel.countryId !== s.countryId) {
+        rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
+      }
+    }
+
+    // 2. Pendidikan (mengikut negara semasa)
+    this._processEducation(s, c);
+
+    // 3. Gaji, pelaburan, cukai & kos sara hidup
+    this._processFinances(s, c);
+
+    // 4. Perayaan & penyesuaian budaya tempatan
+    this._processCultureAndFestivals(s, c);
+
+    // 5. Perubahan statistik semula jadi
+    if (s.age > 55) {
+      const healthDrop = Utils.randInt(1, Math.min(8, Math.floor((s.age - 50) / 5) + 1));
+      s.stats.health = Utils.clamp(s.stats.health - healthDrop);
+      s.stats.looks = Utils.clamp(s.stats.looks - Utils.randInt(0, 2));
+    } else if (s.age >= 13 && s.age <= 24) {
+      s.stats.looks = Utils.clamp(s.stats.looks + Utils.randInt(-2, 3));
+    }
+
+    // 6. Semak kematian
+    const deathCause = this._checkDeath(s, c);
+    if (deathCause) {
+      s.alive = false;
+      s.causeOfDeath = deathCause;
+      GameState.addJournalEntry(
+        `🕊️ Anda menghembuskan nafas terakhir di ${s.city}, ${c.name} ${c.flag} pada umur ${s.age} tahun. Punca: ${deathCause}.`,
+        'warning'
+      );
+      GameState.archiveCurrentLife();
+      GameState.save();
+      return { event: null, died: true };
+    }
+
+    // 7. Pilih peristiwa pilihan tahunan
+    const event = this._pickYearlyEvent(s, c);
+
+    const curBlock = s.journal[s.journal.length - 1];
+    if (curBlock.entries.length === 0) {
+      GameState.addJournalEntry(
+        `Setahun lagi berlalu di ${s.city}, ${c.name} ${c.flag}. Anda rasa ${s.stats.happiness >= 60 ? 'bersemangat dan gembira' : 'tenang merenung masa depan'}.`
+      );
+    }
+
+    GameState.save();
+    return { event, died: false };
+  },
+
+  _processEducation(s, c) {
+    const ed = s.education;
+    const ced = c.education;
+
+    if (s.age === ced.preschool.startAge && ed.stage === 'infant') {
+      ed.stage = 'preschool';
+      ed.schoolName = `${ced.preschool.name} ${s.city}`;
+      GameState.addJournalEntry(`🎒 Anda memulakan alam persekolahan di ${ed.schoolName}, ${c.name}!`, 'milestone');
+      GameState.adjustStats({ smarts: 4, happiness: 3 });
+    } else if (s.age === ced.primary.startAge && (ed.stage === 'infant' || ed.stage === 'preschool')) {
+      ed.stage = 'primary';
+      ed.schoolName = `${ced.primary.name} ${s.city}`;
+      GameState.addJournalEntry(`📚 Anda mendaftar masuk ke ${ed.schoolName}.`, 'milestone');
+      GameState.adjustStats({ smarts: 5 });
+    } else if (s.age === ced.primary.examAge && ed.stage === 'primary') {
+      const score = Utils.clamp(s.stats.smarts + Utils.randInt(-10, 12), 20, 100);
+      const grade = score >= 80 ? 'Semua A Cemerlang!' : score >= 60 ? 'Lulus Dengan Baik' : 'Lulus Sederhana';
+      GameState.addJournalEntry(
+        `📝 Anda menduduki ${ced.primary.examName} di ${c.name} dan memperoleh keputusan: ${grade}`,
+        'milestone'
+      );
+      GameState.adjustStats({ happiness: score >= 60 ? 8 : -4, smarts: 3 });
+    } else if (s.age === ced.secondary.startAge && ed.stage === 'primary') {
+      ed.stage = 'secondary';
+      ed.schoolName = `${ced.secondary.name} ${s.city}`;
+      GameState.addJournalEntry(`🏫 Anda melangkah ke ${ed.schoolName}! Zaman remaja bermula.`, 'milestone');
+    } else if (s.age === ced.secondary.examAge && ed.stage === 'secondary') {
+      const score = Utils.clamp(s.stats.smarts + Utils.randInt(-8, 12), 20, 100);
+      let gradeText;
+      if (c.id === 'MY') {
+        gradeText = score >= 85 ? '9A+ (Pelajar Cemerlang SPM!)' : score >= 70 ? '6A 3B (Keputusan SPM Mantap!)' : score >= 50 ? 'Kepujian BM & Matematik' : 'Lulus Asas';
+      } else if (c.id === 'KR') {
+        gradeText = score >= 85 ? 'Top 2% Suneung (Layak Universiti SKY!)' : score >= 65 ? 'Skor Universiti Baik' : 'Skor Suneung Sederhana';
+      } else if (c.id === 'GB') {
+        gradeText = score >= 85 ? 'Semua Gred 9 Cemerlang!' : score >= 65 ? 'Gred 7–8 Kukuh' : 'Lulus Biasa';
+      } else {
+        gradeText = score >= 85 ? 'Cemerlang Kepujian!' : score >= 65 ? 'Keputusan Baik' : 'Tamat Sekolah';
+      }
+      ed.hasHighSchool = true;
+      ed.examGrade = gradeText;
+      ed.stage = 'highschool_done';
+      ed.schoolName = null;
+      GameState.addJournalEntry(
+        `🎓 Anda menamatkan ${ced.secondary.examName} di ${c.name} dengan keputusan: ${gradeText}! Anda kini boleh mohon Universiti, mula bekerja, atau berhijrah pada umur 18.`,
+        'milestone'
+      );
+      GameState.adjustStats({ happiness: score >= 65 ? 12 : 2, smarts: 5 });
+    } else if (ed.stage === 'university') {
+      const isLocal = s.citizenships.includes(s.countryId) || s.residencyStatus === 'PR';
+      const tuition = Math.round(ced.uniTuitionAnnual * (isLocal ? 1 : 1.75));
+      if (s.age <= 22 && s.money < tuition && s.relationships.some(r => ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role) && r.alive)) {
+        GameState.addJournalEntry(`🎓 Ibu bapa membantu membayar yuran ${Utils.formatMoney(tuition, s.countryId)} anda di ${ed.universityName}.`);
+      } else {
+        s.money -= tuition;
+        GameState.addJournalEntry(`🎓 Membayar yuran ${Utils.formatMoney(tuition, s.countryId)} di ${ed.universityName} (${isLocal ? 'Kadar tempatan' : 'Kadar antarabangsa'}).`);
+      }
+      GameState.adjustStats({ smarts: Utils.randInt(4, 7) });
+      ed.uniYearsLeft -= 1;
+      if (ed.uniYearsLeft <= 0) {
+        ed.stage = 'graduated';
+        ed.hasDegree = true;
+        GameState.addJournalEntry(
+          `🎉 Tahniah! Anda berjaya menamatkan pengajian di ${ed.universityName} (${c.name} ${c.flag}) dan menggenggam Ijazah Sarjana Muda!`,
+          'milestone'
+        );
+        GameState.adjustStats({ happiness: 18, smarts: 6 });
+      }
+    }
+  },
+
+  _processFinances(s, c) {
+    if (s.job) {
+      s.job.years += 1;
+      const gross = s.job.salary;
+      const tax = Math.round(gross * c.taxRate);
+      const retireContrib = Math.round(gross * 0.09);
+      const net = gross - tax - Math.round(retireContrib * 0.5);
+
+      s.money += net;
+      s.retirementFund += retireContrib;
+
+      const usdSalary = Utils.localToUsd(gross, s.countryId);
+      if (usdSalary > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdSalary);
+
+      if (s.job.performance >= 72 && Utils.chance(0.55)) {
+        const bump = Utils.randInt(4, 10);
+        s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
+        GameState.addJournalEntry(
+          `💼 Prestasi cemerlang sebagai ${s.job.title}! Gaji anda naik ${bump}% kepada ${Utils.formatMoney(s.job.salary, s.countryId)}/thn (+${Utils.formatMoney(retireContrib, s.countryId)} ke ${c.retirementScheme}).`,
+          'milestone'
+        );
+      }
+      s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(-3, 3), 20, 100);
+    }
+
+    if (s.investments > 0) {
+      const inv = (window.COUNTRY_INVESTMENTS && window.COUNTRY_INVESTMENTS[s.countryId]) || { name: 'Pasaran Tempatan', minYield: 4, maxYield: 10 };
+      const dip = Utils.chance(0.14);
+      const ratePct = dip ? -Utils.randInt(2, 6) : Utils.randInt(inv.minYield, inv.maxYield);
+      const gain = Math.round(s.investments * (ratePct / 100));
+      s.investments = Math.max(0, s.investments + gain);
+      if (Math.abs(gain) > Utils.usdToLocal(200, s.countryId)) {
+        GameState.addJournalEntry(
+          `📈 Portfolio ${inv.name} anda ${gain >= 0 ? 'meningkat' : 'menurun'} sebanyak ${ratePct >= 0 ? '+' : ''}${ratePct}% (${gain >= 0 ? '+' : ''}${Utils.formatMoney(gain, s.countryId)}).`
+        );
+      }
+    }
+
+    if (s.age === 60 && s.retirementFund > 0) {
+      s.money += s.retirementFund;
+      GameState.addJournalEntry(
+        `🏦 Anda mengeluarkan simpanan persaraan ${c.retirementScheme} berjumlah ${Utils.formatMoney(s.retirementFund, s.countryId)}!`,
+        'milestone'
+      );
+      s.retirementFund = 0;
+    }
+
+    if (s.age >= 19) {
+      const hasHome = s.assets.properties.length > 0;
+      const baseLivingUsd = (hasHome ? 6500 : 12500) * c.costOfLivingIndex;
+      const livingLocal = Utils.usdToLocal(baseLivingUsd, s.countryId);
+      let assetUpkeep = 0;
+
+      for (const v of s.assets.vehicles) {
+        assetUpkeep += v.upkeep;
+        v.value = Math.max(Math.round(v.value * 0.9), 500);
+      }
+      for (const p of s.assets.properties) {
+        assetUpkeep += p.upkeep;
+        p.value = Math.round(p.value * (1 + Utils.randInt(2, 6) / 100));
+      }
+
+      if (s.job || s.money > livingLocal) {
+        s.money -= (livingLocal + assetUpkeep);
+      } else if (s.education.stage === 'university') {
+        s.money -= Math.round(livingLocal * 0.35);
+      } else {
+        s.money -= Math.round(livingLocal * 0.65);
+      }
+    }
+
+    if (s.age >= 8 && s.age <= 17 && Utils.chance(0.7)) {
+      const allowance = Utils.usdToLocal(Utils.randInt(40, 140), s.countryId);
+      s.money += allowance;
+    }
+  },
+
+  _processCultureAndFestivals(s, c) {
+    if (s.age >= 3 && Utils.chance(0.55)) {
+      const fest = Utils.pick(c.festivals);
+      let extra = '';
+      if (s.age <= 18 && (fest.name.includes('Raya') || fest.name.includes('New Year') || fest.name.includes('Tahun Baru') || fest.name.includes('Seollal') || fest.name.includes('Oshogatsu') || fest.name.includes('Idul Fitri'))) {
+        const gift = Utils.usdToLocal(Utils.randInt(35, 110), s.countryId);
+        s.money += gift;
+        extra = ` Anda menerima ${Utils.formatMoney(gift, s.countryId)} duit raya / sampul perayaan!`;
+      }
+      GameState.addJournalEntry(
+        `${fest.icon} Menyambut ${fest.name} di ${c.name}: ${fest.desc}${extra}`,
+        'culture'
+      );
+      GameState.adjustStats({ happiness: Utils.randInt(3, 7), adaptation: 4 });
+    }
+
+    if (s.countryId !== s.birthCountryId) {
+      const gain = Utils.randInt(5, 9);
+      GameState.adjustAdaptation(gain);
+      const adapt = GameState.getCurrentAdaptation();
+
+      if (s.residencyStatus.includes('Visa') && s.yearsInCurrentCountry === 2 && adapt >= 40) {
+        GameState.addJournalEntry(
+          `🛂 Kemas Kini Imigresen: Anda sudah 2 tahun menetap di ${c.name}! Buka Pasport & PR di tab Aktiviti untuk memohon Penduduk Tetap (PR).`,
+          'migration'
+        );
+      }
+      if (s.residencyStatus === 'PR' && s.yearsInCurrentCountry === 5 && adapt >= 65 && !s.citizenships.includes(s.countryId)) {
+        GameState.addJournalEntry(
+          `🛂 Layak Kewarganegaraan! Anda kini layak memohon taraf Warganegara ${c.name} di tab Pasport & PR!`,
+          'migration'
+        );
+      }
+    }
+  },
+
+  _checkDeath(s, c) {
+    if (s.stats.health <= 0) return 'Komplikasi kesihatan serius';
+    if (s.age >= c.lifeExpectancy + 18) return 'Faktor usia tua dengan tenang';
+    if (s.age >= c.lifeExpectancy - 4) {
+      const over = s.age - (c.lifeExpectancy - 5);
+      const healthFactor = (100 - s.stats.health) / 140;
+      const prob = Math.min(0.45, 0.025 * over + healthFactor * 0.14);
+      if (Utils.chance(prob)) return 'Sakit tua secara semula jadi';
+    }
+    return null;
+  },
+
+  _pickYearlyEvent(s, c) {
+    if (s.age < 5) return null;
+
+    const isAbroad = s.countryId !== s.birthCountryId;
+    if (isAbroad && s.yearsInCurrentCountry <= 5 && Utils.chance(0.55)) {
+      const migPool = GAME_EVENTS.migration.filter(e => !s.seenEventIds.includes(e.id + '_' + s.countryId));
+      if (migPool.length > 0) {
+        const picked = Utils.pick(migPool);
+        s.seenEventIds.push(picked.id + '_' + s.countryId);
+        return this._hydrateDynamicEvent(picked, s, c);
+      }
+    }
+
+    const countryPool = (GAME_EVENTS.country[s.countryId] || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
+    );
+    if (countryPool.length > 0 && Utils.chance(0.68)) {
+      const picked = Utils.pick(countryPool);
+      s.seenEventIds.push(picked.id);
+      return picked;
+    }
+
+    const uniPool = GAME_EVENTS.universal.filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
+    );
+    if (uniPool.length > 0 && Utils.chance(0.7)) {
+      const picked = Utils.pick(uniPool);
+      s.seenEventIds.push(picked.id);
+      return picked;
+    }
+
+    const anyCountry = (GAME_EVENTS.country[s.countryId] || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge
+    );
+    if (anyCountry.length > 0 && Utils.chance(0.35)) {
+      return Utils.pick(anyCountry);
+    }
+
+    return null;
+  },
+
+  _hydrateDynamicEvent(ev, s, curr) {
+    const birth = Utils.getCountry(s.birthCountryId);
+    return {
+      id: ev.id,
+      icon: ev.icon,
+      title: ev.title,
+      text: ev.textFn ? ev.textFn(s, curr, birth) : ev.text,
+      choices: ev.choices.map(ch => ({
+        ...ch,
+        outcome: ch.outcomeFn ? ch.outcomeFn(s, curr, birth) : ch.outcome
+      }))
+    };
+  },
+
+  resolveEventChoice(event, choice) {
+    const s = GameState.current;
+    if (!s) return;
+
+    if (choice.effects) GameState.adjustStats(choice.effects);
+    if (choice.moneyUsd) {
+      const localDelta = Utils.usdToLocal(choice.moneyUsd, s.countryId);
+      s.money += localDelta;
+    }
+    GameState.addJournalEntry(`${event.icon} ${event.title}: ${choice.outcome}`, 'culture');
+    GameState.save();
+  },
+
+  // --------------------------------------------------------------------------
+  // ENJIN HIJRAH — Pertukaran Budaya Penuh Sebaik Tiba!
+  // --------------------------------------------------------------------------
+  getMigrationCostLocal(targetCountryId) {
+    const s = GameState.current;
+    const target = Utils.getCountry(targetCountryId);
+    const alreadyCitizen = s.citizenships.includes(targetCountryId);
+    const totalUsd = target.flightBaseUsd + (alreadyCitizen ? 0 : target.visaFeeUsd);
+    return Utils.usdToLocal(totalUsd, s.countryId);
+  },
+
+  migrateToCountry(targetCountryId, visaType = 'work') {
+    const s = GameState.current;
+    if (!s || s.age < 18) return { ok: false, msg: 'Anda mesti berumur sekurang-kurangnya 18 tahun untuk berhijrah.' };
+    if (targetCountryId === s.countryId) return { ok: false, msg: 'Anda sudah menetap di negara ini!' };
+
+    const fromC = Utils.getCountry(s.countryId);
+    const toC = Utils.getCountry(targetCountryId);
+    const alreadyCitizen = s.citizenships.includes(targetCountryId);
+    const costLocal = this.getMigrationCostLocal(targetCountryId);
+
+    if (s.money < costLocal) {
+      return {
+        ok: false,
+        msg: `Anda perlukan ${Utils.formatMoney(costLocal, s.countryId)} untuk tiket & yuran visa.`
+      };
+    }
+
+    let approvalChance = 0.85;
+    let statusLabel = 'Citizen';
+
+    if (!alreadyCitizen) {
+      if (visaType === 'work') {
+        statusLabel = 'Work Visa';
+        approvalChance = (s.education.hasDegree ? 0.88 : 0.58) + (s.stats.smarts - 50) * 0.004;
+      } else if (visaType === 'student') {
+        statusLabel = 'Student Visa';
+        approvalChance = 0.9;
+      } else if (visaType === 'investor') {
+        const netUsd = Utils.localToUsd(GameState.getNetWorth(), s.countryId);
+        if (netUsd < 150000) {
+          return {
+            ok: false,
+            msg: `Visa Pelabur memerlukan nilai harta sekurang-kurangnya ${Utils.formatMoney(Utils.usdToLocal(150000, s.countryId), s.countryId)}.`
+          };
+        }
+        statusLabel = 'Investor Visa';
+        approvalChance = 0.96;
+      } else {
+        statusLabel = 'Work Visa';
+        approvalChance = 0.72;
+      }
+
+      if (s.criminalRecord > 0) approvalChance -= s.criminalRecord * 0.25;
+      approvalChance = Math.max(0.1, Math.min(0.98, approvalChance));
+
+      if (!Utils.chance(approvalChance)) {
+        const appFee = Math.round(costLocal * 0.35);
+        s.money -= appFee;
+        GameState.addJournalEntry(
+          `🛂 Permohonan ${App._residencyLabel(statusLabel)} anda ke ${toC.name} ${toC.flag} ditolak. Anda kerugian ${Utils.formatMoney(appFee, s.countryId)} yuran permohonan.`,
+          'warning'
+        );
+        GameState.adjustStats({ happiness: -7 });
+        GameState.save();
+        return {
+          ok: false,
+          msg: `Visa ditolak oleh imigresen ${toC.name}! Tingkatkan Kepintaran, dapatkan Ijazah, atau kekalkan rekod bersih.`
+        };
+      }
+    }
+
+    s.money -= costLocal;
+
+    let liquidated = 0;
+    for (const v of s.assets.vehicles) liquidated += v.value;
+    for (const p of s.assets.properties) liquidated += p.value;
+    s.assets.vehicles = [];
+    s.assets.properties = [];
+    s.money += liquidated;
+
+    const oldMoneyFormatted = Utils.formatMoney(s.money, fromC.id);
+    s.money = Utils.convertMoney(s.money, fromC.id, toC.id);
+    s.investments = Utils.convertMoney(s.investments || 0, fromC.id, toC.id);
+    s.retirementFund = Utils.convertMoney(s.retirementFund, fromC.id, toC.id);
+    const newMoneyFormatted = Utils.formatMoney(s.money, toC.id);
+
+    const newCity = Utils.pick(toC.cities);
+    s.countryId = toC.id;
+    s.city = newCity;
+    s.residencyStatus = statusLabel;
+    s.yearsInCurrentCountry = 0;
+
+    if (!s.countriesLivedIn.includes(toC.id)) {
+      s.countriesLivedIn.push(toC.id);
+    }
+
+    if (s.culturalAdaptation[toC.id] == null) {
+      if (alreadyCitizen) {
+        s.culturalAdaptation[toC.id] = 100;
+      } else if (fromC.closeCultures && fromC.closeCultures.includes(toC.id)) {
+        s.culturalAdaptation[toC.id] = Utils.randInt(38, 52);
+      } else {
+        s.culturalAdaptation[toC.id] = Utils.randInt(14, 26);
+      }
+    }
+
+    s.passportStamps.push({
+      countryId: toC.id,
+      city: newCity,
+      year: s.year,
+      age: s.age,
+      type: alreadyCitizen ? 'Pulang Tanah Air' : `Hijrah (${App._residencyLabel(statusLabel)})`,
+      status: statusLabel
+    });
+
+    s.job = null;
+    let arrivalRoleNote = '';
+    if (visaType === 'student' && !s.education.hasDegree) {
+      const uni = Utils.pick(toC.education.universities);
+      s.education.stage = 'university';
+      s.education.universityName = uni;
+      s.education.uniYearsLeft = toC.education.uniDuration;
+      arrivalRoleNote = ` Anda mendaftar di ${uni}!`;
+    } else {
+      if (s.education.stage === 'university') {
+        s.education.stage = 'highschool_done';
+        s.education.universityName = null;
+        s.education.uniYearsLeft = 0;
+      }
+      if (visaType === 'work') {
+        const eligible = toC.jobs.filter(j => (!j.reqDegree || s.education.hasDegree) && (!j.reqSmarts || s.stats.smarts >= j.reqSmarts));
+        const starter = eligible.length ? Utils.pick(eligible) : toC.jobs[0];
+        s.job = {
+          id: starter.id,
+          title: starter.title,
+          icon: starter.icon,
+          salary: starter.salary,
+          years: 0,
+          performance: 68,
+          countryId: toC.id
+        };
+        arrivalRoleNote = ` Anda mendapat pekerjaan tajaan sebagai ${starter.title} dengan gaji ${Utils.formatMoney(starter.salary, toC.id)}/thn!`;
+      }
+    }
+
+    const liqNote = liquidated > 0 ? ' (termasuk jualan hartanah/kenderaan)' : '';
+    GameState.addJournalEntry(
+      `✈️ BERHIJRAH KE ${toC.name.toUpperCase()} ${toC.flag}! Anda selamat tiba di ${newCity} dengan ${App._residencyLabel(statusLabel)}. Wang anda ditukar daripada ${oldMoneyFormatted} kepada ${newMoneyFormatted}${liqNote}.${arrivalRoleNote} Budaya, kerja, hartanah & perayaan kini mengikut budaya ${toC.name}!`,
+      'migration'
+    );
+    GameState.adjustStats({ happiness: 14 });
+    GameState.save();
+
+    return {
+      ok: true,
+      msg: `Selamat tiba di ${newCity}, ${toC.name} ${toC.flag}!`,
+      toCountry: toC,
+      newCity,
+      arrivalEvent: (!alreadyCitizen && GAME_EVENTS.arrival) ? GAME_EVENTS.arrival[toC.id] : null
+    };
+  },
+
+  upgradeResidency() {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    const adapt = GameState.getCurrentAdaptation();
+
+    if (s.citizenships.includes(s.countryId)) {
+      return { ok: false, msg: `Anda sudah menjadi Warganegara ${c.name}!` };
+    }
+
+    if (s.residencyStatus !== 'PR') {
+      if (s.yearsInCurrentCountry < 2 || adapt < 40) {
+        return {
+          ok: false,
+          msg: `PR memerlukan sekurang-kurangnya 2 tahun di ${c.name} dan 40% Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
+        };
+      }
+      const fee = Utils.usdToLocal(600, s.countryId);
+      if (s.money < fee) return { ok: false, msg: `Yuran permohonan PR ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+      s.money -= fee;
+      s.residencyStatus = 'PR';
+      GameState.adjustAdaptation(12);
+      GameState.adjustStats({ happiness: 14 });
+      GameState.addJournalEntry(
+        `🪪 Taraf Penduduk Tetap (PR) Diluluskan! Anda kini PR ${c.name} ${c.flag}, layak menikmati kadar yuran tempatan dan kestabilan jangka panjang.`,
+        'migration'
+      );
+      GameState.save();
+      return { ok: true, msg: `Tahniah! Anda kini Penduduk Tetap (PR) ${c.name}!` };
+    }
+
+    if (s.yearsInCurrentCountry < 5 || adapt < 65) {
+      return {
+        ok: false,
+        msg: `Warganegara memerlukan 5+ tahun di ${c.name} & 65%+ Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
+      };
+    }
+    const fee = Utils.usdToLocal(900, s.countryId);
+    if (s.money < fee) return { ok: false, msg: `Yuran kewarganegaraan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    s.money -= fee;
+    s.residencyStatus = 'Citizen';
+    s.citizenships.push(s.countryId);
+    s.culturalAdaptation[s.countryId] = Math.max(adapt, 92);
+    s.passportStamps.push({
+      countryId: s.countryId,
+      city: s.city,
+      year: s.year,
+      age: s.age,
+      type: 'Angkat Sumpah Warganegara',
+      status: 'Citizen'
+    });
+    GameState.adjustStats({ happiness: 22 });
+    GameState.addJournalEntry(
+      `🎉 MAJLIS KEWARGANEGARAAN! Anda melafazkan ikrar di ${s.city} dan rasmi bergelar Warganegara ${c.name} ${c.flag}!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Tahniah, Warganegara rasmi ${c.name} ${c.flag}!` };
+  },
+
+  enrollUniversity(uniName) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.age < 17) return { ok: false, msg: 'Tamatkan sekolah menengah dahulu!' };
+    if (s.education.stage === 'university') return { ok: false, msg: 'Anda sudah belajar di universiti!' };
+    if (s.education.hasDegree) return { ok: false, msg: 'Anda sudah memiliki ijazah universiti!' };
+
+    s.education.stage = 'university';
+    s.education.universityName = uniName;
+    s.education.uniYearsLeft = c.education.uniDuration;
+    GameState.addJournalEntry(`🎓 Anda mendaftar masuk ke ${uniName} di ${c.name} ${c.flag}!`, 'milestone');
+    GameState.adjustStats({ happiness: 10, smarts: 4 });
+    GameState.save();
+    return { ok: true, msg: `Berjaya mendaftar di ${uniName}!` };
+  },
+
+  applyJob(jobDef) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.age < jobDef.minAge) return { ok: false, msg: `Umur minimum ialah ${jobDef.minAge} tahun.` };
+    if (jobDef.reqDegree && !s.education.hasDegree) return { ok: false, msg: 'Memerlukan Ijazah Universiti!' };
+    if (jobDef.reqSmarts && s.stats.smarts < jobDef.reqSmarts) {
+      return { ok: false, msg: `Memerlukan sekurang-kurangnya ${jobDef.reqSmarts}% Kepintaran.` };
+    }
+    if (s.criminalRecord > 0 && jobDef.reqDegree && Utils.chance(0.5)) {
+      return { ok: false, msg: 'Semakan latar belakang mengesan rekod jenayah anda.' };
+    }
+
+    s.job = {
+      id: jobDef.id,
+      title: jobDef.title,
+      icon: jobDef.icon,
+      salary: jobDef.salary,
+      years: 0,
+      performance: 65,
+      countryId: s.countryId
+    };
+    GameState.addJournalEntry(
+      `💼 Diterima bekerja sebagai ${jobDef.title} di ${s.city}, ${c.name} dengan gaji ${Utils.formatMoney(jobDef.salary, s.countryId)}/thn!`,
+      'milestone'
+    );
+    GameState.adjustStats({ happiness: 10 });
+    GameState.save();
+    return { ok: true, msg: `Anda mendapat kerja: ${jobDef.title}!` };
+  },
+
+  workHarder() {
+    const s = GameState.current;
+    if (!s.job) return { ok: false, msg: 'Tiada pekerjaan aktif.' };
+    if (s.yearlyActions.workHard) return { ok: false, msg: 'Anda sudah bekerja lebih masa tahun ini!' };
+    s.yearlyActions.workHard = true;
+    s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(10, 18));
+    GameState.adjustStats({ health: -3, happiness: -2, smarts: 2, adaptation: 4 });
+    GameState.addJournalEntry(`💼 Anda bekerja lebih masa sebagai ${s.job.title}. Majikan anda amat berpuas hati!`);
+    GameState.save();
+    return { ok: true, msg: 'Prestasi kerja meningkat!' };
+  },
+
+  askForRaise() {
+    const s = GameState.current;
+    if (!s.job) return { ok: false, msg: 'Tiada pekerjaan aktif.' };
+    if (s.yearlyActions.askedRaise) return { ok: false, msg: 'Anda sudah meminta kenaikan gaji tahun ini.' };
+    s.yearlyActions.askedRaise = true;
+    if (s.job.performance >= 72 || Utils.chance(0.35)) {
+      const pct = Utils.randInt(6, 14);
+      s.job.salary = Math.round(s.job.salary * (1 + pct / 100));
+      GameState.adjustStats({ happiness: 10 });
+      GameState.addJournalEntry(`💰 Kenaikan gaji diluluskan! Gaji anda naik ${pct}% kepada ${Utils.formatMoney(s.job.salary, s.countryId)}/thn.`, 'milestone');
+      GameState.save();
+      return { ok: true, msg: `Kenaikan gaji diluluskan (+${pct}%)!` };
+    }
+    GameState.adjustStats({ happiness: -4 });
+    GameState.addJournalEntry(`💼 Majikan menolak permohonan naik gaji anda. Terus tingkatkan prestasi!`);
+    GameState.save();
+    return { ok: false, msg: 'Permohonan naik gaji ditolak tahun ini.' };
+  },
+
+  doCultureActivity(act) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.yearlyActions[act.id]) return { ok: false, msg: 'Anda sudah melakukan aktiviti ini tahun ini!' };
+    if (s.money < act.cost && s.age >= 18) {
+      return { ok: false, msg: `Anda perlukan ${Utils.formatMoney(act.cost, s.countryId)}.` };
+    }
+    s.yearlyActions[act.id] = true;
+    if (s.age >= 18) s.money -= act.cost;
+    GameState.adjustStats(act.effects);
+    GameState.addJournalEntry(`${act.icon} ${act.title} (${c.name}): ${act.desc}`, 'culture');
+    GameState.save();
+    return { ok: true, msg: `Seronok menikmati ${act.title}!` };
+  },
+
+  buyAsset(category, item) {
+    const s = GameState.current;
+    if (s.money < item.price) return { ok: false, msg: `Wang tidak cukup! Perlukan ${Utils.formatMoney(item.price, s.countryId)}.` };
+    s.money -= item.price;
+    const owned = {
+      uid: category + '_' + Date.now(),
+      id: item.id,
+      name: item.name,
+      icon: item.icon,
+      value: item.price,
+      upkeep: item.upkeep,
+      countryId: s.countryId
+    };
+    s.assets[category].push(owned);
+    GameState.adjustStats({ happiness: item.happiness });
+    GameState.addJournalEntry(
+      `${item.icon} Membeli ${item.name} di ${s.city} pada harga ${Utils.formatMoney(item.price, s.countryId)}!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Berjaya membeli ${item.name}!` };
+  },
+
+  sellAsset(category, uid) {
+    const s = GameState.current;
+    const idx = s.assets[category].findIndex(a => a.uid === uid);
+    if (idx === -1) return { ok: false, msg: 'Aset tidak ditemui.' };
+    const [asset] = s.assets[category].splice(idx, 1);
+    s.money += asset.value;
+    GameState.addJournalEntry(`💵 Menjual ${asset.name} pada harga ${Utils.formatMoney(asset.value, s.countryId)}.`);
+    GameState.save();
+    return { ok: true, msg: `Dijual dengan harga ${Utils.formatMoney(asset.value, s.countryId)}!` };
+  },
+
+  meetLocalDate() {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.age < 16) return { ok: false, msg: 'Tunggu sehingga umur 16 tahun untuk bercinta!' };
+    if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan!' };
+
+    const targetGender = s.gender === 'male' ? 'female' : 'male';
+    const heritage = Utils.pick(c.heritages).id;
+    const name = Utils.generateName(s.countryId, targetGender, heritage);
+    const job = Utils.pick(c.jobs).title;
+    const age = Utils.clamp(s.age + Utils.randInt(-3, 4), 16, 80);
+
+    const partner = {
+      id: 'rel_partner_' + Date.now(),
+      name,
+      role: targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki',
+      gender: targetGender,
+      age,
+      countryId: s.countryId,
+      closeness: Utils.randInt(58, 82),
+      alive: true,
+      job
+    };
+    s.relationships.push(partner);
+    s.partnerId = partner.id;
+    GameState.adjustStats({ happiness: 14, adaptation: 10 });
+    GameState.addJournalEntry(
+      `💘 Anda berkenalan dengan ${name} (${age} thn, ${job}) di ${s.city}, ${c.name} ${c.flag} dan mula bercinta!`,
+      'romance'
+    );
+    GameState.save();
+    return { ok: true, msg: `Anda kini bercinta dengan ${name}!` };
+  },
+
+  interactRelation(relId, action) {
+    const s = GameState.current;
+    const rel = s.relationships.find(r => r.id === relId);
+    if (!rel || !rel.alive) return { ok: false, msg: 'Tidak dapat berinteraksi.' };
+
+    const key = `rel_${relId}_${action}`;
+    if (s.yearlyActions[key] && action !== 'propose' && action !== 'have_kid' && action !== 'breakup') {
+      return { ok: false, msg: `Anda sudah melakukan ini dengan ${rel.name} tahun ini.` };
+    }
+    s.yearlyActions[key] = true;
+
+    const c = Utils.getCountry(s.countryId);
+    const longDist = rel.countryId !== s.countryId;
+
+    if (action === 'spend_time') {
+      rel.closeness = Utils.clamp(rel.closeness + Utils.randInt(8, 15));
+      GameState.adjustStats({ happiness: 7 });
+      const text = longDist
+        ? `📱 Membuat panggilan video mesra bertanya khabar ${rel.name} di ${Utils.getCountry(rel.countryId).name}!`
+        : `😊 Meluangkan masa berkualiti bersama ${rel.name} di ${s.city}.`;
+      GameState.addJournalEntry(text);
+      GameState.save();
+      return { ok: true, msg: `Hubungan dengan ${rel.name} makin erat!` };
+    }
+
+    if (action === 'gift') {
+      const cost = Utils.usdToLocal(45, s.countryId);
+      if (s.money < cost) return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk hadiah.` };
+      s.money -= cost;
+      rel.closeness = Utils.clamp(rel.closeness + Utils.randInt(12, 20));
+      GameState.adjustStats({ happiness: 6 });
+      GameState.addJournalEntry(`🎁 Menghadiahkan cenderahati (${Utils.formatMoney(cost, s.countryId)}) kepada ${rel.name}!`);
+      GameState.save();
+      return { ok: true, msg: `${rel.name} amat menyukai hadiah anda!` };
+    }
+
+    if (action === 'propose') {
+      if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
+      if (rel.closeness < 70) return { ok: false, msg: `${rel.name} belum bersedia — eratkan kemesraan ke 70%+ dahulu!` };
+      const ringCost = Utils.usdToLocal(1800, s.countryId);
+      if (s.money < ringCost) return { ok: false, msg: `Kos pertunangan & kenduri kahwin ialah ${Utils.formatMoney(ringCost, s.countryId)}.` };
+      s.money -= ringCost;
+      s.married = true;
+      rel.role = rel.gender === 'female' ? 'Isteri' : 'Suami';
+      rel.closeness = 100;
+      GameState.adjustStats({ happiness: 24, adaptation: 12 });
+      GameState.addJournalEntry(
+        `💍 Anda selamat diijabkabulkan dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!`,
+        'romance'
+      );
+      GameState.save();
+      return { ok: true, msg: `Tahniah! Selamat pengantin baru bersama ${rel.name}!` };
+    }
+
+    if (action === 'have_kid') {
+      if (s.age < 18) return { ok: false, msg: 'Tunggu sehingga dewasa!' };
+      if (s.yearlyActions.had_kid) return { ok: false, msg: 'Anda sudah menimang cahaya mata tahun ini!' };
+      s.yearlyActions.had_kid = true;
+      const kidGender = Utils.chance(0.5) ? 'male' : 'female';
+      const heritage = Utils.pick(c.heritages).id;
+      const kidName = Utils.generateName(s.countryId, kidGender, heritage);
+      s.relationships.push({
+        id: 'rel_kid_' + Date.now(),
+        name: kidName,
+        role: kidGender === 'male' ? 'Anak Lelaki' : 'Anak Perempuan',
+        gender: kidGender,
+        age: 0,
+        countryId: s.countryId,
+        closeness: 100,
+        alive: true,
+        job: 'Bayi'
+      });
+      GameState.adjustStats({ happiness: 22 });
+      GameState.addJournalEntry(
+        `👶 Tahniah! Anda dan ${rel.name} menimang cahaya mata ${kidGender === 'male' ? 'lelaki' : 'perempuan'}, ${kidName}, lahir di ${s.city}, ${c.name} ${c.flag}!`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: `Bayi ${kidName} selamat dilahirkan!` };
+    }
+
+    if (action === 'breakup') {
+      s.partnerId = null;
+      s.married = false;
+      rel.role = 'Bekas Pasangan';
+      rel.closeness = 15;
+      GameState.adjustStats({ happiness: -12 });
+      GameState.addJournalEntry(`💔 Anda dan ${rel.name} membawa haluan masing-masing.`, 'warning');
+      GameState.save();
+      return { ok: true, msg: `Hubungan dengan ${rel.name} berakhir.` };
+    }
+
+    return { ok: false, msg: 'Tindakan tidak dikenali.' };
+  },
+
+  visitDoctor(isPrivate = false) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    const cost = isPrivate ? c.healthcare.privateCost : c.healthcare.doctorCost;
+    if (s.money < cost && s.age >= 18) {
+      return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk rawatan ini.` };
+    }
+    if (s.age >= 18) s.money -= cost;
+    const heal = isPrivate ? Utils.randInt(14, 24) : Utils.randInt(9, 16);
+    GameState.adjustStats({ health: heal, happiness: 3 });
+    GameState.addJournalEntry(
+      `🏥 Mendapatkan rawatan di ${isPrivate ? 'hospital pakar swasta' : c.healthcare.type} di ${c.name} (${Utils.formatMoney(cost, s.countryId)}). Kesihatan meningkat +${heal}%!`
+    );
+    GameState.save();
+    return { ok: true, msg: `Kesihatan meningkat +${heal}%!` };
+  },
+
+  commitCrime(type) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.yearlyActions.crime) return { ok: false, msg: 'Tunggu tahun depan dahulu!' };
+    s.yearlyActions.crime = true;
+
+    const strictCountries = ['SG', 'JP', 'KR'];
+    const catchChance = strictCountries.includes(c.id) ? 0.62 : 0.42;
+
+    if (Utils.chance(catchChance)) {
+      const fine = Utils.usdToLocal(type === 'rompakan' ? 2400 : 450, s.countryId);
+      s.money -= fine;
+      s.criminalRecord += 1;
+      GameState.adjustStats({ happiness: -16, health: -4 });
+      GameState.addJournalEntry(
+        `🚓 Ditangkap polis ${c.name} kerana ${type}! Anda didenda ${Utils.formatMoney(fine, s.countryId)} dan kini mempunyai rekod jenayah (menyukarkan permohonan visa!).`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: `Kantoi! Didenda ${Utils.formatMoney(fine, s.countryId)}.` };
+    } else {
+      const loot = Utils.usdToLocal(type === 'rompakan' ? 3500 : 320, s.countryId);
+      s.money += loot;
+      GameState.adjustStats({ happiness: 8 });
+      GameState.addJournalEntry(`🕶️ Anda berjaya melakukan ${type} dan mengaut ${Utils.formatMoney(loot, s.countryId)} tanpa dikesan.`);
+      GameState.save();
+      return { ok: true, msg: `Berjaya lolos dengan ${Utils.formatMoney(loot, s.countryId)}!` };
+    }
+  },
+
+  investMoney(fraction = 0.5) {
+    const s = GameState.current;
+    if (s.money <= 0) return { ok: false, msg: 'Tiada wang tunai untuk dilaburkan!' };
+    const amount = Math.round(s.money * fraction);
+    if (amount <= 0) return { ok: false, msg: 'Jumlah terlalu kecil untuk dilaburkan.' };
+    const inv = window.COUNTRY_INVESTMENTS[s.countryId];
+    s.money -= amount;
+    s.investments = (s.investments || 0) + amount;
+    GameState.addJournalEntry(`📈 Melabur ${Utils.formatMoney(amount, s.countryId)} ke dalam ${inv.name}.`);
+    GameState.save();
+    return { ok: true, msg: `Berjaya melabur ${Utils.formatMoney(amount, s.countryId)}!` };
+  },
+
+  withdrawInvestment() {
+    const s = GameState.current;
+    if (!s.investments || s.investments <= 0) return { ok: false, msg: 'Tiada pelaburan untuk dikeluarkan.' };
+    const amt = s.investments;
+    s.money += amt;
+    s.investments = 0;
+    GameState.addJournalEntry(`💵 Mengeluarkan ${Utils.formatMoney(amt, s.countryId)} daripada portfolio pelaburan.`);
+    GameState.save();
+    return { ok: true, msg: `Berjaya mengeluarkan ${Utils.formatMoney(amt, s.countryId)}!` };
+  },
+
+  takeDrivingTest() {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.hasDriverLicense) return { ok: false, msg: 'Anda sudah memiliki lesen memandu!' };
+    if (s.age < 17) return { ok: false, msg: 'Tunggu umur 17 tahun untuk ambil lesen memandu!' };
+    const fee = Utils.usdToLocal(220, s.countryId);
+    if (s.money < fee && s.age >= 18) return { ok: false, msg: `Yuran ujian memandu ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    if (s.age >= 18) s.money -= fee;
+
+    const passChance = Math.min(0.95, 0.55 + s.stats.smarts * 0.004);
+    const localTestName = c.id === 'MY' ? 'Ujian Bukit & Jalan Raya JPJ'
+      : c.id === 'GB' ? 'Ujian Memandu Praktikal DVSA'
+      : c.id === 'JP' ? 'Ujian Lesen Memandu Menkyo'
+      : c.id === 'SG' ? 'Ujian Praktikal Polis Trafik (BBDC)'
+      : `Ujian Lesen Memandu ${c.name}`;
+
+    if (Utils.chance(passChance)) {
+      s.hasDriverLicense = true;
+      GameState.adjustStats({ happiness: 12, smarts: 2, adaptation: 8 });
+      GameState.addJournalEntry(`🚗 Lulus ${localTestName} di ${c.name} ${c.flag}! Anda kini memiliki lesen memandu sah!`, 'milestone');
+      GameState.save();
+      return { ok: true, msg: `Lulus ${localTestName}!` };
+    } else {
+      GameState.adjustStats({ happiness: -4 });
+      GameState.addJournalEntry(`🚗 Kereta termati enjin di bukit semasa ${localTestName} — cuba lagi nanti!`);
+      GameState.save();
+      return { ok: false, msg: `Gagal ${localTestName}! Cuba lagi.` };
+    }
+  }
+};
