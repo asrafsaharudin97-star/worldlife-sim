@@ -32,10 +32,10 @@ window.Modals = {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
 
-    const choicesHtml = event.choices.map((ch, idx) => `
-      <button class="choice-btn" data-choice-idx="${idx}">
-        <span class="choice-title">${Utils.escapeHtml(ch.label)}</span>
-        ${ch.hint ? `<span class="choice-hint">${Utils.escapeHtml(ch.hint)}</span>` : ''}
+    const choicesHtml = (event.choices || []).map((ch, idx) => `
+      <button class="choice-btn" data-choice-idx="${idx}" style="white-space:normal;word-break:break-word;text-align:left;">
+        <span class="choice-title" style="display:block;white-space:normal;word-break:break-word;">${Utils.escapeHtml(ch.label)}</span>
+        ${ch.hint ? `<span class="choice-hint" style="display:block;white-space:normal;word-break:break-word;">${Utils.escapeHtml(ch.hint)}</span>` : ''}
       </button>
     `).join('');
 
@@ -46,7 +46,7 @@ window.Modals = {
       locked: true,
       bodyHtml: `
         <div class="event-text">${Utils.escapeHtml(event.text)}</div>
-        <div class="action-list">${choicesHtml}</div>
+        <div class="action-list event-choices-scroll" style="max-height:52vh;overflow-y:auto;padding-right:4px;">${choicesHtml}</div>
       `
     });
 
@@ -2078,7 +2078,14 @@ window.Modals = {
 
     document.querySelectorAll('.mig-go-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const res = Sim.migrateToCountry(btn.dataset.dest, btn.dataset.visa);
+        const destId = btn.dataset.dest;
+        const visaType = btn.dataset.visa;
+        const spouse = Sim.getMarriedSpouse ? Sim.getMarriedSpouse(s) : null;
+        if (spouse) {
+          this.showSpouseMigrationDiscussionModal(destId, visaType);
+          return;
+        }
+        const res = Sim.migrateToCountry(destId, visaType);
         if (res.ok) {
           this.close(true);
           App.renderAll();
@@ -2471,5 +2478,173 @@ window.Modals = {
       this.close(true);
       App.showStartScreen();
     });
+  },
+
+  // --------------------------------------------------------------------------
+  // 7. MODAL BINCANG HIJRAH BERSAMA PASANGAN (WAJIB BAGI PEMAIN BERKAHWIN)
+  // --------------------------------------------------------------------------
+  showSpouseMigrationDiscussionModal(destCountryId, visaType = 'work', stateOverride = null) {
+    const s = GameState.current;
+    if (!s) return;
+    const spouse = Sim.getMarriedSpouse ? Sim.getMarriedSpouse(s) : null;
+    if (!spouse) {
+      const res = Sim.migrateToCountry(destCountryId, visaType);
+      if (res.ok) {
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, 'culture');
+      } else {
+        App.toast(res.msg, 'error');
+      }
+      return;
+    }
+
+    const fromC = Utils.getCountry(s.countryId);
+    const toC = Utils.getCountry(destCountryId);
+    const kids = Sim.getDependentChildren ? Sim.getDependentChildren(s) : [];
+    const costLocal = Sim.getMigrationCostLocal(destCountryId);
+
+    if (s.money < costLocal) {
+      App.toast(`Anda perlukan ${Utils.formatMoney(costLocal, s.countryId)} untuk tiket & yuran visa ke ${toC.name}.`, 'error');
+      return;
+    }
+
+    const roll = stateOverride || Sim.rollSpouseMigrationDecision(s, destCountryId);
+    const agreed = Boolean(roll.agreed);
+    const persuasionUsed = Boolean(roll.persuasionUsed);
+    const syariah = window.LegalInheritanceEngine && LegalInheritanceEngine.isSyariahApplicable(s);
+    const courtLabel = syariah ? 'Mahkamah Syariah' : `Mahkamah Sivil ${fromC.name}`;
+
+    let bodyHtml = `
+      <div class="info-banner highlight" style="line-height:1.6;">
+        <strong>✈️ Cadangan Hijrah: ${fromC.flag} ${Utils.escapeHtml(fromC.name)} → ${toC.flag} ${Utils.escapeHtml(toC.name)}</strong><br/>
+        Pasangan: <strong>${Utils.escapeHtml(spouse.name)}</strong> (${Utils.escapeHtml(spouse.role)}, Kemesraan ${spouse.closeness ?? 70}%, Kepercayaan ${spouse.trust ?? 70}%)<br/>
+        Anak Tanggungan (Umur &lt; 18): <strong>${kids.length > 0 ? `${kids.length} orang (${kids.map(k => Utils.escapeHtml(k.name)).join(', ')})` : 'Tiada'}</strong>
+      </div>
+    `;
+
+    if (agreed) {
+      bodyHtml += `
+        <div class="info-banner" style="background:#f0fdf4;border-color:#86efac;color:#166534;line-height:1.6;">
+          <strong>💚 ${Utils.escapeHtml(spouse.name)} Bersetuju Mengikut Anda!</strong><br/>
+          <em>"${Utils.escapeHtml(roll.dialogue)}"</em><br/>
+          <small style="opacity:0.9;">Pasangan anda${kids.length > 0 ? ` dan kesemua ${kids.length} orang anak tanggungan` : ''} akan berpindah bersama-sama ke ${Utils.escapeHtml(toC.name)}.</small>
+        </div>
+        <button type="button" class="primary-btn" id="btn-mig-spouse-confirm">
+          ✈️ Teruskan Hijrah Sekeluarga ke ${Utils.escapeHtml(toC.name)} (${Utils.formatMoney(costLocal, s.countryId)})
+        </button>
+        <button type="button" class="ghost-btn" id="btn-mig-spouse-cancel" style="margin-top:8px;">← Batalkan &amp; Kembali</button>
+      `;
+    } else {
+      bodyHtml += `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;line-height:1.6;">
+          <strong>💔 ${Utils.escapeHtml(spouse.name)} Enggan Berhijrah ke ${Utils.escapeHtml(toC.name)}!</strong><br/>
+          <em>"${Utils.escapeHtml(roll.dialogue)}"</em>
+        </div>
+
+        <div class="action-list">
+          <button type="button" class="action-item" id="btn-mig-persuade" ${persuasionUsed ? 'disabled' : ''}>
+            <span class="ai-icon">💬</span>
+            <span class="ai-content">
+              <span class="ai-title">Pujuk Pasangan</span>
+              <span class="ai-desc">${persuasionUsed ? 'Cubaan memujuk telah digunakan dan gagal melembutkan hatinya' : '1 cubaan memujuk (~30%–45% peluang ikut Kemesraan, Kepercayaan & Kepintaran)'}</span>
+            </span>
+            <span class="ai-right">${persuasionUsed ? 'Gagal' : 'Cuba Pujuk'}</span>
+          </button>
+
+          <button type="button" class="action-item" id="btn-mig-spouse-cancel">
+            <span class="ai-icon">❌</span>
+            <span class="ai-content">
+              <span class="ai-title">Batalkan Hijrah</span>
+              <span class="ai-desc">Kekal menetap di ${Utils.escapeHtml(fromC.name)} demi menyelamatkan rumah tangga</span>
+            </span>
+            <span class="ai-right">Kekal</span>
+          </button>
+
+          <button type="button" class="action-item" id="btn-mig-stubborn-go" style="border-color:#fca5a5;background:#fff1f2;">
+            <span class="ai-icon">✈️</span>
+            <span class="ai-content">
+              <span class="ai-title" style="color:#b91c1c;">Berkeras Hijrah Juga (Auto-Cerai)</span>
+              <span class="ai-desc">Teruskan hijrah ke ${Utils.escapeHtml(toC.name)} — mencetuskan penceraian automatik (${Utils.escapeHtml(courtLabel)}). ${Utils.escapeHtml(spouse.name)} tinggal di ${Utils.escapeHtml(fromC.name)}, manakala anak-anak bawah umur (${kids.length} orang) ikut berpindah bersama anda!</span>
+            </span>
+            <span class="ai-right cost">Cerai &amp; Pergi</span>
+          </button>
+        </div>
+      `;
+    }
+
+    this.open({
+      icon: '✈️',
+      title: '✈️ Bincang Hijrah Bersama Pasangan',
+      subtitle: `${spouse.name} • Destinasi: ${toC.flag} ${toC.name}`,
+      locked: true,
+      bodyHtml
+    });
+
+    const confirmBtn = document.getElementById('btn-mig-spouse-confirm');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => {
+        const res = Sim.migrateToCountry(destCountryId, visaType, { spouseFollows: true });
+        if (res.ok) {
+          this.close(true);
+          App.renderAll();
+          App.toast(res.msg, 'culture');
+          if (res.arrivalEvent) {
+            setTimeout(() => this.showEvent(res.arrivalEvent), 260);
+          }
+        } else {
+          App.toast(res.msg, 'error');
+          App.renderAll();
+          this.showActivities('migrate');
+        }
+      });
+    }
+
+    const persuadeBtn = document.getElementById('btn-mig-persuade');
+    if (persuadeBtn && !persuasionUsed) {
+      persuadeBtn.addEventListener('click', () => {
+        const pRes = Sim.persuadeSpouseToMigrate(s, destCountryId);
+        App.toast(pRes.msg, pRes.agreed ? 'success' : 'error');
+        App.renderAll();
+        this.showSpouseMigrationDiscussionModal(destCountryId, visaType, {
+          agreed: pRes.agreed,
+          dialogue: pRes.dialogue,
+          persuasionUsed: true
+        });
+      });
+    }
+
+    const cancelBtn = document.getElementById('btn-mig-spouse-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        GameState.addJournalEntry(`🏡 Anda membatalkan hasrat berhijrah ke ${toC.name} demi menjaga keharmonian rumah tangga bersama ${spouse.name}.`);
+        GameState.save();
+        App.renderAll();
+        App.toast(`Hijrah ke ${toC.name} dibatalkan — perkahwinan kekal utuh.`, 'culture');
+        this.showActivities('migrate');
+      });
+    }
+
+    const stubbornBtn = document.getElementById('btn-mig-stubborn-go');
+    if (stubbornBtn) {
+      stubbornBtn.addEventListener('click', () => {
+        const res = Sim.migrateToCountry(destCountryId, visaType, {
+          spouseFollows: false,
+          stubbornAutoDivorce: true
+        });
+        if (res.ok) {
+          this.close(true);
+          App.renderAll();
+          App.toast(res.msg, 'error');
+          if (res.arrivalEvent) {
+            setTimeout(() => this.showEvent(res.arrivalEvent), 260);
+          }
+        } else {
+          App.toast(res.msg, 'error');
+          App.renderAll();
+          this.showActivities('migrate');
+        }
+      });
+    }
   }
 };

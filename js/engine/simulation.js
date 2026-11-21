@@ -34,6 +34,8 @@ window.Sim = {
     let priorityMiscarriageEvent = null;
     let priorityTeenEvent = null;
     let babyBirth = null;
+    let totalNpcDeathHappyPenalty = 0;
+    let totalNpcDeathStressGain = 0;
 
     // 1. Umur ahli keluarga, pasangan & rakan + Kematian Orang Terdekat Realistik
     for (const rel of s.relationships) {
@@ -74,14 +76,16 @@ window.Sim = {
         }
 
         if (isCloseFamily) {
-          const baseDrop = (wasSpouse || isChild) ? Utils.randInt(34, 45) : Utils.randInt(20, 34);
-          const closenessScale = 0.7 + ((rel.closeness ?? 70) / 100) * 0.35;
-          const happyDrop = -Utils.clamp(Math.round(baseDrop * closenessScale), 20, 45);
+          const isSpouseOrChild = Boolean(wasSpouse || isChild);
+          const happyDrop = isSpouseOrChild ? -Utils.randInt(40, 60) : -Utils.randInt(25, 40);
+          const stressGain = isSpouseOrChild ? Utils.randInt(20, 30) : Utils.randInt(10, 20);
+          totalNpcDeathHappyPenalty += happyDrop;
+          totalNpcDeathStressGain += stressGain;
 
           GameState.addJournalEntry(
             wasSpouse
-              ? `🕊️💔 Berita Duka: Pasangan hidup anda, ${rel.name} (${rel.role}, ${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}. Status anda kini ialah ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
-              : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}.`,
+              ? `🕊️💔 Berita Duka: Pasangan hidup anda, ${rel.name} (${rel.role}, ${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}. Status anda kini ialah ${s.gender === 'male' ? 'Duda' : 'Balu'} (${happyDrop}% Kegembiraan, +${stressGain}% Stres).`
+              : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause} (${happyDrop}% Kegembiraan, +${stressGain}% Stres).`,
             'warning'
           );
           if (rel.isFormerPlayerParent && rel.savedEstateNetWorth > 0) {
@@ -106,21 +110,19 @@ window.Sim = {
               );
             }
           }
-          GameState.adjustStats({ happiness: happyDrop });
           GameState.recordCrisis('grief');
 
           if (!priorityNpcDeathEvent && window.RelationshipDramaData && RelationshipDramaData.buildNpcDeathEvent) {
-            priorityNpcDeathEvent = RelationshipDramaData.buildNpcDeathEvent(s, rel, deathInfo.cause);
+            priorityNpcDeathEvent = RelationshipDramaData.buildNpcDeathEvent(s, rel, deathInfo.cause, happyDrop, stressGain);
           }
         } else {
-          // Bukan ahli keluarga (rakan, kenalan, rakan sekerja, bekas pasangan): notis berkabung ringkas sahaja tanpa modal pengebumian keluarga
-          const lightDrop = -Utils.randInt(6, 12);
-          GameState.adjustStats({ happiness: lightDrop });
-          if (s.alignment) {
-            s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + Utils.randInt(2, 5), 0, 100);
-          }
+          // Bukan ahli keluarga (rakan, kenalan, rakan sekerja, bekas pasangan): tolak -10% hingga -18% Kegembiraan (minimum ketat -10%)
+          const lightDrop = -Utils.randInt(10, 18);
+          const lightStress = Utils.randInt(3, 7);
+          totalNpcDeathHappyPenalty += lightDrop;
+          totalNpcDeathStressGain += lightStress;
           GameState.addJournalEntry(
-            `🕊️ Anda berkabung atas pemergian ${rel.name} (${rel.role}, ${rel.age} thn) yang telah meninggal dunia akibat ${deathInfo.cause}.`,
+            `🕊️ Anda berkabung atas pemergian ${rel.name} (${rel.role}, ${rel.age} thn) yang telah meninggal dunia akibat ${deathInfo.cause} (${lightDrop}% Kegembiraan).`,
             'normal'
           );
         }
@@ -258,8 +260,8 @@ window.Sim = {
       GameState.recordCrisis('illness');
     }
 
-    // Pemulihan emosi hasil pegangan hidup / ketenangan batin
-    if (s.age >= 15 && s.belief && s.belief !== 'unassigned' && s.devotion >= 55 && s.stats.happiness < 55) {
+    // Pemulihan emosi hasil pegangan hidup / ketenangan batin (dilangkau jika sedang berkabung kematian tahun ini)
+    if (totalNpcDeathHappyPenalty === 0 && s.age >= 15 && s.belief && s.belief !== 'unassigned' && s.devotion >= 55 && s.stats.happiness < 55) {
       const b = GameState.getBeliefObj(s.belief);
       const recovery = Utils.randInt(2, 5);
       s.stats.happiness = Utils.clamp(s.stats.happiness + recovery);
@@ -269,6 +271,14 @@ window.Sim = {
           'spiritual'
         );
       }
+    }
+
+    // 5B. Terapkan kesan emosi/kegembiraan & stres kematian NPC SELEPAS semua kemas kini tahunan supaya tidak ditimpa/dipulihkan!
+    if (totalNpcDeathHappyPenalty < 0) {
+      s.stats.happiness = Utils.clamp((s.stats.happiness ?? 70) + totalNpcDeathHappyPenalty, 0, 100);
+    }
+    if (totalNpcDeathStressGain > 0 && s.alignment) {
+      s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + totalNpcDeathStressGain, 0, 100);
     }
 
     // 6. Semak kematian
@@ -285,11 +295,15 @@ window.Sim = {
       return { event: null, died: true };
     }
 
-    // 7. Pilih peristiwa pilihan tahunan (utamakan Berita Duka / Keguguran / Krisis Remaja)
-    const event = priorityNpcDeathEvent
+    // 7. Pilih peristiwa pilihan tahunan (utamakan Berita Duka / Keguguran / Krisis Remaja) & pastikan sekurang-kurangnya 5 pilihan berbeza!
+    let event = priorityNpcDeathEvent
       || priorityMiscarriageEvent
       || priorityTeenEvent
       || this._pickYearlyEvent(s, c);
+
+    if (event) {
+      event = this._ensureAtLeastFiveChoices(event, s, c);
+    }
 
     const curBlock = s.journal[s.journal.length - 1];
     if (curBlock.entries.length === 0) {
@@ -796,11 +810,391 @@ window.Sim = {
     const anyCountry = (GAME_EVENTS.country[s.countryId] || []).filter(
       e => s.age >= e.minAge && s.age <= e.maxAge
     );
-    if (anyCountry.length > 0 && Utils.chance(0.30)) {
+    if (anyCountry.length > 0 && Utils.chance(0.45)) {
       return Utils.pick(anyCountry);
     }
 
-    return null;
+    const anyUni = (GAME_EVENTS.universal || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge
+    );
+    if (anyUni.length > 0 && Utils.chance(0.55)) {
+      return Utils.pick(anyUni);
+    }
+
+    return this._buildProceduralFiveChoiceEvent(s, c);
+  },
+
+  _buildProceduralFiveChoiceEvent(s, c) {
+    const isChild = s.age < 13;
+    const isTeen = s.age >= 13 && s.age < 18;
+    const isSenior = s.age >= 60;
+    const spendAmt = Utils.usdToLocal(isChild ? 15 : isTeen ? 45 : isSenior ? 180 : 140, s.countryId);
+
+    if (isChild) {
+      return {
+        id: `proc_child_${s.age}_${Date.now()}`,
+        icon: '🎈',
+        title: `Pertandingan & Aktiviti Sekolah di ${s.city}`,
+        text: `Guru kelas di ${c.name} mengajak murid-murid menyertai hari terbuka sekolah yang menawarkan pertandingan bakat, gerai buku, dan permainan kumpulan.`,
+        choices: [
+          {
+            label: '🌟 Tampil Berani Menyertai Pertandingan Bakat',
+            hint: 'Proaktif/Berani • Pintar ++, Gembira ++',
+            outcome: 'Anda naik ke pentas dengan penuh yakin dan menerima tepukan gemuruh daripada guru serta rakan-rakan!',
+            effects: { smarts: 6, happiness: 10 }
+          },
+          {
+            label: '🤝 Bantu Guru & Bekerjasama Dalam Kumpulan',
+            hint: 'Selamat/Diplomatik • Karma +, Kemesraan Rakan +',
+            outcome: 'Sikap ringan tulang dan sopan santun anda dipuji oleh guru kelas serta mengeratkan hubungan dengan rakan sebaya.',
+            effects: { happiness: 7, smarts: 4 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 4, -100, 100);
+              return {};
+            }
+          },
+          {
+            label: `📚 Beli Buku & Kit Eksperimen Sains (${Utils.formatMoney(spendAmt, s.countryId)})`,
+            hint: 'Guna Wang/Sumber • Pintar +++',
+            outcome: 'Anda menggunakan duit tabung untuk membeli buku rujukan menarik yang meluaskan pengetahuan anda.',
+            effects: { smarts: 9, happiness: 5 },
+            moneyUsd: -15
+          },
+          {
+            label: '😜 Buat Nakal &Sorok Barang Kawan',
+            hint: 'Berisiko/Nakal • Gembira +, Karma -',
+            journalType: 'warning',
+            outcome: 'Gurauan nakal anda membuat sebahagian kawan ketawa, tetapi guru disiplin memberi teguran tegas kepada anda.',
+            effects: { happiness: 4, smarts: -2 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) - 5, -100, 100);
+              return {};
+            }
+          },
+          {
+            label: '😶 Duduk Diam di Sudut Kelas & Perhatikan Sahaja',
+            hint: 'Abaikan/Elak • Tiada risiko, berehat',
+            outcome: 'Anda memilih untuk berehat dengan tenang sambil memerhatikan gelagat rakan-rakan dari jauh.',
+            effects: { health: 2 }
+          }
+        ]
+      };
+    }
+
+    if (isTeen) {
+      return {
+        id: `proc_teen_${s.age}_${Date.now()}`,
+        icon: '🎒',
+        title: `Cabaran Remaja & Projek Belia ${s.city}`,
+        text: `Sekumpulan pelajar dan belia di ${s.city}, ${c.name} sedang menganjurkan kem kepimpinan, bengkel kemahiran, serta aktiviti malam hujung minggu.`,
+        choices: [
+          {
+            label: '🔥 Pimpin Kumpulan & Bentangkan Idea Utama',
+            hint: 'Proaktif/Berani • Pintar ++, Populariti +',
+            outcome: 'Kepimpinan berani anda menyerlahkan bakat sebenar dan menarik perhatian guru serta rakan-rakan!',
+            effects: { smarts: 7, happiness: 8 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.fame = Utils.clamp((state.alignment.fame || 0) + 3, 0, 100);
+              return {};
+            }
+          },
+          {
+            label: '🕊️ Jadi Pendamai & Bina Persahabatan Sihat',
+            hint: 'Selamat/Diplomatik • Gembira ++, Karma +',
+            outcome: 'Anda menjaga hubungan baik dengan semua pihak dan dihormati sebagai rakan yang matang.',
+            effects: { happiness: 9, smarts: 3 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
+              return {};
+            }
+          },
+          {
+            label: `💻 Daftar Bengkel Kemahiran & Tuisyen Khas (${Utils.formatMoney(spendAmt, s.countryId)})`,
+            hint: 'Guna Wang/Sumber • Pintar +++, Penampilan +',
+            outcome: 'Pelaburan ilmu pada usia remaja memberi kelebihan besar kepada persediaan peperiksaan anda.',
+            effects: { smarts: 10, looks: 3, happiness: 4 },
+            moneyUsd: -45
+          },
+          {
+            label: '🏍️ Ponteng Sesi & Ikut Geng Melepak Lewat Malam',
+            hint: 'Berisiko/Nakal • Keseronokan segera, Karma -, Risiko Stres',
+            journalType: 'warning',
+            outcome: 'Anda berseronok melepak sehingga lewat malam, namun hampir kantoi dengan peronda keselamatan tempatan!',
+            effects: { happiness: 6, smarts: -3, health: -2 },
+            customAction: (state) => {
+              if (state.alignment) {
+                state.alignment.karma = Utils.clamp((state.alignment.karma || 0) - 6, -100, 100);
+                state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 5, 0, 100);
+              }
+              return {};
+            }
+          },
+          {
+            label: '🎧 Balik Awal & Berehat di Rumah Sahaja',
+            hint: 'Abaikan/Elak • Stres -, Kesihatan +',
+            outcome: 'Anda memilih untuk tidak terlibat dan meluangkan masa mendengar muzik serta berehat di bilik.',
+            effects: { health: 4, happiness: 2 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 4, 0, 100);
+              return {};
+            }
+          }
+        ]
+      };
+    }
+
+    if (isSenior) {
+      return {
+        id: `proc_senior_${s.age}_${Date.now()}`,
+        icon: '🌅',
+        title: `Wacana Komuniti & Kesihatan Warga Emas di ${s.city}`,
+        text: `Komuniti setempat di ${s.city}, ${c.name} menjemput warga berpengalaman untuk berkongsi nasihat kehidupan, menyertai pemeriksaan kesihatan, atau menyumbang kepada dana kebajikan.`,
+        choices: [
+          {
+            label: '🎙️ Tampil Berucap & Kongsi Pengalaman Hidup',
+            hint: 'Proaktif/Berani • Gembira ++, Reputasi Keluarga +',
+            outcome: 'Kisah pengalaman hidup anda memberi inspirasi mendalam kepada generasi muda di komuniti tersebut!',
+            effects: { happiness: 11, smarts: 3 },
+            customAction: (state) => {
+              if (window.Dynasty) Dynasty.adjustReputation(3);
+              if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
+              return {};
+            }
+          },
+          {
+            label: '🍵 Berbual Mesra &Jalin Silaturahim Bersama Jiran',
+            hint: 'Selamat/Diplomatik • Gembira +, Stres -',
+            outcome: 'Suasana petang yang harmoni bersama rakan seusia membuatkan hati anda tenang dan dihargai.',
+            effects: { happiness: 8, health: 3 },
+            customAction: (state) => {
+              if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 6, 0, 100);
+              return {};
+            }
+          },
+          {
+            label: `🩺 Ambil Pakej Pemeriksaan & Terapi Kesihatan (${Utils.formatMoney(spendAmt, s.countryId)})`,
+            hint: 'Guna Wang/Sumber • Kesihatan +++, Gembira +',
+            outcome: 'Rawatan fisioterapi dan saringan kesihatan menyeluruh memastikan tubuh anda kekal cergas.',
+            effects: { health: 12, happiness: 6 },
+            moneyUsd: -180
+          },
+          {
+            label: '🎲 Cuba Pelaburan Spekulatif Jangka Pendek',
+            hint: 'Berisiko/Nakal • Peluang untung tunai atau rugi kecil',
+            journalType: 'dilemma',
+            customAction: (state) => {
+              const win = Utils.chance(0.45);
+              const delta = Utils.usdToLocal(win ? 420 : -260, state.countryId);
+              state.money += delta;
+              GameState.adjustStats({ happiness: win ? 7 : -6 });
+              return {
+                outcome: win
+                  ? `Langkah berani anda membuahkan hasil tambahan ${Utils.formatMoney(delta, state.countryId)}!`
+                  : `Keputusan terburu-buru menyebabkan anda kerugian ${Utils.formatMoney(Math.abs(delta), state.countryId)}.`,
+                toastType: win ? 'success' : 'error'
+              };
+            }
+          },
+          {
+            label: '🏡 Berehat Tenang di Rumah Bersama Keluarga',
+            hint: 'Abaikan/Elak • Tiada risiko, ketenangan jiwa',
+            outcome: 'Anda memilih untuk berehat di rumah sambil menikmati udara segar tanpa sebarang gangguan.',
+            effects: { health: 4, happiness: 3 }
+          }
+        ]
+      };
+    }
+
+    return {
+      id: `proc_adult_${s.age}_${Date.now()}`,
+      icon: '🌆',
+      title: `Peluang & Dilema Harian di ${s.city}`,
+      text: `Ketika menjalani rutin tahun ini di ${s.city}, ${c.name}, anda berdepan dengan peluang jaringan profesional, cabaran komuniti setempat, serta tawaran urus niaga sampingan.`,
+      choices: [
+        {
+          label: '🚀 Sahut Cabaran & Ambil Langkah Proaktif',
+          hint: 'Proaktif/Berani • Pintar ++, Gembira ++, Peluang Reputasi',
+          outcome: 'Keberanian anda mengambil inisiatif membuka ruang baharu dan meningkatkan keyakinan diri!',
+          effects: { smarts: 6, happiness: 9, adaptation: 5 },
+          customAction: (state) => {
+            if (state.job) state.job.performance = Utils.clamp((state.job.performance || 70) + 5, 0, 100);
+            return {};
+          }
+        },
+        {
+          label: '🤝 Gunakan Pendekatan Diplomatik & Berhemah',
+          hint: 'Selamat/Diplomatik • Karma +, Hubungan +, Stres -',
+          outcome: 'Pendekatan berhemah anda menyelesaikan situasi dengan harmoni dan disenangi semua pihak.',
+          effects: { happiness: 7, adaptation: 4 },
+          customAction: (state) => {
+            if (state.alignment) {
+              state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
+              state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 4, 0, 100);
+            }
+            return {};
+          }
+        },
+        {
+          label: `💼 Laburkan Wang Untuk Urusan & Kemudahan (${Utils.formatMoney(spendAmt, s.countryId)})`,
+          hint: 'Guna Wang/Sumber • Selesai pantas, Pintar +, Kesihatan +',
+          outcome: 'Anda menggunakan sumber kewangan dengan bijak untuk melancarkan urusan dan menjaga keselesaan diri.',
+          effects: { smarts: 5, health: 5, happiness: 6 },
+          moneyUsd: -140
+        },
+        {
+          label: '🕶️ Ambil Jalan Pintas Berisiko Tinggi',
+          hint: 'Berisiko/Nakal • Peluang wang segera tetapi Karma - & Stres +',
+          journalType: 'dilemma',
+          customAction: (state) => {
+            const win = Utils.chance(0.50);
+            const amt = Utils.usdToLocal(win ? 550 : -320, state.countryId);
+            state.money += amt;
+            if (state.alignment) {
+              state.alignment.karma = Utils.clamp((state.alignment.karma || 0) - 6, -100, 100);
+              state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 7, 0, 100);
+            }
+            GameState.adjustStats({ happiness: win ? 6 : -7 });
+            return {
+              outcome: win
+                ? `Jalan pintas berisiko memberikan anda keuntungan segera ${Utils.formatMoney(amt, state.countryId)}, walaupun hati sedikit gusar.`
+                : `Rancangan berisiko gagal dan menyebabkan anda kerugian ${Utils.formatMoney(Math.abs(amt), state.countryId)}!`,
+              toastType: win ? 'culture' : 'error'
+            };
+          }
+        },
+        {
+          label: '🚶 Abaikan & Fokus Pada Rutin Sendiri',
+          hint: 'Abaikan/Elak • Kekal selamat tanpa gangguan',
+          outcome: 'Anda memilih untuk tidak mencampuri urusan tersebut dan meneruskan kehidupan harian dengan tenang.',
+          effects: { health: 2, happiness: 2 }
+        }
+      ]
+    };
+  },
+
+  _ensureAtLeastFiveChoices(ev, s, c) {
+    if (!ev || !Array.isArray(ev.choices)) return ev;
+    if (ev.choices.length >= 5) return ev;
+
+    const existingLabels = new Set(ev.choices.map(ch => (ch.label || '').trim().toLowerCase()));
+    const isChild = s.age < 13;
+    const isTeen = s.age >= 13 && s.age < 18;
+    const isSenior = s.age >= 60;
+    const resourceCostLocal = Utils.usdToLocal(isChild ? 12 : isTeen ? 35 : 120, s.countryId);
+
+    const candidateExtras = [
+      {
+        label: isChild
+          ? '🌟 Cuba Selesaikan Sendiri Dengan Berani'
+          : isTeen
+            ? '🔥 Tampil Berani Mengambil Inisiatif'
+            : '🚀 Ambil Langkah Proaktif & Berani Hadapi Situasi',
+        hint: 'Tindakan proaktif • Pintar +, Gembira +',
+        journalType: 'culture',
+        customAction: (state) => {
+          GameState.adjustStats({ smarts: 4, happiness: 6 });
+          if (state.alignment) state.alignment.fame = Utils.clamp((state.alignment.fame || 0) + 2, 0, 100);
+          return {
+            outcome: `Anda mengambil pendekatan proaktif dan berani menghadapi situasi tersebut dengan penuh keyakinan.`,
+            toastType: 'culture'
+          };
+        }
+      },
+      {
+        label: isChild
+          ? '🤝 Minta Nasihat Ibu Bapa & Guru Secara Sopan'
+          : '🕊️ Gunakan Pendekatan Diplomatik & Berbincang Baik-Baik',
+        hint: 'Pendekatan selamat/diplomatik • Karma +, Stres -',
+        journalType: 'culture',
+        customAction: (state) => {
+          GameState.adjustStats({ happiness: 5, smarts: 2 });
+          if (state.alignment) {
+            state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
+            state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 4, 0, 100);
+          }
+          return {
+            outcome: `Pendekatan diplomatik dan berbudi bahasa membantu menjernihkan keadaan tanpa mencetuskan sebarang konflik.`,
+            toastType: 'success'
+          };
+        }
+      },
+      {
+        label: isChild
+          ? `🎁 Gunakan Duit Tabung Untuk Selesaikan (${Utils.formatMoney(resourceCostLocal, s.countryId)})`
+          : `💳 Gunakan Wang & Sumber Untuk Selesaikan Segera (${Utils.formatMoney(resourceCostLocal, s.countryId)})`,
+        hint: 'Guna wang/sumber • Pantas & mengurangkan tekanan',
+        journalType: 'culture',
+        customAction: (state) => {
+          if ((state.money || 0) >= resourceCostLocal) {
+            state.money -= resourceCostLocal;
+            GameState.adjustStats({ happiness: 7, health: 3 });
+            if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 6, 0, 100);
+            return {
+              outcome: `Anda membelanjakan ${Utils.formatMoney(resourceCostLocal, state.countryId)} bagi menyelesaikan urusan tersebut dengan pantas dan selesa.`,
+              toastType: 'success'
+            };
+          }
+          GameState.adjustStats({ happiness: -3 });
+          return {
+            outcome: `Baki tunai tidak mencukupi (${Utils.formatMoney(resourceCostLocal, state.countryId)}), lalu anda terpaksa mencari jalan alternatif.`,
+            toastType: 'error'
+          };
+        }
+      },
+      {
+        label: isChild
+          ? '😜 Bertindak Nakal & Ikut Kata Hati'
+          : isSenior
+            ? '🎲 Ambil Risiko Berani TanpaPedulikan Kritikan'
+            : '🕶️ Ambil Jalan Pintas Berisiko Demi Kelebihan Diri',
+        hint: 'Tindakan berisiko/nakal • Peluang untung atau padah (Karma -)',
+        journalType: 'dilemma',
+        customAction: (state) => {
+          const lucky = Utils.chance(0.48);
+          const cashDelta = isChild ? 0 : Utils.usdToLocal(lucky ? 280 : -180, state.countryId);
+          state.money = (state.money || 0) + cashDelta;
+          if (state.alignment) {
+            state.alignment.karma = Utils.clamp((state.alignment.karma || 0) - 5, -100, 100);
+            state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 5, 0, 100);
+          }
+          GameState.adjustStats({ happiness: lucky ? 6 : -6 });
+          return {
+            outcome: lucky
+              ? `Langkah berisiko anda berhasil memberi kelebihan${cashDelta > 0 ? ` (+${Utils.formatMoney(cashDelta, state.countryId)})` : ''}, walaupun sedikit mencalar reputasi.`
+              : `Tindakan berisiko itu memakan diri dan menimbulkan rasa kurang senang orang sekeliling.`,
+            toastType: lucky ? 'culture' : 'error'
+          };
+        }
+      },
+      {
+        label: '🚶 Abaikan & Elak Daripada Terlibat',
+        hint: 'Abaikan/elak • Kekal tenang & jaga kesihatan diri',
+        journalType: 'normal',
+        customAction: (state) => {
+          GameState.adjustStats({ health: 2, happiness: 1 });
+          if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 3, 0, 100);
+          return {
+            outcome: `Anda memilih untuk tidak mencampuri hal tersebut dan meneruskan rutin harian dengan tenang.`,
+            toastType: 'culture'
+          };
+        }
+      }
+    ];
+
+    const newChoices = [...ev.choices];
+    for (const extra of candidateExtras) {
+      if (newChoices.length >= 5) break;
+      const norm = extra.label.trim().toLowerCase();
+      if (!existingLabels.has(norm)) {
+        existingLabels.add(norm);
+        newChoices.push(extra);
+      }
+    }
+
+    return {
+      ...ev,
+      choices: newChoices
+    };
   },
 
   _hydrateDynamicEvent(ev, s, curr) {
@@ -860,7 +1254,7 @@ window.Sim = {
   },
 
   // --------------------------------------------------------------------------
-  // ENJIN HIJRAH — Pertukaran Budaya Penuh Sebaik Tiba!
+  // ENJIN HIJRAH — Pertukaran Budaya Penuh Sebaik Tiba! (Termasuk Perbincangan Pasangan & Anak-Anak)
   // --------------------------------------------------------------------------
   getMigrationCostLocal(targetCountryId) {
     const s = GameState.current;
@@ -870,7 +1264,83 @@ window.Sim = {
     return Utils.usdToLocal(totalUsd, s.countryId);
   },
 
-  migrateToCountry(targetCountryId, visaType = 'work') {
+  getMarriedSpouse(s = GameState.current) {
+    if (!s || !s.married || !s.partnerId || !Array.isArray(s.relationships)) return null;
+    return s.relationships.find(r => r.id === s.partnerId && r.alive) || null;
+  },
+
+  getDependentChildren(s = GameState.current) {
+    if (!s || !Array.isArray(s.relationships)) return [];
+    return s.relationships.filter(r =>
+      ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive && r.age < 18
+    );
+  },
+
+  rollSpouseMigrationDecision(s = GameState.current, targetCountryId) {
+    const spouse = this.getMarriedSpouse(s);
+    const toC = Utils.getCountry(targetCountryId);
+    const fromC = Utils.getCountry(s.countryId);
+    // Peluang asas 50% setuju ikut vs 50% enggan
+    const agreed = Utils.chance(0.50);
+    const refusalReasons = [
+      `Saya sudah selesa dengan kerjaya saya sebagai ${spouse ? (spouse.job || 'pekerja tetap') : 'pekerja'} di ${fromC.name} dan berat hati mahu memulakan semula dari kosong di ${toC.name}.`,
+      `Ibu bapa dan keluarga saya semuanya berada di ${fromC.name}. Saya tidak sanggup berjauhan dengan mereka di tanah air.`,
+      `Kos sara hidup dan perbezaan budaya di ${toC.name} terlalu asing bagi saya — saya lebih bahagia kita kekal menetap di ${fromC.name}.`
+    ];
+    const agreeReasons = [
+      `Ke mana sahaja awak pergi demi masa depan keluarga kita, saya sanggup ikut berhijrah ke ${toC.name} bersama anak-anak!`,
+      `Walaupun berat meninggalkan ${fromC.name}, saya yakin penghijrahan ke ${toC.name} akan membuka rezeki dan peluang baharu untuk keluarga kita.`
+    ];
+    return {
+      agreed,
+      spouse,
+      dialogue: agreed ? Utils.pick(agreeReasons) : Utils.pick(refusalReasons)
+    };
+  },
+
+  persuadeSpouseToMigrate(s = GameState.current, targetCountryId) {
+    const spouse = this.getMarriedSpouse(s);
+    if (!spouse) return { ok: false, agreed: false, msg: 'Tiada pasangan berkahwin.' };
+    const toC = Utils.getCountry(targetCountryId);
+    // Peluang pujukan ~30%–45% mengikut Kemesraan, Kepercayaan & Kepintaran
+    const closeness = spouse.closeness ?? 70;
+    const trust = spouse.trust ?? 70;
+    const smarts = (s.stats && s.stats.smarts) ?? 65;
+    const chance = Math.max(0.28, Math.min(0.48, 0.25 + ((closeness - 50) / 100) * 0.12 + ((trust - 50) / 100) * 0.12 + ((smarts - 50) / 100) * 0.08));
+
+    if (Utils.chance(chance)) {
+      spouse.closeness = Utils.clamp(closeness + 4, 0, 100);
+      GameState.addJournalEntry(
+        `💬 Selepas dipujuk dengan penuh kasih sayang dan jaminan masa depan yang kukuh, ${spouse.name} akhirnya lembut hati dan bersetuju mengikut anda berhijrah ke ${toC.name} ${toC.flag}!`,
+        'romance'
+      );
+      GameState.save();
+      return {
+        ok: true,
+        agreed: true,
+        chance,
+        dialogue: `"Baiklah sayang... melihat kesungguhan awak merancang masa depan keluarga kita, saya setuju ikut berpindah ke ${toC.name} bersama anak-anak!"`,
+        msg: `${spouse.name} lembut hati dan bersetuju mengikut anda ke ${toC.name}!`
+      };
+    }
+
+    spouse.closeness = Utils.clamp(closeness - 8, 10, 100);
+    spouse.trust = Utils.clamp(trust - 6, 10, 100);
+    GameState.addJournalEntry(
+      `💔 Pujukan anda gagal melembutkan hati ${spouse.name}. Dia tetap berkeras enggan meninggalkan tanah air untuk berpindah ke ${toC.name}.`,
+      'warning'
+    );
+    GameState.save();
+    return {
+      ok: false,
+      agreed: false,
+      chance,
+      dialogue: `"Keputusan saya muktamad! Saya tetap tidak mahu berpindah ke ${toC.name}. Kalau awak berkeras mahu pergi juga, terpaksalah kita membawa haluan masing-masing!"`,
+      msg: `Pujukan gagal — ${spouse.name} tetap enggan berhijrah ke ${toC.name}.`
+    };
+  },
+
+  migrateToCountry(targetCountryId, visaType = 'work', opts = {}) {
     const s = GameState.current;
     if (!s || s.age < 18) return { ok: false, msg: 'Anda mesti berumur sekurang-kurangnya 18 tahun untuk berhijrah.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Anda di dalam penjara — tidak boleh berhijrah secara sah!' };
@@ -895,6 +1365,36 @@ window.Sim = {
         ok: false,
         msg: `Anda perlukan ${Utils.formatMoney(costLocal, s.countryId)} untuk tiket & yuran visa.`
       };
+    }
+
+    const spouse = this.getMarriedSpouse(s);
+    const dependentKids = this.getDependentChildren(s);
+
+    // Jika berkeras berhijrah walaupun pasangan menolak -> laksanakan Auto-Cerai di negara asal sebelum berlepas!
+    let divorcedExSpouse = null;
+    if (spouse && opts && opts.stubbornAutoDivorce) {
+      divorcedExSpouse = spouse;
+      spouse.countryId = fromC.id;
+      spouse.country = fromC.id;
+      if (window.LegalInheritanceEngine && LegalInheritanceEngine.executeDivorce) {
+        const syariah = LegalInheritanceEngine.isSyariahApplicable(s);
+        const divPath = syariah
+          ? (s.gender === 'male' ? 'talak1' : 'fasakh')
+          : 'civil';
+        LegalInheritanceEngine.executeDivorce(s, spouse.id, {
+          path: divPath,
+          settlementMode: syariah ? 'sulh' : 'mediasi'
+        });
+      } else {
+        s.partnerId = null;
+        s.married = false;
+        spouse.category = 'ex';
+        spouse.role = 'Bekas Pasangan (Cerai)';
+      }
+      // Pastikan baki tunai masih mencukupi untuk kos tiket atau benarkan diteruskan selepas penyelesaian harta
+      if (s.money < costLocal) {
+        s.money = costLocal;
+      }
     }
 
     let approvalChance = 0.85;
@@ -961,9 +1461,21 @@ window.Sim = {
 
     const newCity = Utils.pick(toC.cities);
     s.countryId = toC.id;
+    s.country = toC.id;
     s.city = newCity;
     s.residencyStatus = statusLabel;
     s.yearsInCurrentCountry = 0;
+
+    // Kemas kini negara bagi pasangan (jika ikut bersama) & semua anak tanggungan (umur < 18 sentiasa ikut pemain!)
+    const activeSpouseNow = this.getMarriedSpouse(s);
+    if (activeSpouseNow && (!opts || opts.spouseFollows !== false)) {
+      activeSpouseNow.countryId = toC.id;
+      activeSpouseNow.country = toC.id;
+    }
+    for (const kid of dependentKids) {
+      kid.countryId = toC.id;
+      kid.country = toC.id;
+    }
 
     if (!s.countriesLivedIn.includes(toC.id)) {
       s.countriesLivedIn.push(toC.id);
@@ -1018,17 +1530,41 @@ window.Sim = {
       }
     }
 
+    let familyMoveNote = '';
+    if (divorcedExSpouse) {
+      const kidsNote = dependentKids.length > 0
+        ? `; anak-anak (${dependentKids.map(k => k.name).join(', ')}) ikut berpindah bersama anda`
+        : '';
+      GameState.addJournalEntry(
+        `💔✈️ Bercerai kerana pasangan (${divorcedExSpouse.name}) enggan mengikut berhijrah ke ${toC.name} ${toC.flag}${kidsNote}. ${divorcedExSpouse.name} kekal menetap di ${fromC.name}.`,
+        'warning'
+      );
+      familyMoveNote = dependentKids.length > 0
+        ? ` Anak-anak bawah umur (${dependentKids.length} orang) turut berpindah bersama anda.`
+        : '';
+    } else if (activeSpouseNow) {
+      familyMoveNote = dependentKids.length > 0
+        ? ` Pasangan anda (${activeSpouseNow.name}) dan ${dependentKids.length} orang anak turut berhijrah bersama-sama!`
+        : ` Pasangan anda (${activeSpouseNow.name}) turut berhijrah bersama-sama!`;
+    } else if (dependentKids.length > 0) {
+      familyMoveNote = ` Anak-anak tanggungan anda (${dependentKids.length} orang) turut berpindah bersama anda!`;
+    }
+
     const liqNote = liquidated > 0 ? ' (termasuk jualan hartanah/kenderaan)' : '';
     GameState.addJournalEntry(
-      `✈️ BERHIJRAH KE ${toC.name.toUpperCase()} ${toC.flag}! Anda selamat tiba di ${newCity} dengan ${App._residencyLabel(statusLabel)}. Wang anda ditukar daripada ${oldMoneyFormatted} kepada ${newMoneyFormatted}${liqNote}.${arrivalRoleNote} Budaya, kerja, hartanah & perayaan kini mengikut budaya ${toC.name}!`,
+      `✈️ BERHIJRAH KE ${toC.name.toUpperCase()} ${toC.flag}! Anda selamat tiba di ${newCity} dengan ${App._residencyLabel(statusLabel)}.${familyMoveNote} Wang anda ditukar daripada ${oldMoneyFormatted} kepada ${newMoneyFormatted}${liqNote}.${arrivalRoleNote} Budaya, kerja, hartanah & perayaan kini mengikut budaya ${toC.name}!`,
       'migration'
     );
-    GameState.adjustStats({ happiness: 14 });
+    GameState.adjustStats({ happiness: divorcedExSpouse ? -8 : 14 });
     GameState.save();
 
     return {
       ok: true,
-      msg: `Selamat tiba di ${newCity}, ${toC.name} ${toC.flag}!`,
+      divorcedOnMigration: Boolean(divorcedExSpouse),
+      movedKidsCount: dependentKids.length,
+      msg: divorcedExSpouse
+        ? `Berhijrah ke ${newCity}, ${toC.name} ${toC.flag} selepas bercerai dengan ${divorcedExSpouse.name}${dependentKids.length > 0 ? ` (${dependentKids.length} anak ikut bersama)` : ''}.`
+        : `Selamat tiba di ${newCity}, ${toC.name} ${toC.flag}!`,
       toCountry: toC,
       newCity,
       arrivalEvent: (!alreadyCitizen && GAME_EVENTS.arrival) ? GAME_EVENTS.arrival[toC.id] : null

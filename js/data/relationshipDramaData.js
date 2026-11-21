@@ -761,21 +761,24 @@ window.RelationshipDramaData = {
     return this.CLOSE_FAMILY_ROLES.includes(npc.role);
   },
 
-  buildNpcDeathEvent(s, npc, cause) {
+  buildNpcDeathEvent(s, npc, cause, happyDrop = -30, stressGain = 15) {
     // Hanya ahli keluarga terdekat (pasangan, anak, ibu bapa, adik-beradik) membuka modal pengurusan pengebumian penuh
     if (!this.isCloseFamilyMember(s, npc)) return null;
 
     const funeralCost = Utils.usdToLocal(650, s.countryId);
+    const charityCost = Utils.usdToLocal(250, s.countryId);
+    const counselCost = Utils.usdToLocal(180, s.countryId);
     const wasSpouse = Boolean(npc._wasSpouse);
     const statusNote = wasSpouse
       ? `\n\nStatus anda kini bertukar kepada ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
       : '';
+    const impactNote = `\n\nKesan Emosi: ${happyDrop}% Kegembiraan • +${stressGain}% Stres.`;
 
     return {
       id: `npc_death_${npc.id}_${s.age}_${Date.now()}`,
       icon: '🕊️',
       title: 'Berita Duka / Kematian',
-      text: `Innalillahi wa inna ilaihi raji'un / Salam takziah. ${npc.role} anda, ${npc.name} (Umur ${npc.age} tahun), telah menghembuskan nafas terakhir akibat ${cause}.${statusNote}`,
+      text: `Innalillahi wa inna ilaihi raji'un / Salam takziah. ${npc.role} anda, ${npc.name} (Umur ${npc.age} tahun), telah menghembuskan nafas terakhir akibat ${cause}.${statusNote}${impactNote}`,
       choices: [
         {
           label: `🕯️ Uruskan Pengebumian Sempurna (${Utils.formatMoney(funeralCost, s.countryId)})`,
@@ -786,34 +789,60 @@ window.RelationshipDramaData = {
             }
             if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 12, -100, 100);
             if (window.Dynasty) Dynasty.adjustReputation(6);
-            GameState.adjustStats({ happiness: 5 });
             return {
-              outcome: `Anda menguruskan majlis pengebumian ${npc.name} dengan penuh tertib dan penghormatan terakhir. Ramai kenalan hadir mengucapkan takziah.`,
+              outcome: `Anda menguruskan majlis pengebumian ${npc.name} dengan penuh tertib dan penghormatan terakhir (${happyDrop}% Kegembiraan).`,
               toastType: 'culture'
             };
           }
         },
         {
           label: '🤲 Majlis Ringkas & Doa Keluarga',
-          hint: 'Sederhana • Mengenang pemergian bersama ahli keluarga terdekat',
+          hint: 'Sederhana • Mengenang pemergian bersama ahli keluarga terdekat (+Karma)',
           customAction: (state) => {
-            if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 4, -100, 100);
-            GameState.adjustStats({ happiness: 2 });
+            if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
             return {
-              outcome: `Majlis pengebumian ringkas dan bacaan doa diadakan untuk mengenang pemergian ${npc.name}.`,
+              outcome: `Majlis pengebumian ringkas dan bacaan doa diadakan untuk mengenang pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
+              toastType: 'culture'
+            };
+          }
+        },
+        {
+          label: `💝 Sedekah / Amal Jariah Atas Nama Arwah (${Utils.formatMoney(charityCost, s.countryId)})`,
+          hint: 'Sumber & Pahala • Sumbangan kebajikan atas nama si mati (+Karma ++, -Stres)',
+          customAction: (state) => {
+            if (state.money >= charityCost) state.money -= charityCost;
+            if (state.alignment) {
+              state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 15, -100, 100);
+              state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 5, 0, 100);
+            }
+            state.devotion = Utils.clamp((state.devotion || 50) + 6, 0, 100);
+            return {
+              outcome: `Anda menghulurkan sumbangan amal jariah atas nama arwah ${npc.name} untuk membantu golongan memerlukan (${happyDrop}% Kegembiraan).`,
+              toastType: 'culture'
+            };
+          }
+        },
+        {
+          label: `🛋️ Dapatkan Sokongan Kaunseling Duka (${Utils.formatMoney(counselCost, s.countryId)})`,
+          hint: 'Berbayar • Kurangkan tekanan mental akibat kehilangan (-Stres)',
+          customAction: (state) => {
+            if (state.money >= counselCost) state.money -= counselCost;
+            if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 10, 0, 100);
+            return {
+              outcome: `Sesi sokongan kaunseling membantu anda mengawal tekanan emosi selepas pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
               toastType: 'culture'
             };
           }
         },
         {
           label: '💔 Terlalu Sedih / Berkabung Sendirian',
-          hint: 'Emosi amat terkesan oleh kehilangan ini',
+          hint: 'Emosi amat terkesan oleh kehilangan ini (-Gembira tambahan, +Stres)',
           journalType: 'warning',
           customAction: (state) => {
-            if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 12, 0, 100);
-            GameState.adjustStats({ happiness: -8 });
+            if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 10, 0, 100);
+            GameState.adjustStats({ happiness: -6 });
             return {
-              outcome: `Pemergian ${npc.name} meninggalkan luka yang amat dalam. Anda berkabung sendirian buat sekian lama.`,
+              outcome: `Pemergian ${npc.name} meninggalkan luka yang amat dalam. Anda berkabung sendirian buat sekian lama (${happyDrop - 6}% Kegembiraan).`,
               toastType: 'error'
             };
           }
