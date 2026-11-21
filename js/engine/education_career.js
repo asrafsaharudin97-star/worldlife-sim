@@ -85,13 +85,26 @@ window.EduCareerEngine = {
     if (typeof s.careerMarket.applicationsLeft !== 'number') s.careerMarket.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
     if (!Array.isArray(s.careerMarket.appliedJobIdsThisYear)) s.careerMarket.appliedJobIdsThisYear = [];
 
-    if (typeof s.totalYearsWorked !== 'number') {
-      s.totalYearsWorked = (s.job && typeof s.job.years === 'number') ? s.job.years : 0;
+    if (!Array.isArray(s.careerHistory)) s.careerHistory = [];
+    const currentTenure = (s.job && typeof s.job.years === 'number') ? s.job.years : 0;
+    if (typeof s.yearsInCurrentJob !== 'number') {
+      s.yearsInCurrentJob = currentTenure;
+    } else if (s.job && s.yearsInCurrentJob !== currentTenure) {
+      s.yearsInCurrentJob = currentTenure;
+    } else if (!s.job) {
+      s.yearsInCurrentJob = 0;
+    }
+
+    if (typeof s.totalYearsWorked !== 'number' || s.totalYearsWorked <= 0) {
+      const pastSum = s.careerHistory.reduce((acc, ch) => acc + (Number(ch.years ?? ch.yearsInRole) || 0), 0);
+      const retroTotal = pastSum + currentTenure;
+      if (typeof s.totalYearsWorked !== 'number' || retroTotal > 0) {
+        s.totalYearsWorked = retroTotal;
+      }
     }
     if (typeof s.isRetired !== 'boolean') s.isRetired = Boolean(s.retired);
     if (typeof s.retired !== 'boolean') s.retired = Boolean(s.isRetired);
     if (typeof s.pensionAnnual !== 'number') s.pensionAnnual = 0;
-    if (!Array.isArray(s.careerHistory)) s.careerHistory = [];
     if (typeof s.mandatoryRetirementAge !== 'number') s.mandatoryRetirementAge = 60;
   },
 
@@ -898,6 +911,7 @@ window.EduCareerEngine = {
       countryId: s.countryId
     };
 
+    s.yearsInCurrentJob = 0;
     s.retired = false;
     s.isRetired = false;
     if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
@@ -1029,6 +1043,7 @@ window.EduCareerEngine = {
 
     // 4. Kemas kini status Pesara & kurangkan stres
     s.job = null;
+    s.yearsInCurrentJob = 0;
     s.retired = true;
     s.isRetired = true;
     if (s.alignment) {

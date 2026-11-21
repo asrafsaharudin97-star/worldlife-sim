@@ -440,7 +440,8 @@ window.Sim = {
     }
 
     if (s.job && !(s.prison && s.prison.inPrison)) {
-      s.job.years += 1;
+      s.job.years = (s.job.years || 0) + 1;
+      s.yearsInCurrentJob = s.job.years;
       s.totalYearsWorked = (s.totalYearsWorked || 0) + 1;
       const retireContrib = Math.round(s.job.salary * 0.12);
 

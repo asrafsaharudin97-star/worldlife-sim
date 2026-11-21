@@ -1821,11 +1821,12 @@ window.Modals = {
         ? edObj.certificates.map(cid => EducationData.CERTIFICATES.find(x => x.id === cid)).filter(Boolean)
         : [];
 
+      if (window.EduCareerEngine && EduCareerEngine.ensureFields) EduCareerEngine.ensureFields(s);
       contentHtml += `
         <div class="info-banner highlight">
           <strong>🛂 Biodata &amp; Pasport ${Utils.escapeHtml(displayName)}</strong><br/>
           Pekerjaan / Peranan: <strong>${occ.icon || '👤'} ${Utils.escapeHtml(occ.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(occ.badge)}</span>${occ.secondaryRole ? `<br/>Peranan Sampingan: <strong>${Utils.escapeHtml(occ.secondaryRole)}</strong>` : ''}<br/>
-          Tempoh Bekerja &amp; Persaraan: <strong>${s.totalYearsWorked || 0} tahun</strong> • Tabung (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong>${(s.pensionAnnual || 0) > 0 ? ` • Pencen: <strong>${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn</strong>` : ''}<br/>
+          Jumlah Tahun Bekerja: <strong>${s.totalYearsWorked || 0} tahun</strong> • Tabung (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong>${(s.pensionAnnual || 0) > 0 ? ` • Pencen: <strong>${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn</strong>` : ''}<br/>
           Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong><br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>

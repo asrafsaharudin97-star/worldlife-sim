@@ -80,19 +80,33 @@ window.CareerModals = {
     }
 
     if (s.job) {
+      EduCareerEngine.ensureFields(s);
       const ladder = Array.isArray(s.job.ladder) ? s.job.ladder : [s.job.title];
       const rankIdx = s.job.rankIndex || 0;
       const nextRank = ladder[rankIdx + 1] || null;
       const pct = Math.round(((rankIdx + 1) / ladder.length) * 100);
-      const totalYrs = Math.max(s.totalYearsWorked || 0, s.job.years || 0);
+      const currentTenure = s.yearsInCurrentJob ?? s.job.years ?? 0;
+      const totalYrs = Math.max(s.totalYearsWorked || 0, currentTenure);
       const retElig = EduCareerEngine.canRetire(s);
+      const isPensionEligible = s.age >= 55 && totalYrs >= 15;
+      const yrsLeftForPension = Math.max(0, 15 - totalYrs);
+      const ageLeftForPension = Math.max(0, 55 - s.age);
+      const pensionBadgeText = isPensionEligible
+        ? '✅ Layak Pencen'
+        : yrsLeftForPension > 0
+          ? `⏳ Baki ${yrsLeftForPension} tahun lagi untuk pencen`
+          : `⏳ Baki ${ageLeftForPension} tahun umur untuk pencen`;
+      const pensionBadgeStyle = isPensionEligible
+        ? 'background:#dcfce7;color:#166534;border:1px solid #86efac;'
+        : 'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
 
       html += `
         <div class="career-active-card">
           <div class="cac-top">
             <div>
               <div class="cac-title">${s.job.icon || '💼'} ${Utils.escapeHtml(s.job.title)}</div>
-              <div class="cac-sub">Gaji: <strong>${Utils.formatMoney(s.job.salary, s.countryId)}/thn</strong> • Cukai ${Math.round((c.taxRate || 0) * 100)}% • Tempoh: ${s.job.years} thn (Jumlah Kerjaya: ${totalYrs} thn)</div>
+              <div class="cac-sub">Gaji: <strong>${Utils.formatMoney(s.job.salary, s.countryId)}/thn</strong> • Cukai ${Math.round((c.taxRate || 0) * 100)}%</div>
+              <div class="cac-sub" style="margin-top:2px;">📅 Tempoh Berkhidmat: <strong>${currentTenure} tahun</strong></div>
               <div class="cac-sub" style="margin-top:2px;color:#059669;">🏦 Tabung Persaraan (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong> (+12%/thn)</div>
             </div>
             <span class="cat-badge synergy">Pangkat ${rankIdx + 1}/${ladder.length}</span>
@@ -108,6 +122,11 @@ window.CareerModals = {
             </div>
           </div>
           ${nextRank ? `<div class="cac-next">🎯 Pangkat Seterusnya: <strong>${Utils.escapeHtml(nextRank)}</strong></div>` : '<div class="cac-next">👑 Anda telah mencapai puncak tangga kerjaya ini!</div>'}
+        </div>
+
+        <div class="info-banner" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;background:#f8fafc;">
+          <span>📊 Jumlah Tahun Bekerja: <strong>${totalYrs} tahun</strong></span>
+          <span style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;${pensionBadgeStyle}">${pensionBadgeText}</span>
         </div>
 
         <div class="action-list" style="margin-bottom:12px;">
@@ -139,7 +158,7 @@ window.CareerModals = {
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
               <span class="ai-title">Bersara (Pencen)</span>
-              <span class="ai-desc">${retElig.ok ? `Layak bersara penuh! Keluarkan Tabung ${Utils.formatMoney(s.retirementFund || 0, s.countryId)} + Ganjaran${s.age >= 55 && totalYrs >= 15 ? ' & Pencen Tahunan (30%–60% gaji)' : ''}` : `Syarat: Umur 55+ (kini ${s.age}) atau 20+ tahun bekerja (kini ${totalYrs} thn)`}</span>
+              <span class="ai-desc">${retElig.ok ? `Layak bersara penuh! Keluarkan Tabung ${Utils.formatMoney(s.retirementFund || 0, s.countryId)} + Ganjaran${isPensionEligible ? ' & Pencen Tahunan (30%–60% gaji)' : ''}` : `Syarat: Umur 55+ (kini ${s.age}) atau 20+ tahun bekerja (kini ${totalYrs} thn)`}</span>
             </span>
             <span class="ai-right" style="color:${retElig.ok ? '#059669' : '#64748b'};font-weight:700;">${retElig.ok ? 'Bersara' : 'Belum Layak'}</span>
           </button>
@@ -581,6 +600,7 @@ window.CareerModals = {
         });
         GameState.addJournalEntry(`🚪 Anda meletak jawatan sebagai ${s.job.title}.`, 'culture');
         s.job = null;
+        s.yearsInCurrentJob = 0;
         this._browsingNewJob = false;
         GameState.save();
         App.renderAll();
