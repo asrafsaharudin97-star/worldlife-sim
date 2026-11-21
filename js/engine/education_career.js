@@ -63,6 +63,30 @@ window.EduCareerEngine = {
     if (!Array.isArray(ed.certificates)) ed.certificates = [];
     if (typeof ed.educationLoan !== 'number') ed.educationLoan = 0;
     if (typeof ed.hasDoctorateTitle !== 'boolean') ed.hasDoctorateTitle = ed.educationLevel === 'phd';
+    if (typeof ed.hasDeansAward !== 'boolean') {
+      ed.hasDeansAward = ed.completedDegrees.some(d => Number(d.gpa) >= 4.0 || d.deansAward);
+    }
+    if (typeof ed.deansAwardCount !== 'number') {
+      ed.deansAwardCount = ed.completedDegrees.filter(d => Number(d.gpa) >= 4.0 || d.deansAward).length;
+    }
+    if (typeof ed.studiedThisYear !== 'boolean') ed.studiedThisYear = Boolean(s.yearlyActions && s.yearlyActions.studyHard);
+    if (ed.activeStudy) {
+      if (typeof ed.activeStudy.currentCgpa !== 'number') {
+        ed.activeStudy.currentCgpa = Number(Math.max(0, Math.min(4.0, ed.activeStudy.gpa ?? 3.15)).toFixed(2));
+      }
+      ed.activeStudy.gpa = ed.activeStudy.currentCgpa;
+      if (typeof ed.activeStudy.studiedThisYear !== 'boolean') {
+        ed.activeStudy.studiedThisYear = Boolean(ed.studiedThisYear);
+      }
+      if (typeof ed.activeStudy.academicWarningCount !== 'number') ed.activeStudy.academicWarningCount = 0;
+      ed.currentCgpa = ed.activeStudy.currentCgpa;
+    } else if (typeof ed.currentCgpa !== 'number') {
+      ed.currentCgpa = null;
+    }
+    if (typeof ed.graduatedCgpa !== 'number') {
+      const lastDeg = ed.completedDegrees.length > 0 ? ed.completedDegrees[ed.completedDegrees.length - 1] : null;
+      ed.graduatedCgpa = (lastDeg && typeof lastDeg.gpa === 'number') ? Number(lastDeg.gpa.toFixed(2)) : null;
+    }
 
     // Kekalkan flag serasi versi lama
     const rank = window.EducationData ? EducationData.levelRank(ed.educationLevel) : 0;
@@ -246,7 +270,7 @@ window.EduCareerEngine = {
       s.job = null;
     }
 
-    const baseGpa = Math.max(2.5, Math.min(3.95, 2.4 + (s.stats.smarts / 60)));
+    const baseGpa = Number(Math.max(3.0, Math.min(3.4, 3.0 + ((s.stats.smarts || 60) / 100) * 0.4)).toFixed(2));
     s.education.activeStudy = {
       level,
       field: fieldId,
@@ -258,9 +282,14 @@ window.EduCareerEngine = {
       funding,
       fundingLabel,
       annualTuition,
-      gpa: Number(baseGpa.toFixed(2)),
+      currentCgpa: baseGpa,
+      gpa: baseGpa,
+      studiedThisYear: false,
+      academicWarningCount: 0,
       publications: 0
     };
+    s.education.currentCgpa = baseGpa;
+    s.education.studiedThisYear = false;
     s.education.stage = level === 'high_school' ? 'adult_school' : 'university';
     s.education.universityName = instName;
     s.education.uniYearsLeft = finalTotalYears;
@@ -280,15 +309,28 @@ window.EduCareerEngine = {
   studyHarder() {
     const s = GameState.current;
     this.ensureFields(s);
-    if (s.yearlyActions.studyHard) return { ok: false, msg: 'Anda sudah mengulang kaji intensif tahun ini!' };
+    if (s.yearlyActions.studyHard || (s.education.activeStudy && s.education.activeStudy.studiedThisYear)) {
+      return { ok: false, msg: 'Anda sudah mengulang kaji intensif tahun ini!' };
+    }
     s.yearlyActions.studyHard = true;
+    s.education.studiedThisYear = true;
     const gain = Utils.randInt(4, 8);
     GameState.adjustStats({ smarts: gain, happiness: -2 });
+    if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + 4, 0, 100);
+
     if (s.education.activeStudy) {
-      s.education.activeStudy.gpa = Number(Math.min(4.0, (s.education.activeStudy.gpa || 3.0) + 0.14).toFixed(2));
+      const st = s.education.activeStudy;
+      st.studiedThisYear = true;
+      const smartsBoost = 0.20 + Math.min(0.25, ((s.stats.smarts || 55) / 100) * 0.25);
+      const nextCgpa = Number(Math.max(0, Math.min(4.0, (st.currentCgpa ?? st.gpa ?? 3.1) + smartsBoost)).toFixed(2));
+      st.currentCgpa = nextCgpa;
+      st.gpa = nextCgpa;
+      s.education.currentCgpa = nextCgpa;
       GameState.addJournalEntry(
-        `📚 Anda mengulang kaji bersungguh-sungguh untuk ${s.education.activeStudy.institution} (Kepintaran +${gain}%, PNGK/GPA kini ${s.education.activeStudy.gpa})!`
+        `📖 Anda mengulang kaji bersungguh-sungguh untuk ${st.institution} (Kepintaran +${gain}%, PNGK kini ${nextCgpa.toFixed(2)}).`
       );
+      GameState.save();
+      return { ok: true, msg: `📖 Ulang kaji berjaya! Kepintaran +${gain}%, PNGK kini ${nextCgpa.toFixed(2)}.` };
     } else {
       GameState.addJournalEntry(`📖 Anda belajar bersungguh-sungguh tahun ini (Kepintaran +${gain}%)!`);
     }
@@ -313,7 +355,10 @@ window.EduCareerEngine = {
 
     // 2) Kemajuan pengajian aktif (Kelas Dewasa / Diploma / Ijazah / Master / PhD)
     const st = ed.activeStudy;
-    if (!st) return false;
+    if (!st) {
+      ed.studiedThisYear = false;
+      return false;
+    }
 
     // Proses yuran tahunan
     if (st.annualTuition > 0) {
@@ -330,10 +375,71 @@ window.EduCareerEngine = {
       GameState.adjustStats({ health: -2 });
     }
 
+    const didStudy = Boolean(st.studiedThisYear || ed.studiedThisYear || (s.yearlyActions && s.yearlyActions.studyHard));
+    const curCgpa = typeof st.currentCgpa === 'number' ? st.currentCgpa : (typeof st.gpa === 'number' ? st.gpa : 3.15);
+
+    if (!didStudy) {
+      const drop = 0.50 + (Math.random() * 0.30);
+      st.currentCgpa = Number(Math.max(0.0, curCgpa - drop).toFixed(2));
+      st.gpa = st.currentCgpa;
+      ed.currentCgpa = st.currentCgpa;
+      GameState.adjustStats({ happiness: -4 });
+      GameState.addJournalEntry(
+        `📉 Anda langsung tidak mengulang kaji tahun ini — PNGK jatuh mendadak kepada ${st.currentCgpa.toFixed(2)}!`,
+        'warning'
+      );
+    } else {
+      const boost = 0.15 + (Math.random() * 0.20);
+      st.currentCgpa = Number(Math.min(4.0, curCgpa + boost).toFixed(2));
+      st.gpa = st.currentCgpa;
+      ed.currentCgpa = st.currentCgpa;
+      GameState.adjustStats({ smarts: Utils.randInt(3, 6) });
+    }
+
+    // Tetapkan semula status ulang kaji bagi tahun baharu
+    st.studiedThisYear = false;
+    ed.studiedThisYear = false;
+
     st.yearsCompleted += 1;
     ed.uniYearsLeft = Math.max(0, st.totalYears - st.yearsCompleted);
-    GameState.adjustStats({ smarts: Utils.randInt(3, 6) });
-    st.gpa = Number(Utils.clamp((st.gpa || 3.0) + (s.stats.smarts >= 70 ? 0.08 : -0.04) + (Math.random() * 0.1 - 0.04), 2.1, 4.0).toFixed(2));
+
+    // Semak Amaran Akademik jika PNGK < 2.00
+    if (st.currentCgpa < 2.0) {
+      st.academicWarningCount = (st.academicWarningCount || 0) + 1;
+      if (st.academicWarningCount >= 2 && !didStudy) {
+        st.totalYears += 1;
+        ed.uniYearsLeft = Math.max(1, st.totalYears - st.yearsCompleted);
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
+        GameState.adjustStats({ happiness: -10 });
+        GameState.addJournalEntry(
+          `⚠️ Amaran Akademik Kritikal: PNGK anda (${st.currentCgpa.toFixed(2)}) kekal di bawah 2.00 akibat tidak mengulang kaji — anda gagal dan terpaksa mengulang 1 tahun pengajian!`,
+          'warning'
+        );
+      } else {
+        GameState.addJournalEntry(
+          `⚠️ Amaran Akademik: PNGK anda jatuh di bawah 2.00 (${st.currentCgpa.toFixed(2)})! Sila tekan "📖 Belajar / Ulang Kaji" setiap tahun atau anda berisiko gagal dan mengulang tahun.`,
+          'warning'
+        );
+      }
+    } else {
+      st.academicWarningCount = 0;
+    }
+
+    // Semak Anugerah Dekan (PNGK 4.00)
+    let deansAwardedThisYear = false;
+    if (st.currentCgpa >= 4.0) {
+      ed.hasDeansAward = true;
+      ed.deansAwardCount = (ed.deansAwardCount || 0) + 1;
+      deansAwardedThisYear = true;
+      GameState.adjustStats({ happiness: 10, smarts: 2 });
+      if (window.Dynasty) Dynasty.adjustReputation(2);
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: 2 });
+      if (window.Utils && Utils.playTone) Utils.playTone('achievement');
+      GameState.addJournalEntry(
+        `🏅 ANUGERAH DEKAN! Pencapaian cemerlang PNGK 4.00 di ${st.institution} melayakkan anda menerima Anugerah Dekan (Jumlah: ${ed.deansAwardCount}x)!`,
+        'milestone'
+      );
+    }
 
     // Peristiwa tahunan khas penyelidikan PhD (tesis, penerbitan jurnal)
     if (st.level === 'phd' && st.yearsCompleted < st.totalYears) {
@@ -372,6 +478,15 @@ window.EduCareerEngine = {
         }
       }
 
+      const finalCgpa = Number((st.currentCgpa ?? st.gpa ?? 3.0).toFixed(2));
+      const graduatedWithDeans = finalCgpa >= 4.0;
+      if (graduatedWithDeans && !deansAwardedThisYear) {
+        ed.hasDeansAward = true;
+        ed.deansAwardCount = (ed.deansAwardCount || 0) + 1;
+      }
+      ed.graduatedCgpa = finalCgpa;
+      ed.currentCgpa = null;
+
       const prevRank = EducationData.levelRank(ed.educationLevel);
       const newRank = EducationData.levelRank(st.level);
       if (newRank >= prevRank) {
@@ -388,31 +503,33 @@ window.EduCareerEngine = {
         fieldName: st.fieldName,
         institution: st.institution,
         year: s.year,
-        gpa: st.gpa,
+        gpa: finalCgpa,
+        deansAward: graduatedWithDeans,
         publications: st.publications || 0
       });
 
+      const deansTag = graduatedWithDeans ? ' — 🏅 Anugerah Dekan!' : '';
       if (st.level === 'phd') {
         ed.hasDoctorateTitle = true;
         if (window.Dynasty) Dynasty.adjustReputation(10);
         if (window.KarmaEndings) {
           KarmaEndings.adjustAlignment({ fame: 8, karma: 6 });
-          KarmaEndings.addHighlight('👑', `Menggenggam PhD (${st.fieldName}) & gelaran Dr. dari ${st.institution}`);
+          KarmaEndings.addHighlight('👑', `Menggenggam PhD (${st.fieldName}) & gelaran Dr. dari ${st.institution} (PNGK ${finalCgpa.toFixed(2)})`);
         }
         if (window.Utils && Utils.playTone) Utils.playTone('achievement');
         GameState.addJournalEntry(
-          `👑 TAHNIAH ${this.getDisplayName(s)}! Anda lulus ujian Viva PhD (${st.fieldName}) di ${st.institution} dengan ${st.publications || 1} penerbitan jurnal! Gelaran "Dr." rasmi dianugerahkan & Reputasi Keluarga +10%!`,
+          `👑 TAHNIAH ${this.getDisplayName(s)}! Anda lulus ujian Viva PhD (${st.fieldName}) di ${st.institution} (PNGK ${finalCgpa.toFixed(2)}${deansTag}) dengan ${st.publications || 1} penerbitan jurnal! Gelaran "Dr." rasmi dianugerahkan & Reputasi Keluarga +10%!`,
           'milestone'
         );
       } else {
         if (window.Utils && Utils.playTone) Utils.playTone('achievement');
         GameState.addJournalEntry(
-          `🎓 KONVOKESYEN! Anda menamatkan ${prog ? prog.title : st.level}${st.field ? ` (${st.fieldName})` : ''} di ${st.institution} (PNGK ${st.gpa})!`,
+          `🎓 KONVOKESYEN! Anda menamatkan ${prog ? prog.title : st.level}${st.field ? ` (${st.fieldName})` : ''} di ${st.institution} (PNGK ${finalCgpa.toFixed(2)}${deansTag})!`,
           'milestone'
         );
       }
 
-      GameState.adjustStats({ happiness: 18, smarts: 6 });
+      GameState.adjustStats({ happiness: graduatedWithDeans ? 24 : 18, smarts: 6 });
       ed.activeStudy = null;
       ed.stage = newRank >= 3 ? 'graduated' : 'highschool_done';
     }
@@ -673,10 +790,21 @@ window.EduCareerEngine = {
     return { locked: false, roleName: '', type: null };
   },
 
+  getEffectiveCgpa(s) {
+    if (!s || !s.education) return null;
+    const ed = s.education;
+    if (typeof ed.graduatedCgpa === 'number') return ed.graduatedCgpa;
+    if (Array.isArray(ed.completedDegrees) && ed.completedDegrees.length > 0) {
+      const last = ed.completedDegrees[ed.completedDegrees.length - 1];
+      if (last && typeof last.gpa === 'number') return last.gpa;
+    }
+    return null;
+  },
+
   calculateScreeningChance(s, career) {
     this.ensureFields(s);
     const ed = s.education;
-    // Peluang asas mengikut peringkat jawatan (TIDAK PERNAH 100%)
+    // Peluang asas mengikut peringkat jawatan
     let base;
     if (career.isRare || career.baseSalary >= 80000 || career.minEducation === 'phd' || career.minEducation === 'master') {
       base = Utils.randInt(10, 25); // Senior / Elit / Nadir: 10–25%
@@ -693,6 +821,20 @@ window.EduCareerEngine = {
     const reqRank = EducationData.levelRank(career.minEducation);
     if (this.isCareerFieldMatched(s, career) && lvlRank >= 2) {
       mod += (lvlRank >= 4 || lvlRank > reqRank) ? 15 : 10;
+    }
+
+    // 1B) Kesan Nyata PNGK (CGPA) & Anugerah Dekan dalam saringan resume majikan
+    const cgpa = this.getEffectiveCgpa(s);
+    let maxCap = 85;
+    if (cgpa !== null) {
+      if (cgpa >= 4.0) {
+        mod += Utils.randInt(25, 35); // Anugerah Dekan: keutamaan tinggi (+25% hingga +35%)
+        maxCap = 95;
+      } else if (cgpa >= 3.0) {
+        mod += Math.round((cgpa - 3.0) * 10); // 3.00–3.99: skala positif ringan (+0% hingga +10%)
+      } else {
+        mod -= Utils.randInt(25, 40); // PNGK < 3.00: penalti berat (-25% hingga -40%)
+      }
     }
 
     // 2) Sijil & Kursus Profesional Sepadan (+8% hingga +14%)
@@ -726,8 +868,7 @@ window.EduCareerEngine = {
     }
     mod -= Math.min(40, penalty);
 
-    // Had ketat antara 5% minimum hingga 85% maksimum
-    return Utils.clamp(base + mod, 5, 85);
+    return Utils.clamp(base + mod, 5, maxCap);
   },
 
   checkJobEligibility(s, career) {
@@ -799,15 +940,18 @@ window.EduCareerEngine = {
     // Tolak kuota permohonan tahunan (5/5)
     s.careerMarket.applicationsLeft = Math.max(0, s.careerMarket.applicationsLeft - 1);
 
-    // TAHAP 1: SARINGAN CV BERPEMBERAT (5% – 85%, TIDAK PERNAH 100%)
+    // TAHAP 1: SARINGAN CV BERPEMBERAT (termasuk kesan PNGK & Anugerah Dekan)
     const screeningPct = this.calculateScreeningChance(s, career);
     const shortlisted = Utils.chance(screeningPct / 100);
+    const cgpa = this.getEffectiveCgpa(s);
 
     if (!shortlisted) {
       if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
         s.careerMarket.appliedJobIdsThisYear.push(career.id);
       }
-      const reason = Utils.pick(this.REJECTION_SCENARIOS);
+      const reason = (cgpa !== null && cgpa < 3.0 && Utils.chance(0.75))
+        ? `PNGK bawah 3.00 (${cgpa.toFixed(2)}) tidak melepasi saringan majikan.`
+        : Utils.pick(this.REJECTION_SCENARIOS);
       const hapDip = Utils.randInt(2, 4);
       GameState.adjustStats({ happiness: -hapDip });
       GameState.addJournalEntry(
@@ -837,19 +981,19 @@ window.EduCareerEngine = {
     const q = Utils.pick(CareersData.INTERVIEW_QUESTIONS);
     const salaryLocal = this.getCareerSalaryLocal(s, career, 0);
     const shuffledOpts = [...q.options].sort(() => Math.random() - 0.5);
+    const cgpa = this.getEffectiveCgpa(s);
 
     return {
       id: `interview_${career.id}_${Date.now()}`,
       icon: career.icon,
       title: `Temu Duga Kerja: ${career.title}`,
-      text: `${q.prompt}\n\n(Gaji ditawarkan: ${Utils.formatMoney(salaryLocal, s.countryId)}/thn • Persaingan sengit dengan calon lain!)`,
+      text: `${q.prompt}\n\n(Gaji ditawarkan: ${Utils.formatMoney(salaryLocal, s.countryId)}/thn • Persaingan sengit dengan calon lain!${cgpa !== null ? ` • PNGK Anda: ${cgpa.toFixed(2)}${cgpa >= 4.0 ? ' 🏅 Anugerah Dekan' : ''}` : ''})`,
       choices: shuffledOpts.map(opt => ({
         label: opt.label,
         hint: 'Jawapan temu duga',
         journalType: 'culture',
         customAction: () => {
-          // Tahap 2 RNG Kompetitif (TIDAK PERNAH 100%):
-          // Jawapan Hebat = 65–80%, Sederhana = 25–40%, Lemah = 5–10%
+          // Tahap 2 RNG Kompetitif dengan kesan PNGK & Anugerah Dekan
           let offerChance;
           if (opt.bonus >= 15) {
             offerChance = Utils.randInt(65, 80);
@@ -858,6 +1002,13 @@ window.EduCareerEngine = {
           } else {
             offerChance = Utils.randInt(5, 10);
           }
+
+          if (cgpa !== null) {
+            if (cgpa >= 4.0) offerChance += Utils.randInt(25, 35);
+            else if (cgpa >= 3.0) offerChance += Math.round((cgpa - 3.0) * 8);
+            else offerChance -= Utils.randInt(25, 40);
+          }
+          offerChance = Utils.clamp(offerChance, 5, cgpa !== null && cgpa >= 4.0 ? 96 : 88);
 
           const hired = Utils.chance(offerChance / 100);
           if (hired) {
@@ -871,11 +1022,16 @@ window.EduCareerEngine = {
           }
           const learned = Utils.chance(0.45);
           GameState.adjustStats({ happiness: -3, smarts: learned ? 1 : 0 });
-          const failReasons = [
-            `Panel temu duga berpuas hati dengan anda, tetapi syarikat memilih calon dalaman pada saat akhir untuk jawatan ${career.title}.`,
-            `Persaingan sangat ketat! Syarikat memilih calon lain yang menawarkan jangkaan gaji lebih rendah untuk ${career.title}.`,
-            `Selepas seminggu menunggu, HR memaklumkan posisi ${career.title} diberikan kepada calon yang mempunyai lebih banyak pengalaman.`
-          ];
+          const failReasons = (cgpa !== null && cgpa < 3.0)
+            ? [
+                `PNGK bawah 3.00 (${cgpa.toFixed(2)}) tidak melepasi saringan akhir majikan untuk jawatan ${career.title}.`,
+                `Panel temu duga bimbang dengan pencapaian akademik anda (PNGK ${cgpa.toFixed(2)}) dan memilih calon berprestasi lebih tinggi.`
+              ]
+            : [
+                `Panel temu duga berpuas hati dengan anda, tetapi syarikat memilih calon dalaman pada saat akhir untuk jawatan ${career.title}.`,
+                `Persaingan sangat ketat! Syarikat memilih calon lain yang menawarkan jangkaan gaji lebih rendah untuk ${career.title}.`,
+                `Selepas seminggu menunggu, HR memaklumkan posisi ${career.title} diberikan kepada calon yang mempunyai lebih banyak pengalaman.`
+              ];
           const failMsg = Utils.pick(failReasons) + (learned ? ' Pengalaman temu duga tetap mengasah minda anda (Kepintaran +1%).' : '');
           GameState.save();
           return {

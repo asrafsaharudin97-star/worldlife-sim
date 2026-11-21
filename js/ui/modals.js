@@ -1824,12 +1824,16 @@ window.Modals = {
         : [];
 
       if (window.EduCareerEngine && EduCareerEngine.ensureFields) EduCareerEngine.ensureFields(s);
+      const activeCgpa = (edObj.activeStudy && typeof edObj.activeStudy.currentCgpa === 'number') ? edObj.activeStudy.currentCgpa : null;
+      const shownCgpa = activeCgpa !== null ? activeCgpa : (typeof edObj.graduatedCgpa === 'number' ? edObj.graduatedCgpa : null);
+      const cgpaLabel = shownCgpa !== null ? ` • PNGK ${activeCgpa !== null ? 'Semasa' : 'Akhir'}: <strong>${shownCgpa.toFixed(2)}</strong>` : '';
+      const deansBadge = edObj.hasDeansAward ? ` <span class="cat-badge rare">🏅 Anugerah Dekan (${edObj.deansAwardCount || 1}x)</span>` : '';
       contentHtml += `
         <div class="info-banner highlight">
           <strong>🛂 Biodata &amp; Pasport ${Utils.escapeHtml(displayName)}</strong><br/>
           Pekerjaan / Peranan: <strong>${occ.icon || '👤'} ${Utils.escapeHtml(occ.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(occ.badge)}</span>${occ.secondaryRole ? `<br/>Peranan Sampingan: <strong>${Utils.escapeHtml(occ.secondaryRole)}</strong>` : ''}<br/>
           Jumlah Tahun Bekerja: <strong>${s.totalYearsWorked || 0} tahun</strong> • Tabung (${Utils.escapeHtml(c.retirementScheme || 'KWSP')}): <strong>${Utils.formatMoney(s.retirementFund || 0, s.countryId)}</strong>${(s.pensionAnnual || 0) > 0 ? ` • Pencen: <strong>${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn</strong>` : ''}<br/>
-          Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong><br/>
+          Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong>${cgpaLabel}${deansBadge}<br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
           Agama: <strong>${relMeta.icon} ${Utils.escapeHtml(relMeta.label)}</strong> • Ketahanan Jiwa: ${s.devotion || 40}%<br/>

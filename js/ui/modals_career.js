@@ -313,10 +313,12 @@ window.CareerModals = {
     }
 
     // 2) Status pendidikan semasa dewasa
+    const finalCgpaVal = typeof ed.graduatedCgpa === 'number' ? ed.graduatedCgpa : null;
     html += `
       <div class="info-banner highlight">
-        <strong>${lvlInfo.icon} Tahap Akademik Tertinggi: ${lvlInfo.label}</strong>${fieldObj ? ` (${fieldObj.icon} ${fieldObj.name})` : ''}<br/>
-        Kepintaran: <strong>${s.stats.smarts}%</strong> • Sijil Dimiliki: <strong>${ed.certificates.length}</strong>${ed.educationLoan > 0 ? ` • Hutang Pengajian: <strong>${Utils.formatMoney(ed.educationLoan, s.countryId)}</strong>` : ''}
+        <strong>${lvlInfo.icon} Tahap Akademik Tertinggi: ${lvlInfo.label}</strong>${fieldObj ? ` (${fieldObj.icon} ${fieldObj.name})` : ''}
+        ${ed.hasDeansAward ? ` <span class="cat-badge rare">🏅 Anugerah Dekan (${ed.deansAwardCount || 1}x)</span>` : ''}<br/>
+        Kepintaran: <strong>${s.stats.smarts}%</strong>${finalCgpaVal !== null ? ` • PNGK Akhir: <strong>${finalCgpaVal.toFixed(2)}</strong>` : ''} • Sijil Dimiliki: <strong>${ed.certificates.length}</strong>${ed.educationLoan > 0 ? ` • Hutang Pengajian: <strong>${Utils.formatMoney(ed.educationLoan, s.countryId)}</strong>` : ''}
       </div>
     `;
 
@@ -325,6 +327,13 @@ window.CareerModals = {
       const st = ed.activeStudy;
       const prog = EducationData.PROGRAMS.find(p => p.id === st.level);
       const pct = Math.min(100, Math.round((st.yearsCompleted / st.totalYears) * 100));
+      const cgpaNum = Number((st.currentCgpa ?? st.gpa ?? 3.15).toFixed(2));
+      const didStudy = Boolean(st.studiedThisYear || ed.studiedThisYear || s.yearlyActions.studyHard);
+      const cgpaBadgeStyle = cgpaNum >= 4.0
+        ? 'background:#fef3c7;color:#92400e;border:1px solid #f59e0b;'
+        : cgpaNum < 2.0
+          ? 'background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;'
+          : '';
       html += `
         <div class="career-active-card">
           <div class="cac-top">
@@ -332,22 +341,32 @@ window.CareerModals = {
               <div class="cac-title">${prog ? prog.icon : '🎓'} ${Utils.escapeHtml(prog ? prog.title : st.level)} — ${Utils.escapeHtml(st.fieldName)}</div>
               <div class="cac-sub">${Utils.escapeHtml(st.institution)} • ${st.mode === 'part_time' ? 'Separuh Masa (Sambil Bekerja)' : 'Sepenuh Masa'} • ${Utils.escapeHtml(st.fundingLabel)}</div>
             </div>
-            <span class="cat-badge synergy">PNGK ${st.gpa}</span>
+            <span class="cat-badge synergy" ${cgpaBadgeStyle ? `style="${cgpaBadgeStyle}"` : ''}>PNGK ${cgpaNum.toFixed(2)}${cgpaNum >= 4.0 ? ' 🏅' : ''}</span>
           </div>
           <div style="margin-top:8px;">
             <div class="ph-bar-lbl"><span>Kemajuan Pengajian</span><strong>Tahun ${st.yearsCompleted}/${st.totalYears} (${pct}%)</strong></div>
             <div class="mini-track" style="height:8px;"><div class="mini-fill" style="width:${pct}%;background:#3b82f6;"></div></div>
           </div>
+          ${!didStudy ? `
+            <div style="margin-top:8px;padding:7px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;font-weight:600;">
+              ⚠️ Anda belum mengulang kaji tahun ini! PNGK akan jatuh mendadak (-0.50 hingga -0.80) jika anda terus +UMUR tanpa belajar.
+            </div>
+          ` : `
+            <div style="margin-top:8px;padding:6px 10px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:12px;font-weight:600;">
+              ✅ Usaha ulang kaji tahun ini direkodkan — PNGK akan meningkat/kekal pada +UMUR nanti.
+            </div>
+          `}
+          ${cgpaNum < 2.0 ? `<div class="cac-next" style="color:#b91c1c;font-weight:700;">⚠️ Amaran Akademik: PNGK di bawah 2.00 — risiko gagal &amp; mengulang tahun!</div>` : ''}
           ${st.level === 'phd' ? `<div class="cac-next">📄 Penerbitan Jurnal PhD: <strong>${st.publications || 0} kertas</strong> • Ujian Viva menanti pada tahun akhir!</div>` : ''}
         </div>
         <div class="action-list">
-          <button type="button" class="action-item" id="act-study-hard" ${s.yearlyActions.studyHard ? 'disabled' : ''}>
-            <span class="ai-icon">📚</span>
+          <button type="button" class="action-item" id="act-study-hard" ${didStudy ? 'disabled' : ''}>
+            <span class="ai-icon">📖</span>
             <span class="ai-content">
-              <span class="ai-title">Ulang Kaji &amp; Kajian Intensif</span>
-              <span class="ai-desc">Naikkan Kepintaran &amp; PNGK/GPA pengajian anda</span>
+              <span class="ai-title">Belajar / Ulang Kaji</span>
+              <span class="ai-desc">${didStudy ? 'Sudah mengulang kaji tahun ini (Kepintaran & PNGK meningkat)' : 'Naikkan Kepintaran & PNGK hingga 4.00 (Anugerah Dekan) • Sedikit stres'}</span>
             </span>
-            <span class="ai-right">GPA +</span>
+            <span class="ai-right">${didStudy ? '✓ Selesai' : 'PNGK +'}</span>
           </button>
         </div>
       `;
@@ -468,8 +487,9 @@ window.CareerModals = {
     const lvlInfo = EducationData.LEVEL_INFO[ed.educationLevel] || EducationData.LEVEL_INFO.none;
     let html = `
       <div class="info-banner highlight">
-        <strong>🎓 Profil Akademik ${Utils.escapeHtml(EduCareerEngine.getDisplayName(s))}</strong><br/>
-        Tahap Tertinggi: <strong>${lvlInfo.icon} ${lvlInfo.label}</strong><br/>
+        <strong>🎓 Profil Akademik ${Utils.escapeHtml(EduCareerEngine.getDisplayName(s))}</strong>
+        ${ed.hasDeansAward ? ` <span class="cat-badge rare">🏅 Anugerah Dekan (${ed.deansAwardCount || 1}x)</span>` : ''}<br/>
+        Tahap Tertinggi: <strong>${lvlInfo.icon} ${lvlInfo.label}</strong>${typeof ed.graduatedCgpa === 'number' ? ` • PNGK Akhir: <strong>${ed.graduatedCgpa.toFixed(2)}</strong>` : ''}<br/>
         Baki Pinjaman Pendidikan: <strong>${Utils.formatMoney(ed.educationLoan || 0, s.countryId)}</strong>
       </div>
     `;
@@ -479,10 +499,11 @@ window.CareerModals = {
       html += `<div class="info-banner">Belum ada diploma atau ijazah tamat lagi.</div>`;
     } else {
       ed.completedDegrees.forEach(d => {
+        const dGpa = typeof d.gpa === 'number' ? d.gpa.toFixed(2) : d.gpa;
         html += `
           <div class="info-banner">
-            <strong>🎓 ${Utils.escapeHtml(d.title || d.level)} — ${Utils.escapeHtml(d.fieldName || 'Am')}</strong><br/>
-            ${Utils.escapeHtml(d.institution)} • Tahun ${d.year} • PNGK ${d.gpa}${d.publications ? ` • ${d.publications} Jurnal` : ''}
+            <strong>🎓 ${Utils.escapeHtml(d.title || d.level)} — ${Utils.escapeHtml(d.fieldName || 'Am')}</strong>${(d.deansAward || Number(d.gpa) >= 4.0) ? ' <span class="cat-badge rare">🏅 Anugerah Dekan</span>' : ''}<br/>
+            ${Utils.escapeHtml(d.institution)} • Tahun ${d.year} • PNGK ${dGpa}${d.publications ? ` • ${d.publications} Jurnal` : ''}
           </div>
         `;
       });
