@@ -378,7 +378,7 @@ window.SpecialModesEngine = {
       : (['celebrity', 'royalty'].includes(modeId) ? (looks * 0.55 + smarts * 0.45) : (smarts * 0.65 + health * 0.35));
 
     const statMod = Math.round(((primaryStat - 60) / 100) * 26);
-    const stressPenalty = stress >= 75 ? 18 : stress >= 55 ? 10 : stress >= 40 ? 4 : 0;
+    const stressPenalty = stress >= 75 ? 18 : stress >= 50 ? 10 : stress >= 35 ? 4 : 0;
 
     const successPct = Utils.clamp(baseSuccess + statMod + rankBonus - stressPenalty, 18, 86);
     const partialPct = tier === 'high' ? 22 : (tier === 'medium' ? 20 : 15);

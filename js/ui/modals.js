@@ -1894,11 +1894,29 @@ window.Modals = {
       contentHtml += `</div>`;
     } else if (activeSubTab === 'lifestyle') {
       const gymCost = Utils.usdToLocal(25, s.countryId);
+      const vacationCost = s.age < 18 ? Utils.usdToLocal(40, s.countryId) : Utils.usdToLocal(180, s.countryId);
+      const therapyCost = s.age < 18 ? 0 : Utils.usdToLocal(120, s.countryId);
       const beliefObj = GameState.getBeliefObj(s.belief);
       const charityCost = Utils.usdToLocal(35, s.countryId);
+      const curStress = Math.round((s.alignment && s.alignment.stress) || 0);
+      const stressTierLabel = curStress >= 90
+        ? '🚨 Tekanan Melampau (Risiko Masuk Hospital / Strok)'
+        : curStress >= 75
+        ? '⚠️ Burnout / Kritikal (Jejas Kesihatan & Emosi)'
+        : curStress >= 50
+        ? '🟠 Stres Tinggi (-10% Peluang Kerjaya / Misi)'
+        : '🟢 Terkawal';
+      const stressColor = curStress >= 75 ? '#ef4444' : curStress >= 50 ? '#f59e0b' : '#22c55e';
+      const activeStressIllnesses = Array.isArray(s.stressIllnesses) && s.stressIllnesses.length > 0
+        ? `<div style="margin-top:4px;font-size:0.78rem;color:#fca5a5;">🩺 Penyakit Akibat Stres: <strong>${s.stressIllnesses.map(i => Utils.escapeHtml(i)).join(', ')}</strong></div>`
+        : '';
       contentHtml += `
         <div class="section-heading">🏥 Kesihatan di ${c.name} (${c.healthcare.type})</div>
         <div class="info-banner">${Utils.escapeHtml(c.healthcare.desc)}</div>
+        <div class="info-banner" style="border-left:3px solid ${stressColor};margin-top:6px;">
+          <div>🧠 <strong>Tahap Stres Semasa: ${curStress}%</strong> — <span style="color:${stressColor};font-weight:700;">${stressTierLabel}</span></div>
+          ${activeStressIllnesses}
+        </div>
         <div class="action-list">
           <button class="action-item" id="act-doc-pub">
             <span class="ai-icon">🏥</span>
@@ -1918,6 +1936,42 @@ window.Modals = {
           </button>
         </div>
 
+        <div class="section-heading">🧘‍♂️ Pengurusan Stres &amp; Kesihatan Mental</div>
+        <div class="action-list">
+          <button class="action-item" id="act-gym" ${s.yearlyActions.gym ? 'disabled' : ''}>
+            <span class="ai-icon">🏃‍♂️</span>
+            <span class="ai-content">
+              <span class="ai-title">Bersenam / Joging</span>
+              <span class="ai-desc">Kurangkan Stres (-8 hingga -12%) &amp; tingkatkan Kesihatan</span>
+            </span>
+            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(gymCost, s.countryId)}</span>
+          </button>
+          <button class="action-item" id="act-vacation-rest" ${s.yearlyActions.vacationRest ? 'disabled' : ''}>
+            <span class="ai-icon">🏖️</span>
+            <span class="ai-content">
+              <span class="ai-title">Bercuti / Rehat</span>
+              <span class="ai-desc">Rehatkan minda daripada tekanan (-20 hingga -35% Stres, +Gembira)</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(vacationCost, s.countryId)}</span>
+          </button>
+          <button class="action-item" id="act-counseling" ${s.yearlyActions.counselingTherapy ? 'disabled' : ''}>
+            <span class="ai-icon">🛋️</span>
+            <span class="ai-content">
+              <span class="ai-title">Sesi Kaunseling / Terapi</span>
+              <span class="ai-desc">Rawatan psikologi (-25 hingga -40% Stres, bantu pulihkan Kemurungan / Insomnia)</span>
+            </span>
+            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(therapyCost, s.countryId)}</span>
+          </button>
+          <button class="action-item" id="act-family-hobby" ${s.yearlyActions.familyHobby ? 'disabled' : ''}>
+            <span class="ai-icon">🎨</span>
+            <span class="ai-content">
+              <span class="ai-title">Luangkan Masa Bersama Keluarga / Hobi</span>
+              <span class="ai-desc">Aktiviti santai (-10 hingga -15% Stres, +Gembira &amp; mengeratkan hubungan)</span>
+            </span>
+            <span class="ai-right">Percuma</span>
+          </button>
+        </div>
+
         <div class="section-heading">💪 Minda, Jiwa &amp; Badan</div>
         <div class="action-list">
           <button class="action-item" id="act-spiritual" ${s.yearlyActions.spiritualPractice ? 'disabled' : ''}>
@@ -1927,14 +1981,6 @@ window.Modals = {
               <span class="ai-desc">${Utils.escapeHtml(beliefObj.practiceDesc)}</span>
             </span>
             <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(charityCost, s.countryId)}</span>
-          </button>
-          <button class="action-item" id="act-gym" ${s.yearlyActions.gym ? 'disabled' : ''}>
-            <span class="ai-icon">🏋️</span>
-            <span class="ai-content">
-              <span class="ai-title">Bersenam di Gim</span>
-              <span class="ai-desc">Tingkatkan Kesihatan &amp; Penampilan</span>
-            </span>
-            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(gymCost, s.countryId)}</span>
           </button>
           <button class="action-item" id="act-library" ${s.yearlyActions.library ? 'disabled' : ''}>
             <span class="ai-icon">📚</span>
@@ -1948,7 +1994,7 @@ window.Modals = {
             <span class="ai-icon">🧘</span>
             <span class="ai-content">
               <span class="ai-title">Tenangkan Fikiran di Taman</span>
-              <span class="ai-desc">Tingkatkan Gembira &amp; Kesihatan</span>
+              <span class="ai-desc">Tingkatkan Gembira &amp; Kesihatan (-6% Stres)</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
@@ -2140,15 +2186,33 @@ window.Modals = {
 
     const gymBtn = document.getElementById('act-gym');
     if (gymBtn) gymBtn.addEventListener('click', () => {
-      const cost = s.age < 18 ? 0 : Utils.usdToLocal(25, s.countryId);
-      if (s.money < cost) return App.toast('Wang tidak mencukupi untuk gim!', 'error');
-      s.money -= cost;
-      s.yearlyActions.gym = true;
-      GameState.adjustStats({ health: 8, looks: 5, happiness: 4 });
-      GameState.addJournalEntry(`🏋️ Bersenam bersungguh-sungguh di gim tempatan di ${s.city}!`);
-      GameState.save();
+      const res = Sim.doExerciseJogging();
+      App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
-      App.toast('Kesihatan & Penampilan meningkat!', 'success');
+      this.showActivities('lifestyle');
+    });
+
+    const vacRestBtn = document.getElementById('act-vacation-rest');
+    if (vacRestBtn) vacRestBtn.addEventListener('click', () => {
+      const res = Sim.takeVacationRest();
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showActivities('lifestyle');
+    });
+
+    const counselBtn = document.getElementById('act-counseling');
+    if (counselBtn) counselBtn.addEventListener('click', () => {
+      const res = Sim.attendCounselingTherapy();
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showActivities('lifestyle');
+    });
+
+    const famHobbyBtn = document.getElementById('act-family-hobby');
+    if (famHobbyBtn) famHobbyBtn.addEventListener('click', () => {
+      const res = Sim.spendFamilyHobbyTime();
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
       this.showActivities('lifestyle');
     });
 
@@ -2167,10 +2231,11 @@ window.Modals = {
     if (medBtn) medBtn.addEventListener('click', () => {
       s.yearlyActions.meditate = true;
       GameState.adjustStats({ happiness: 8, health: 4 });
-      GameState.addJournalEntry(`🧘 Bertenang dan berjalan santai di taman rekreasi.`);
+      if (typeof AlignmentEngine !== 'undefined') AlignmentEngine.adjust(s, { stress: -6 });
+      GameState.addJournalEntry(`🧘 Bertenang dan berjalan santai di taman rekreasi (-6% Stres).`);
       GameState.save();
       App.renderAll();
-      App.toast('Fikiran lebih tenang!', 'success');
+      App.toast('Fikiran lebih tenang! (-6% Stres)', 'success');
       this.showActivities('lifestyle');
     });
 

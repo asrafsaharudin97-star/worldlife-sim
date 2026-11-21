@@ -868,6 +868,11 @@ window.EduCareerEngine = {
     }
     mod -= Math.min(40, penalty);
 
+    // 6) Penalti Stres Tinggi (50–74%: -10% peluang; >= 75% Burnout: -15% peluang)
+    const curStress = (s.alignment && s.alignment.stress) || 0;
+    if (curStress >= 75) mod -= 15;
+    else if (curStress >= 50) mod -= 10;
+
     return Utils.clamp(base + mod, 5, maxCap);
   },
 
@@ -993,7 +998,7 @@ window.EduCareerEngine = {
         hint: 'Jawapan temu duga',
         journalType: 'culture',
         customAction: () => {
-          // Tahap 2 RNG Kompetitif dengan kesan PNGK & Anugerah Dekan
+          // Tahap 2 RNG Kompetitif dengan kesan PNGK, Anugerah Dekan & Penalti Stres
           let offerChance;
           if (opt.bonus >= 15) {
             offerChance = Utils.randInt(65, 80);
@@ -1008,6 +1013,12 @@ window.EduCareerEngine = {
             else if (cgpa >= 3.0) offerChance += Math.round((cgpa - 3.0) * 8);
             else offerChance -= Utils.randInt(25, 40);
           }
+
+          // Penalti Stres Tinggi (50–74%: -10%; >= 75%: -15%)
+          const curStress = (s.alignment && s.alignment.stress) || 0;
+          if (curStress >= 75) offerChance -= 15;
+          else if (curStress >= 50) offerChance -= 10;
+
           offerChance = Utils.clamp(offerChance, 5, cgpa !== null && cgpa >= 4.0 ? 96 : 88);
 
           const hired = Utils.chance(offerChance / 100);

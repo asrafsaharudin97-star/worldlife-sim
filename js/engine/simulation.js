@@ -460,12 +460,15 @@ window.Sim = {
       const retireContrib = Math.round(s.job.salary * 0.12);
 
       let promoted = false;
-      if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(0.45)) {
+      const curStress = (s.alignment && s.alignment.stress) || 0;
+      const promoChance = curStress >= 50 ? 0.35 : 0.45; // -10% peluang naik pangkat jika Stres >= 50%
+      if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(promoChance)) {
         const pRes = EduCareerEngine.tryPromote(s, false);
         promoted = Boolean(pRes && pRes.ok);
       }
 
-      if (!promoted && s.job.performance >= 72 && Utils.chance(0.55)) {
+      const raiseChance = curStress >= 50 ? 0.45 : 0.55; // -10% peluang naik gaji automatik jika Stres >= 50%
+      if (!promoted && s.job.performance >= 72 && Utils.chance(raiseChance)) {
         const bump = Utils.randInt(4, 10);
         s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
         GameState.addJournalEntry(
@@ -564,6 +567,7 @@ window.Sim = {
   },
 
   _checkDeath(s, c) {
+    if (s._lethalStressCause) return s._lethalStressCause;
     if (s.stats.health <= 0) return 'Komplikasi kesihatan serius';
     if (s.age >= c.lifeExpectancy + 18) return 'Faktor usia tua dengan tenang';
     if (s.age >= c.lifeExpectancy - 4) {
@@ -576,6 +580,9 @@ window.Sim = {
   },
 
   _processModesAndAlignment(s, c) {
+    if (!Array.isArray(s.stressIllnesses)) s.stressIllnesses = [];
+    s._lethalStressCause = null;
+
     // 1. Hukuman Penjara
     if (s.prison && s.prison.inPrison) {
       s.prison.yearsServed = (s.prison.yearsServed || 0) + 1;
@@ -598,27 +605,125 @@ window.Sim = {
       if (s.prison && s.prison.inPrison) return;
     }
 
-    // (Pendapatan tahunan semua Mod Khas kini dikreditkan secara bersepadu melalui CharacterStatus.getTotalAnnualIncome dalam _processFinances!)
-
     // 3. Pertumbuhan pasif Laman Sosial
     if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers > 0) {
       const passive = Math.round(s.socialMedia.followers * Utils.randInt(2, 6) / 100);
       s.socialMedia.followers += passive;
     }
 
-    // 4. Penyejukan semula jadi Haba Polis & Stres (pesara mendapat pengurangan stres tambahan)
+    // 4. Penyejukan semula jadi Haba Polis
     if (s.alignment.notoriety > 0) {
       s.alignment.notoriety = Math.max(0, s.alignment.notoriety - Utils.randInt(2, 5));
     }
-    const stressCool = (s.retired || s.isRetired) ? Utils.randInt(4, 8) : Utils.randInt(2, 5);
-    if (s.alignment.stress > 10) {
-      s.alignment.stress = Math.max(5, s.alignment.stress - stressCool);
+
+    // 5. KESAN STRES BERPERINGKAT (TIERED STRESS CONSEQUENCES) SEBELUM PENYEJUKAN RINGAN
+    const stressNow = s.alignment.stress || 0;
+
+    if (stressNow >= 90) {
+      // PERINGKAT 3: 90–100% (TEKANAN MELAMPAU / BURNOUT TERUK)
+      const hDrop = Utils.randInt(12, 18);
+      const hapDrop = Utils.randInt(14, 20);
+      GameState.adjustStats({ health: -hDrop, happiness: -hapDrop });
+
+      // Risiko Serangan Jantung / Strok (meningkat bagi umur 40+)
+      const strokeChance = s.age >= 40
+        ? Math.min(0.28, 0.08 + ((s.age - 40) * 0.006))
+        : 0.03;
+
+      if (Utils.chance(strokeChance)) {
+        const ConditionName = Utils.pick(['Serangan Jantung Mengejut', 'Strok Akibat Tekanan Melampau']);
+        const fatalRoll = s.age >= 45 ? 0.35 : 0.15;
+        if (Utils.chance(fatalRoll) || s.stats.health <= 15) {
+          s.stats.health = 0;
+          s._lethalStressCause = `${ConditionName} (Stres ${stressNow}%)`;
+          GameState.addJournalEntry(
+            `🚨💔 TRAGEDI TEKANAN MELAMPAU (Stres ${stressNow}%): Anda rebah secara mengejut akibat ${ConditionName}!`,
+            'warning'
+          );
+          return;
+        }
+        const emergBill = Utils.usdToLocal(Utils.randInt(1800, 4200), s.countryId);
+        s.money = Math.max(0, (s.money || 0) - emergBill);
+        GameState.adjustStats({ health: -15 });
+        s.alignment.stress = Utils.clamp(stressNow - 18, 50, 100);
+        GameState.addJournalEntry(
+          `🚑⚠️ ${ConditionName.toUpperCase()} (Stres ${stressNow}%): Anda dikejarkan ke ICU! Mujur nyawa anda sempat diselamatkan, namun kesihatan merosot teruk dan bil hospital kecemasan berjumlah ${Utils.formatMoney(emergBill, s.countryId)}.`,
+          'warning'
+        );
+      } else if (Utils.chance(0.75)) {
+        // Burnout / Masuk Hospital (bil perubatan + rehat paksa)
+        const hospBill = Utils.usdToLocal(Utils.randInt(650, 1800), s.countryId);
+        s.money = Math.max(0, (s.money || 0) - hospBill);
+        s.alignment.stress = Utils.clamp(stressNow - 15, 55, 100);
+        if (s.job) s.job.performance = Utils.clamp((s.job.performance || 70) - 10, 15, 100);
+        GameState.addJournalEntry(
+          `🏥⚠️ BURNOUT & MASUK HOSPITAL (Stres ${stressNow}%): Akibat tekanan melampau, anda rebah keletihan dan terpaksa dimasukkan ke wad untuk rehat paksa! Bil rawatan: ${Utils.formatMoney(hospBill, s.countryId)} (Kesihatan -${hDrop}%, Gembira -${hapDrop}%).`,
+          'warning'
+        );
+      } else {
+        GameState.addJournalEntry(
+          `🚨⚠️ AMARAN TEKANAN MELAMPAU (Stres ${stressNow}%): Tubuh dan minda anda berada di ambang kehancuran (Kesihatan -${hDrop}%, Gembira -${hapDrop}%)! Segera ambil Cuti Rehat atau Sesi Kaunseling sebelum terkena serangan jantung/strok!`,
+          'warning'
+        );
+      }
+    } else if (stressNow >= 75) {
+      // PERINGKAT 2: 75–89% (BURNOUT / KRITIKAL)
+      const hDrop = Utils.randInt(8, 15);
+      const hapDrop = Utils.randInt(10, 15);
+      GameState.adjustStats({ health: -hDrop, happiness: -hapDrop });
+
+      const extraWarnings = [];
+
+      // Peluang menghidap penyakit berkaitan stres (Darah Tinggi, Insomnia, Kemurungan)
+      const possibleIllnesses = ['Darah Tinggi', 'Insomnia', 'Kemurungan'].filter(il => !s.stressIllnesses.includes(il));
+      if (possibleIllnesses.length > 0 && Utils.chance(0.45)) {
+        const newIllness = Utils.pick(possibleIllnesses);
+        s.stressIllnesses.push(newIllness);
+        extraWarnings.push(`Disahkan menghidap ${newIllness}`);
+      }
+
+      // Peluang cepat marah / bergaduh dengan pasangan atau keluarga (-10 Hubungan)
+      const familyOrSpouse = (s.relationships || []).filter(r => r.alive && (r.id === s.partnerId || r.category === 'family' || r.category === 'spouse'));
+      if (familyOrSpouse.length > 0 && Utils.chance(0.50)) {
+        const targetRel = s.partnerId
+          ? (familyOrSpouse.find(r => r.id === s.partnerId) || Utils.pick(familyOrSpouse))
+          : Utils.pick(familyOrSpouse);
+        if (targetRel) {
+          targetRel.closeness = Utils.clamp((targetRel.closeness ?? 70) - 10, 5, 100);
+          extraWarnings.push(`Pertengkaran emosi dengan ${targetRel.name} (-10% Hubungan)`);
+        }
+      }
+
+      // Peluang menerima amaran prestasi di tempat kerja
+      if (s.job && Utils.chance(0.45)) {
+        s.job.performance = Utils.clamp((s.job.performance || 70) - 12, 15, 100);
+        extraWarnings.push(`Amaran prestasi kerja sebagai ${s.job.title} (-12% Prestasi)`);
+      }
+
+      const detailTxt = extraWarnings.length > 0 ? ` Kesan sampingan: ${extraWarnings.join(' • ')}.` : '';
+      GameState.addJournalEntry(
+        `⚠️🧠 BURNOUT / STRES KRITIKAL (${stressNow}%): Tekanan melampau menjejaskan kesihatan (-${hDrop}%) dan kegembiraan (-${hapDrop}%) anda.${detailTxt}`,
+        'warning'
+      );
+    } else if (stressNow >= 50) {
+      // PERINGKAT 1: 50–74% (STRES TINGGI)
+      const hapDrop = Utils.randInt(5, 10);
+      GameState.adjustStats({ happiness: -hapDrop });
+      GameState.addJournalEntry(
+        `😓 Stres Tinggi (${stressNow}%): Beban tekanan tahun ini menurunkan kegembiraan anda (-${hapDrop}% Gembira) serta mengurangkan -10% peluang kenaikan pangkat, temu duga kerja dan misi Mod Khas.`,
+        'warning'
+      );
     }
 
-    // 5. Kesan Stres Melampau (Burnout)
-    if (s.alignment.stress >= 85) {
-      GameState.adjustStats({ health: -8, happiness: -10 });
-      GameState.addJournalEntry('🧠 Tekanan mental (Stres) anda berada pada tahap kritikal! Luangkan masa berehat atau tenangkan jiwa.', 'warning');
+    // Kesan berterusan penyakit stres aktif jika belum dirawat melalui Kaunseling/Terapi atau Doktor
+    if (s.stressIllnesses.length > 0 && stressNow >= 50) {
+      GameState.adjustStats({ health: -3, happiness: -3 });
+    }
+
+    // Penyejukan semula jadi ringan (hanya jika stres < 75%; jika >= 75% pemain perlu aktif berehat/bersenam/kaunseling)
+    if (s.alignment.stress > 10 && stressNow < 75) {
+      const stressCool = (s.retired || s.isRetired) ? Utils.randInt(4, 8) : Utils.randInt(2, 4);
+      s.alignment.stress = Math.max(5, s.alignment.stress - stressCool);
     }
   },
 
@@ -1721,7 +1826,9 @@ window.Sim = {
     if (!s.job) return { ok: false, msg: 'Tiada pekerjaan aktif.' };
     if (s.yearlyActions.askedRaise) return { ok: false, msg: 'Anda sudah meminta kenaikan gaji tahun ini.' };
     s.yearlyActions.askedRaise = true;
-    if (s.job.performance >= 72 || Utils.chance(0.35)) {
+    const curStress = (s.alignment && s.alignment.stress) || 0;
+    const baseRaiseChance = curStress >= 50 ? 0.25 : 0.35; // -10% jika Stres >= 50%
+    if ((s.job.performance >= 72 && (curStress < 50 || Utils.chance(0.90))) || Utils.chance(baseRaiseChance)) {
       const pct = Utils.randInt(6, 14);
       s.job.salary = Math.round(s.job.salary * (1 + pct / 100));
       GameState.adjustStats({ happiness: 10 });
@@ -1730,9 +1837,128 @@ window.Sim = {
       return { ok: true, msg: `Kenaikan gaji diluluskan (+${pct}%)!` };
     }
     GameState.adjustStats({ happiness: -4 });
-    GameState.addJournalEntry(`💼 Majikan menolak permohonan naik gaji anda. Terus tingkatkan prestasi!`);
+    GameState.addJournalEntry(`💼 Majikan menolak permohonan naik gaji anda. Terus tingkatkan prestasi & kawal tekanan kerja!`);
     GameState.save();
     return { ok: false, msg: 'Permohonan naik gaji ditolak tahun ini.' };
+  },
+
+  // --------------------------------------------------------------------------
+  // AKTIVITI PENGURANGAN STRES (COUNTER-PLAY)
+  // --------------------------------------------------------------------------
+  doExerciseJogging() {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.yearlyActions.gym) return { ok: false, msg: 'Anda sudah bersenam / joging tahun ini!' };
+    const cost = s.age < 18 ? 0 : Utils.usdToLocal(25, s.countryId);
+    if (s.money < cost) return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk keahlian gim & peralatan senaman.` };
+
+    s.money -= cost;
+    s.yearlyActions.gym = true;
+    const stressDrop = Utils.randInt(8, 12);
+    const healthGain = Utils.randInt(6, 10);
+    s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - stressDrop, 0, 100);
+    GameState.adjustStats({ health: healthGain, looks: 4, happiness: 5 });
+
+    // Membantu mengawal Darah Tinggi
+    let curedNote = '';
+    if (Array.isArray(s.stressIllnesses) && s.stressIllnesses.includes('Darah Tinggi') && Utils.chance(0.50)) {
+      s.stressIllnesses = s.stressIllnesses.filter(x => x !== 'Darah Tinggi');
+      curedNote = ' Senaman konsisten turut memulihkan masalah Darah Tinggi anda!';
+    }
+
+    GameState.addJournalEntry(
+      `🏃‍♂️ Bersenam & Joging di ${s.city}: Stres berkurang -${stressDrop}% (kini ${s.alignment.stress}%) dan Kesihatan meningkat +${healthGain}%!${curedNote}`
+    );
+    GameState.save();
+    return {
+      ok: true,
+      stressDrop,
+      msg: `🏃‍♂️ Bersenam selesai! Stres -${stressDrop}%, Kesihatan +${healthGain}%!${curedNote}`
+    };
+  },
+
+  takeVacationRest() {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.yearlyActions.vacationRest) return { ok: false, msg: 'Anda sudah mengambil cuti rehat tahun ini!' };
+    const cost = s.age < 18 ? 0 : Utils.usdToLocal(180, s.countryId);
+    if (s.money < cost) return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk pakej bercuti & rehat.` };
+
+    s.money -= cost;
+    s.yearlyActions.vacationRest = true;
+    const stressDrop = Utils.randInt(20, 35);
+    const hapGain = Utils.randInt(12, 18);
+    s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - stressDrop, 0, 100);
+    GameState.adjustStats({ happiness: hapGain, health: 5 });
+
+    GameState.addJournalEntry(
+      `🏖️ Bercuti & Berehat (${cost > 0 ? Utils.formatMoney(cost, s.countryId) : 'Tajaan Keluarga'}): Percutian tenang memulihkan tenaga anda — Stres turun mendadak -${stressDrop}% (kini ${s.alignment.stress}%) & Gembira +${hapGain}%!`,
+      'culture'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      stressDrop,
+      msg: `🏖️ Percutian menyegarkan! Stres -${stressDrop}%, Gembira +${hapGain}%!`
+    };
+  },
+
+  attendCounselingTherapy() {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.yearlyActions.counselingTherapy) return { ok: false, msg: 'Anda sudah menghadiri sesi kaunseling / terapi tahun ini!' };
+    const fee = s.age < 18 ? 0 : Utils.usdToLocal(140, s.countryId);
+    if (s.money < fee) return { ok: false, msg: `Perlukan ${Utils.formatMoney(fee, s.countryId)} untuk yuran sesi kaunseling & terapi.` };
+
+    s.money -= fee;
+    s.yearlyActions.counselingTherapy = true;
+    const stressDrop = Utils.randInt(25, 40);
+    s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - stressDrop, 0, 100);
+    GameState.adjustStats({ happiness: 10, health: 6 });
+
+    if (!Array.isArray(s.stressIllnesses)) s.stressIllnesses = [];
+    const cured = s.stressIllnesses.filter(x => ['Kemurungan', 'Insomnia', 'Darah Tinggi'].includes(x));
+    s.stressIllnesses = [];
+    const cureTxt = cured.length > 0 ? ` Rawatan terapi turut menyembuhkan ${cured.join(' & ')} anda!` : '';
+
+    GameState.addJournalEntry(
+      `🛋️ Sesi Kaunseling & Terapi Profesional (${fee > 0 ? Utils.formatMoney(fee, s.countryId) : 'Percuma'}): Stres anda turun -${stressDrop}% (kini ${s.alignment.stress}%).${cureTxt}`,
+      'milestone'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      stressDrop,
+      cured,
+      msg: `🛋️ Terapi berkesan! Stres -${stressDrop}%${cureTxt ? ` • Pulih: ${cured.join(', ')}` : ''}!`
+    };
+  },
+
+  spendFamilyHobbyTime() {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.yearlyActions.familyHobby) return { ok: false, msg: 'Anda sudah meluangkan masa bersama keluarga & hobi tahun ini!' };
+
+    s.yearlyActions.familyHobby = true;
+    const stressDrop = Utils.randInt(10, 15);
+    s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - stressDrop, 0, 100);
+    GameState.adjustStats({ happiness: 9, health: 3 });
+
+    // Eratkan hubungan dengan ahli keluarga / pasangan hidup
+    const closeOnes = (s.relationships || []).filter(r => r.alive && (r.id === s.partnerId || r.category === 'family' || r.category === 'spouse'));
+    closeOnes.forEach(r => {
+      r.closeness = Utils.clamp((r.closeness ?? 70) + 6, 0, 100);
+    });
+
+    GameState.addJournalEntry(
+      `🎨👨‍👩‍👧‍👦 Meluangkan Masa Berkualiti Bersama Keluarga & Hobi: Fikiran kembali tenang — Stres berkurang -${stressDrop}% (kini ${s.alignment.stress}%) dan hubungan keluarga semakin erat!`
+    );
+    GameState.save();
+    return {
+      ok: true,
+      stressDrop,
+      msg: `🎨 Masa bersama keluarga & hobi mengurangkan Stres -${stressDrop}%!`
+    };
   },
 
   doCultureActivity(act) {

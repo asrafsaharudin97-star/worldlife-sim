@@ -427,7 +427,7 @@ window.App = {
       pillHeat.classList.toggle('danger', a.notoriety >= 50);
     }
     if (pillStress) {
-      pillStress.textContent = `🧠 ${a.stress}%`;
+      pillStress.textContent = a.stress >= 75 ? `⚠️ Burnout ${a.stress}%` : `🧠 ${a.stress}%`;
       pillStress.classList.toggle('danger', a.stress >= 75);
     }
     if (prisonBar) {
