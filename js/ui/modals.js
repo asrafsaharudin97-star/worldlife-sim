@@ -18,6 +18,9 @@ window.Modals = {
 
   close(force = false) {
     if (this.locked && !force) return;
+    if (window.PrisonModals && typeof PrisonModals._cleanupMiniGame === 'function') {
+      PrisonModals._cleanupMiniGame();
+    }
     this.locked = false;
     document.getElementById('modal-backdrop').classList.add('hidden');
   },

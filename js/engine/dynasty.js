@@ -181,16 +181,20 @@ window.Dynasty = {
     const d = this.getData();
     const c = Utils.getCountry(s.countryId);
     const ending = window.KarmaEndings ? KarmaEndings.evaluateEnding(s) : { title: 'Jiwa Seimbang', icon: '✨' };
-    const topHighlight = (s.highlights && s.highlights.length > 0)
+    let topHighlight = (s.highlights && s.highlights.length > 0)
       ? s.highlights[s.highlights.length - 1].text
       : (s.causeOfDeath || 'Menjalani kehidupan penuh warna');
+
+    if (s.fugitive && s.fugitive.aliasName) {
+      topHighlight = `Hidup dalam buangan dengan nama samaran ${s.fugitive.aliasName} (Nama asal: ${s.fugitive.trueName || s.name}) • ${topHighlight}`;
+    }
 
     // Elak duplikat untuk watak yang sama
     if (!d.dynastyHistory.some(h => h.id === s.id)) {
       d.dynastyHistory.unshift({
         id: s.id,
         generation: s.generation || d.generation || 1,
-        name: s.name,
+        name: (s.fugitive && s.fugitive.trueName) ? `${s.fugitive.trueName} (a.k.a. ${s.fugitive.aliasName})` : s.name,
         age: s.age,
         yearDied: s.year,
         countryFlag: c.flag,

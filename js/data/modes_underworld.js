@@ -129,6 +129,9 @@ window.UnderworldModes = {
   // 2. MAHKAMAH & PENJARA (Peguam Murah vs Elit, Parol, Lari, Insaf)
   // --------------------------------------------------------------------------
   buildTrialEvent(s, crimeName, baseYears) {
+    if (window.PrisonFugitive && PrisonFugitive.buildCourtTrialEvent) {
+      return PrisonFugitive.buildCourtTrialEvent(s, crimeName, baseYears);
+    }
     const privCost = Utils.usdToLocal(3500, s.countryId);
     const eliteCost = Utils.usdToLocal(18000, s.countryId);
 

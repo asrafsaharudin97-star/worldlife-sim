@@ -39,7 +39,10 @@ window.App = {
       if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
     });
     document.getElementById('prison-alert-bar').addEventListener('click', () => {
-      if (GameState.current && GameState.current.alive) ModeModals.showLifeModes('crime');
+      if (GameState.current && GameState.current.alive && window.PrisonModals) PrisonModals.showPrisonHub();
+    });
+    document.getElementById('fugitive-alert-bar').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive && window.PrisonModals) PrisonModals.showFugitiveHub('overview');
     });
 
     document.getElementById('btn-age-up').addEventListener('click', () => this.handleAgeUp());
@@ -294,7 +297,7 @@ window.App = {
     document.getElementById('header-flag').textContent = c.flag;
     document.getElementById('header-country-code').textContent = c.id;
 
-    document.querySelector('#char-avatar .avatar-emoji').textContent = Utils.getAvatar(s.age, s.gender);
+    document.querySelector('#char-avatar .avatar-emoji').textContent = (s.fugitive && s.fugitive.avatarOverride) || Utils.getAvatar(s.age, s.gender);
     document.getElementById('char-age-badge').textContent = s.age;
     document.getElementById('char-name').textContent = s.name;
 
@@ -340,7 +343,7 @@ window.App = {
       adaptWrap.classList.add('hidden');
     }
 
-    // Bar Karma, Populariti, Haba Polis, Stres & Penjara
+    // Bar Karma, Populariti, Haba Polis, Stres, Penjara & Pelarian
     GameState.ensureUpgradedState();
     const a = s.alignment;
     const kInfo = window.KarmaEndings ? KarmaEndings.getKarmaLabel(a.karma) : { icon: '⚖️' };
@@ -349,6 +352,7 @@ window.App = {
     const pillHeat = document.getElementById('pill-heat');
     const pillStress = document.getElementById('pill-stress');
     const prisonBar = document.getElementById('prison-alert-bar');
+    const fugitiveBar = document.getElementById('fugitive-alert-bar');
     if (pillKarma) pillKarma.textContent = `${kInfo.icon} ${a.karma >= 0 ? '+' : ''}${a.karma}`;
     if (pillFame) pillFame.textContent = `⭐ ${a.fame}%`;
     if (pillHeat) {
@@ -362,9 +366,22 @@ window.App = {
     if (prisonBar) {
       if (s.prison && s.prison.inPrison) {
         prisonBar.classList.remove('hidden');
-        prisonBar.textContent = `⛓️ DI PENJARA (Baki ${s.prison.yearsLeft} thn) — Klik untuk Parol / Taubat / Bolos`;
+        prisonBar.textContent = `⛓️ DI PENJARA (Baki ${s.prison.yearsLeft} thn) — Klik untuk buka Hab Penjara`;
       } else {
         prisonBar.classList.add('hidden');
+      }
+    }
+    if (fugitiveBar) {
+      if (s.fugitive && s.fugitive.isFugitive) {
+        fugitiveBar.classList.remove('hidden');
+        fugitiveBar.classList.remove('hidden-past');
+        fugitiveBar.textContent = `🚨 PELARIAN • Risiko Dikesan Polis: ${s.fugitive.recaptureRisk}% — Klik Akses Pasaran Gelap`;
+      } else if (s.fugitive && s.fugitive.hiddenPast) {
+        fugitiveBar.classList.remove('hidden');
+        fugitiveBar.classList.add('hidden-past');
+        fugitiveBar.textContent = `🌟 IDENTITI BAHARU — Klik Status Kehidupan Baharu`;
+      } else {
+        fugitiveBar.classList.add('hidden');
       }
     }
     const legBtn = document.getElementById('btn-open-legacy');

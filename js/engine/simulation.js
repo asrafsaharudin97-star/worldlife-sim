@@ -327,6 +327,7 @@ window.Sim = {
   _processModesAndAlignment(s, c) {
     // 1. Hukuman Penjara
     if (s.prison && s.prison.inPrison) {
+      s.prison.yearsServed = (s.prison.yearsServed || 0) + 1;
       s.prison.yearsLeft = Math.max(0, (s.prison.yearsLeft || 1) - 1);
       if (s.prison.yearsLeft <= 0) {
         s.prison.inPrison = false;
@@ -335,9 +336,15 @@ window.Sim = {
         GameState.addJournalEntry('🔓 Anda tamat menjalani hukuman penjara dan melangkah keluar sebagai insan bebas! Masa untuk memulakan bab baru.', 'milestone');
       } else {
         GameState.adjustStats({ happiness: -4, health: -2 });
-        GameState.addJournalEntry(`⛓️ Menjalani hukuman di penjara (${s.prison.yearsLeft} tahun lagi). Buka tab 🎭 5 Mod untuk Program Keinsafan, Parol atau Bolos.`, 'warning');
+        GameState.addJournalEntry(`⛓️ Menjalani hukuman di penjara (${s.prison.yearsLeft} tahun lagi). Klik bar PENJARA untuk Gim, Perpustakaan, Rayuan, Parol, Lari atau Rusuhan.`, 'warning');
       }
       return;
+    }
+
+    // 1B. Semakan Risiko Dikesan Polis bagi PELARIAN
+    if (s.fugitive && s.fugitive.isFugitive && window.PrisonFugitive) {
+      PrisonFugitive.tickFugitiveYear(s);
+      if (s.prison && s.prison.inPrison) return;
     }
 
     // 2. Pendapatan tahunan Mod Khas (Mafia, Artis, Pelakon, Politik)
@@ -396,7 +403,15 @@ window.Sim = {
 
   _pickYearlyEvent(s, c) {
     if (s.age < 5) return null;
-    if (s.prison && s.prison.inPrison) return null;
+    if (s.prison && s.prison.inPrison) {
+      return (window.PrisonFugitive && PrisonFugitive.pickPrisonEvent) ? PrisonFugitive.pickPrisonEvent(s) : null;
+    }
+
+    // 00. Kejutan Masa Silam (1–2% peluang nadir bagi IDENTITI BAHARU)
+    if (window.PrisonFugitive && PrisonFugitive.pickHiddenPastEvent) {
+      const hpEv = PrisonFugitive.pickHiddenPastEvent(s);
+      if (hpEv) return hpEv;
+    }
 
     // 0A. Sabotaj Legasi & Peluang Penebusan Dinasti (Timer Penebusan / Serangan Musuh)
     if (window.Dynasty && Dynasty.pickLegacyEvent) {
@@ -624,6 +639,10 @@ window.Sim = {
   migrateToCountry(targetCountryId, visaType = 'work') {
     const s = GameState.current;
     if (!s || s.age < 18) return { ok: false, msg: 'Anda mesti berumur sekurang-kurangnya 18 tahun untuk berhijrah.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Anda di dalam penjara — tidak boleh berhijrah secara sah!' };
+    if (s.fugitive && s.fugitive.isFugitive) {
+      return { ok: false, msg: 'Status PELARIAN! Perjalanan sah disekat — guna Akses Pasaran Gelap → Lari Ke Luar Negara!' };
+    }
     if (targetCountryId === s.countryId) return { ok: false, msg: 'Anda sudah menetap di negara ini!' };
 
     const fromC = Utils.getCountry(s.countryId);
@@ -854,12 +873,33 @@ window.Sim = {
   applyJob(jobDef) {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: '⛓️ Anda sedang berada di dalam penjara dan tidak boleh memohon kerja biasa.' };
+    }
+    if (s.fugitive && s.fugitive.isFugitive) {
+      if (s.fugitive.fakeIdentityTier === 'cheap') {
+        if (Utils.chance(0.65)) {
+          s.fugitive.recaptureRisk = Utils.clamp((s.fugitive.recaptureRisk || 25) + 10, 0, 99);
+          GameState.addJournalEntry(
+            `🚨 Majikan mengesyaki dokumen palsu murahan anda semasa semakan latar belakang untuk jawatan ${jobDef.title}! Risiko dikesan polis naik kepada ${s.fugitive.recaptureRisk}%.`,
+            'bad'
+          );
+          GameState.save();
+          return { ok: false, msg: '🚨 Dokumen palsu murahan anda gagal semakan latar belakang! Risiko dikesan polis meningkat.' };
+        }
+      } else if (s.fugitive.fakeIdentityTier !== 'pro') {
+        return {
+          ok: false,
+          msg: '🚨 Status PELARIAN: Anda disenarai hitam daripada pekerjaan rasmi! Beli Identiti Palsu Gred Profesional di Pasaran Gelap.'
+        };
+      }
+    }
     if (s.age < jobDef.minAge) return { ok: false, msg: `Umur minimum ialah ${jobDef.minAge} tahun.` };
     if (jobDef.reqDegree && !s.education.hasDegree) return { ok: false, msg: 'Memerlukan Ijazah Universiti!' };
     if (jobDef.reqSmarts && s.stats.smarts < jobDef.reqSmarts) {
       return { ok: false, msg: `Memerlukan sekurang-kurangnya ${jobDef.reqSmarts}% Kepintaran.` };
     }
-    if (s.criminalRecord > 0 && jobDef.reqDegree && Utils.chance(0.5)) {
+    if (s.criminalRecord > 0 && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast)) && jobDef.reqDegree && Utils.chance(0.5)) {
       return { ok: false, msg: 'Semakan latar belakang mengesan rekod jenayah anda.' };
     }
 

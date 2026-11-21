@@ -313,6 +313,9 @@ window.GameState = {
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
     }
+    if (window.PrisonFugitive && PrisonFugitive.ensureFields) {
+      PrisonFugitive.ensureFields(s);
+    }
   },
 
   setHiddenFlag(key, data = {}) {
