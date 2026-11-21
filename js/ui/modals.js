@@ -55,6 +55,10 @@ window.Modals = {
         const idx = Number(btn.dataset.choiceIdx);
         const choice = event.choices[idx];
         const res = Sim.resolveEventChoice(event, choice) || {};
+        if (res.openDivorceModal) {
+          this.showDivorceModal(res.openDivorceModal.partnerId, res.openDivorceModal);
+          return;
+        }
         if (res.nextEvent) {
           this.showEvent(res.nextEvent);
           return;
@@ -443,6 +447,33 @@ window.Modals = {
     const familyList = living.filter(r => r.id !== s.partnerId && r.category !== 'friend' && r.category !== 'ex');
 
     let html = '<div class="action-list">';
+    if (s.pregnancy && s.pregnancy.active) {
+      html += `
+        <div class="info-banner highlight" style="background:#fdf2f8;border-color:#fbcfe8;">
+          🤰 <strong>Kehamilan Sedang Berlangsung!</strong> Bayi dijangka lahir apabila anda menekan <strong>+UMUR</strong> (usia ibu: ${s.pregnancy.motherAge} thn). Jaga kesihatan &amp; kurangkan stres!
+        </div>
+      `;
+    }
+    if (s.maritalStatus && !s.married) {
+      html += `
+        <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;">
+          🕊️ Status Perkahwinan Semasa: <strong>${Utils.escapeHtml(s.maritalStatus)}</strong>
+        </div>
+      `;
+    }
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.canRujuk(s)) {
+      const idah = s.idahState;
+      html += `
+        <button class="action-item" id="btn-rujuk-spouse" style="background:#f0fdf4;border-color:#86efac;">
+          <span class="ai-icon">💍</span>
+          <span class="ai-content">
+            <span class="ai-title">Rujuk Semula bersama ${Utils.escapeHtml(idah.exSpouseName)}</span>
+            <span class="ai-desc">Tempoh Idah aktif (${idah.yearsLeft} tahun berbaki • Talak ${idah.talakCount}) — peluang sekali untuk kembali sah sebagai suami isteri</span>
+          </span>
+          <span class="ai-right" style="color:#15803d;">Rujuk</span>
+        </button>
+      `;
+    }
     if (s.age >= 7) {
       const friendSrc = s.age < 18 || s.education.stage === 'university' ? 'Sekolah / Kampus' : (s.job ? 'Tempat Kerja / Komuniti' : 'Komuniti');
       html += `
@@ -480,6 +511,18 @@ window.Modals = {
             <span class="ai-desc">${muslim ? 'Beri kasih sayang kepada anak angkat (berbinkan/berbintikan Abdullah)' : 'Beri rumah yang penyayang kepada anak angkat baru'}</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(adoptCost, s.countryId)}</span>
+        </button>
+      `;
+    }
+    if (s.age >= 18 && window.LegalInheritanceEngine) {
+      html += `
+        <button class="action-item" id="btn-open-wasiat-rel">
+          <span class="ai-icon">📜</span>
+          <span class="ai-content">
+            <span class="ai-title">Urus Wasiat &amp; Harta Pusaka</span>
+            <span class="ai-desc">${muslim ? 'Tetapkan Wasiat Islam (maks. 1/3 harta bersih) & semak Faraid' : `Tetapkan Wasiat Sivil ${c.name} (Sama Rata / 1 Waris / Amal)`}</span>
+          </span>
+          <span class="ai-right">Wasiat</span>
         </button>
       `;
     }
@@ -530,6 +573,21 @@ window.Modals = {
       bodyHtml: html
     });
 
+    const rujukBtn = document.getElementById('btn-rujuk-spouse');
+    if (rujukBtn) {
+      rujukBtn.addEventListener('click', () => {
+        const res = Relationships.rujukSpouse();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showRelationships();
+      });
+    }
+
+    const wasiatRelBtn = document.getElementById('btn-open-wasiat-rel');
+    if (wasiatRelBtn) {
+      wasiatRelBtn.addEventListener('click', () => this.showWasiatModal(() => this.showRelationships()));
+    }
+
     const friendBtn = document.getElementById('btn-meet-friend');
     if (friendBtn) {
       friendBtn.addEventListener('click', () => {
@@ -562,6 +620,10 @@ window.Modals = {
     if (adoptBtn) {
       adoptBtn.addEventListener('click', () => {
         const res = Sim.adoptChild();
+        if (res.openBabyNamingModal) {
+          this.showBabyNamingModal(res.openBabyNamingModal, () => this.showRelationships());
+          return;
+        }
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showRelationships();
@@ -581,6 +643,8 @@ window.Modals = {
 
     const isPartner = rel.id === s.partnerId;
     const isFriend = rel.category === 'friend';
+    const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
+    const isMinorChild = isChild && rel.age < 18;
     const muslim = Relationships.isMuslim(s);
     const interfaithBlocked = isPartner && muslim && (rel.belief !== 'islam' || rel.gender === s.gender);
     const longDist = rel.countryId !== s.countryId;
@@ -591,13 +655,87 @@ window.Modals = {
       ? (s.married ? 'Berkahwin' : rel.stage === 'engaged' ? 'Bertunang' : rel.stage === 'cohabiting' ? 'Tinggal Bersama' : rel.stage === 'taaruf' ? 'Ta\'aruf' : 'Bercinta')
       : (rel.origin || rel.role);
 
+    const trustVal = rel.trust ?? 65;
+    const hasPrenupBadge = (isPartner && s.married && s.marriageMeta && s.marriageMeta.hasPrenup)
+      ? ' • 🛡️ Dilindungi Prenup'
+      : '';
+
+    const parentCountUsed = s.yearlyActions[`parent_cnt_${rel.id}`] || 0;
+    const eduCost = Utils.usdToLocal(180, s.countryId);
+    const healthCost = Utils.usdToLocal(120, s.countryId);
+
+    const childUpbringingHtml = isMinorChild ? `
+      <div class="info-banner ${rel.isDelinquent ? '' : 'highlight'}" style="${rel.isDelinquent ? 'background:#fef2f2;border-color:#fecaca;' : ''}line-height:1.6;">
+        <strong>👶 Perkembangan &amp; Didikan Anak (Umur ${rel.age}/17)</strong>
+        ${rel.isDelinquent ? ' <span class="cat-badge" style="background:#dc2626;color:#fff;">⚠️ DELINKUEN</span>' : ''}<br/>
+        📚 Penjagaan Pendidikan: <strong>${rel.educationCare ?? 65}%</strong> (Kepintaran: ${(rel.stats && rel.stats.smarts) ?? 65}%)<br/>
+        🩺 Penjagaan Kesihatan: <strong>${rel.healthCare ?? 75}%</strong> (Kesihatan: ${(rel.stats && rel.stats.health) ?? 80}%)<br/>
+        🌟 Akhlak &amp; Moral: <strong>${rel.morals ?? 70}%</strong> • 🔥 Pemberontakan: <strong style="color:${(rel.rebelliousness ?? 10) > 65 ? '#dc2626' : 'inherit'};">${rel.rebelliousness ?? 10}%</strong><br/>
+        <small style="opacity:0.8;">Tindakan keibubapaan tahun ini: <strong>${parentCountUsed}/3</strong></small>
+      </div>
+      <div class="section-heading">👨‍👩‍👧 Tindakan Keibubapaan (${parentCountUsed}/3 Tahun Ini)</div>
+      <div class="action-list" style="margin-bottom:10px;">
+        <button class="action-item parent-act-btn" data-pact="education" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_education`] ? 'disabled' : ''}>
+          <span class="ai-icon">📚</span>
+          <span class="ai-content">
+            <span class="ai-title">Beri Pendidikan / Tuisyen</span>
+            <span class="ai-desc">Tingkatkan Kepintaran &amp; penjagaan pendidikan anak</span>
+          </span>
+          <span class="ai-right cost">${Utils.formatMoney(eduCost, s.countryId)}</span>
+        </button>
+        <button class="action-item parent-act-btn" data-pact="health" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_health`] ? 'disabled' : ''}>
+          <span class="ai-icon">🩺</span>
+          <span class="ai-content">
+            <span class="ai-title">Jaga Kesihatan / Rawatan</span>
+            <span class="ai-desc">Tingkatkan Kesihatan anak &amp; kurangkan risiko sakit tenat</span>
+          </span>
+          <span class="ai-right cost">${Utils.formatMoney(healthCost, s.countryId)}</span>
+        </button>
+        <button class="action-item parent-act-btn" data-pact="morals" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_morals`] ? 'disabled' : ''}>
+          <span class="ai-icon">🌟</span>
+          <span class="ai-content">
+            <span class="ai-title">Didikan Akhlak &amp; Moral</span>
+            <span class="ai-desc">Bentuk akhlak mulia &amp; turunkan tahap pemberontakan</span>
+          </span>
+          <span class="ai-right">Percuma</span>
+        </button>
+        <button class="action-item parent-act-btn" data-pact="quality_time" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_quality_time`] ? 'disabled' : ''}>
+          <span class="ai-icon">🎡</span>
+          <span class="ai-content">
+            <span class="ai-title">Luangkan Masa Bersama Anak</span>
+            <span class="ai-desc">Eratkan kasih sayang &amp; tingkatkan kegembiraan keluarga</span>
+          </span>
+          <span class="ai-right">Percuma</span>
+        </button>
+      </div>
+    ` : '';
+
     const html = `
       <div class="info-banner">
         <strong>${Utils.escapeHtml(rel.name)}</strong> (${rel.role}, Umur ${rel.age})<br/>
-        Agama / Pegangan: <strong>${bObj.icon} ${bObj.name}</strong> • Status: <strong>${stageLabel}</strong><br/>
-        Kemesraan: <strong>${rel.closeness}%</strong> • Kepercayaan: <strong>${rel.trust ?? 65}%</strong> • Keserasian: <strong>${rel.compatibility ?? 75}%</strong><br/>
+        Agama / Pegangan: <strong>${bObj.icon} ${bObj.name}</strong> • Status: <strong>${stageLabel}${hasPrenupBadge}</strong><br/>
+        Kemesraan: <strong>${rel.closeness}%</strong> • Kepercayaan: <strong>${trustVal}%</strong> • Keserasian: <strong>${rel.compatibility ?? 75}%</strong><br/>
+        ${isPartner ? `
+          <div style="margin-top:6px;">
+            <small style="opacity:0.8;">🤝 Tahap Kepercayaan (${trustVal}%)${trustVal < 30 ? ' — ⚠️ Risiko Cerai!' : ''}</small>
+            <div class="rel-meter" style="margin-top:3px;">
+              <div class="rel-meter-fill" style="width:${trustVal}%;background:${Utils.getStatColor(trustVal)}"></div>
+            </div>
+          </div>
+        ` : ''}
         Lokasi: ${rc.flag} ${rc.name}${rel.job ? ` • ${Utils.escapeHtml(rel.job)}` : ''}
       </div>
+      ${isPartner && s.pregnancy && s.pregnancy.active ? `
+        <div class="info-banner" style="background:#fdf2f8;border-color:#fbcfe8;">
+          🤰 <strong>Sedang Hamil:</strong> Cahaya mata dijangka lahir tahun hadapan!
+        </div>
+      ` : ''}
+      ${isPartner && s.infertilityDiagnosed ? `
+        <div class="info-banner" style="background:#fff7ed;border-color:#fdba74;">
+          🩺 <strong>Nota Kesuburan:</strong> Diagnosis ketidaksuburan telah direkodkan. Anda boleh memilih <strong>Ambil Anak Angkat</strong> di tab Hubungan sebagai alternatif.
+        </div>
+      ` : ''}
+      ${childUpbringingHtml}
       ${interfaithBlocked ? `
         <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">
           ☪️ <strong>Batas Agama:</strong> Sebagai watak beragama Islam, pernikahan hanya sah bersama pasangan seakidah. Bincangkan haluan hubungan secara jujur.
@@ -733,7 +871,15 @@ window.Modals = {
     document.querySelectorAll('.rel-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
+        if (act === 'propose' && !muslim && window.LegalInheritanceEngine) {
+          this.showCivilMarriagePrenupModal(relId);
+          return;
+        }
         const res = Sim.interactRelation(relId, act);
+        if (res.openDivorceModal) {
+          this.showDivorceModal(res.openDivorceModal.partnerId, res.openDivorceModal);
+          return;
+        }
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         if (res.followUpEvent) {
@@ -746,7 +892,520 @@ window.Modals = {
       });
     });
 
+    document.querySelectorAll('.parent-act-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = Sim.parentChild(relId, btn.dataset.pact);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showRelationDetail(relId);
+      });
+    });
+
     document.getElementById('rel-back-btn').addEventListener('click', () => this.showRelationships());
+  },
+
+  // --------------------------------------------------------------------------
+  // 4A. MODAL PENAMAAN BAYI / ANAK ANGKAT (CUSTOM ATAU NAMA RAWAK)
+  // --------------------------------------------------------------------------
+  showBabyNamingModal(draft, onDone = null) {
+    const s = GameState.current;
+    if (!s || !draft) return;
+    const c = Utils.getCountry(s.countryId);
+    const isBoy = draft.gender === 'male';
+    const genderLabel = isBoy ? '♂ Lelaki' : '♀ Perempuan';
+    const stats = draft.stats || { smarts: 70, health: 85, looks: 75 };
+
+    this.open({
+      icon: draft.isAdopted ? '🏡' : '👶',
+      title: draft.isAdopted ? 'Anak Angkat Baharu!' : 'Bayi Dilahirkan!',
+      subtitle: `${genderLabel} • ${s.city}, ${c.name} ${c.flag}`,
+      locked: true,
+      bodyHtml: `
+        <div class="info-banner highlight" style="text-align:center;">
+          <div style="font-size:38px;line-height:1;">${isBoy ? '👶🏻' : '👧🏻'}</div>
+          <div style="margin-top:6px;font-weight:700;">
+            ${draft.isAdopted
+              ? `Anak angkat ${isBoy ? 'lelaki' : 'perempuan'} (${draft.kidAge} tahun) kini menyertai keluarga anda!`
+              : `Tahniah! Bayi ${isBoy ? 'lelaki' : 'perempuan'} anda selamat dilahirkan!`}
+          </div>
+          <div class="preview-tags" style="justify-content:center;margin-top:8px;">
+            <span class="preview-tag">Jantina: ${genderLabel}</span>
+            <span class="preview-tag">❤️ Kesihatan: ${stats.health}%</span>
+            <span class="preview-tag">🧠 Kepintaran: ${stats.smarts}%</span>
+            <span class="preview-tag">✨ Penampilan: ${stats.looks}%</span>
+          </div>
+        </div>
+
+        <div class="creator-section" style="margin-top:10px;">
+          <label class="creator-label" for="baby-name-input">Masukkan Nama Anak</label>
+          <div class="name-input-row">
+            <input type="text" id="baby-name-input" class="input-field" value="${Utils.escapeHtml(draft.suggestedName)}" maxlength="48" placeholder="Masukkan nama anak..." />
+            <button type="button" id="btn-baby-random-name" class="secondary-btn" title="Jana nama rawak mengikut budaya">🎲 Nama Rawak</button>
+          </div>
+          <small style="opacity:0.78;display:block;margin-top:4px;">Tip: Anda boleh tulis nama panggilan ringkas (cth. "Aiman") — format bin/binti atau nama keluarga akan dilengkapkan secara automatik.</small>
+        </div>
+
+        <button type="button" class="primary-btn" id="btn-baby-confirm-name" style="margin-top:12px;">✅ Sahkan Nama</button>
+      `
+    });
+
+    const inputEl = document.getElementById('baby-name-input');
+    const randBtn = document.getElementById('btn-baby-random-name');
+    const confirmBtn = document.getElementById('btn-baby-confirm-name');
+
+    if (randBtn) {
+      randBtn.addEventListener('click', () => {
+        const fresh = Relationships.generateBabyDraft(s, {
+          gender: draft.gender,
+          isAdopted: draft.isAdopted,
+          isOutOfWedlock: draft.isOutOfWedlock,
+          kidAge: draft.kidAge,
+          partnerId: draft.partnerId,
+          partnerName: draft.partnerName,
+          stats: draft.stats
+        });
+        draft.suggestedName = fresh.suggestedName;
+        if (inputEl) inputEl.value = fresh.suggestedName;
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => {
+        const chosen = inputEl ? inputEl.value.trim() : draft.suggestedName;
+        const res = Relationships.finalizeChildBirth(s, draft, chosen);
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        if (typeof onDone === 'function') onDone(res);
+      });
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // 4B. MODAL PERJANJIAN PRANIKAH (PRENUP) UNTUK PERKAHWINAN SIVIL
+  // --------------------------------------------------------------------------
+  showCivilMarriagePrenupModal(relId) {
+    const s = GameState.current;
+    const rel = s.relationships.find(r => r.id === relId);
+    if (!rel) return;
+    const c = Utils.getCountry(s.countryId);
+    const ringCost = Utils.usdToLocal(1800, s.countryId);
+    const prenupFee = LegalInheritanceEngine.getPrenupFeeLocal(s.countryId);
+    const curNet = Math.max(0, GameState.getNetWorth());
+
+    this.open({
+      icon: '💍',
+      title: `Perkahwinan Sivil (${c.name})`,
+      subtitle: `Pilihan Perjanjian Pranikah (Prenup) bersama ${rel.name}`,
+      bodyHtml: `
+        <div class="info-banner highlight">
+          <strong>🛡️ Lindungi Aset Sebelum Kahwin?</strong><br/>
+          Nilai aset bersih anda sekarang ialah <strong>${Utils.formatMoney(curNet, s.countryId)}</strong>.<br/>
+          Dalam Undang-undang Sivil ${c.name}, penceraian tanpa Prenup melibatkan pembahagian <strong>40–50% aset perkahwinan</strong> serta kemungkinan <strong>Alimoni</strong>.
+        </div>
+        <div class="action-list">
+          <button class="action-item" id="btn-marry-with-prenup">
+            <span class="ai-icon">🛡️</span>
+            <span class="ai-content">
+              <span class="ai-title">Berkahwin Dengan Perjanjian Pranikah (Prenup)</span>
+              <span class="ai-desc">Melindungi 100% aset sebelum kahwin &amp; mengecualikan Alimoni jika bercerai</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(ringCost + prenupFee, s.countryId)}</span>
+          </button>
+          <button class="action-item" id="btn-marry-no-prenup">
+            <span class="ai-icon">💍</span>
+            <span class="ai-content">
+              <span class="ai-title">Berkahwin Tanpa Prenup</span>
+              <span class="ai-desc">Perkahwinan sivil biasa tanpa perjanjian pranikah</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(ringCost, s.countryId)}</span>
+          </button>
+        </div>
+        <button class="ghost-btn" id="btn-prenup-back">← Kembali</button>
+      `
+    });
+
+    document.getElementById('btn-marry-with-prenup').addEventListener('click', () => {
+      const res = Sim.interactRelation(relId, 'propose', { hasPrenup: true });
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showRelationDetail(relId);
+    });
+    document.getElementById('btn-marry-no-prenup').addEventListener('click', () => {
+      const res = Sim.interactRelation(relId, 'propose', { hasPrenup: false });
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showRelationDetail(relId);
+    });
+    document.getElementById('btn-prenup-back').addEventListener('click', () => this.showRelationDetail(relId));
+  },
+
+  // --------------------------------------------------------------------------
+  // 4C. MODAL PROSIDING PENCERAIAN (MAHKAMAH SYARIAH & MAHKAMAH SIVIL)
+  // --------------------------------------------------------------------------
+  showDivorceModal(partnerId, meta = {}, opts = {}) {
+    const s = GameState.current;
+    GameState.ensureUpgradedState();
+    const partner = s.relationships.find(r => r.id === partnerId);
+    if (!partner || !window.LegalInheritanceEngine) {
+      this.showRelationships();
+      return;
+    }
+
+    const islamic = LegalInheritanceEngine.isIslamic(s);
+    const isHusband = s.gender === 'male';
+    const priorTalak = Math.max((s.marriageMeta && s.marriageMeta.talakCount) || 0, partner.talakCount || 0);
+
+    const selectedPath = opts.path || (islamic
+      ? (meta.initiatedBy === 'spouse'
+          ? (isHusband ? 'khuluk' : (priorTalak >= 2 ? 'talak3' : 'talak1'))
+          : (isHusband ? (priorTalak >= 2 ? 'talak3' : 'talak1') : 'fasakh'))
+      : 'civil');
+    const selectedMode = opts.settlementMode || (islamic ? 'sulh' : 'mediasi');
+
+    const prev = LegalInheritanceEngine.previewDivorce(s, partner, {
+      path: selectedPath,
+      settlementMode: selectedMode
+    });
+
+    const fmt = (val) => Utils.formatMoney(Math.abs(val), s.countryId);
+    const fmtSigned = (val) => val >= 0 ? `+${fmt(val)}` : `-${fmt(val)}`;
+
+    let controlsHtml = '';
+    let breakdownHtml = '';
+
+    if (islamic) {
+      const pathOptions = isHusband
+        ? [
+            ...(priorTalak < 2 ? [{ id: 'talak1', label: `📜 Talak ${priorTalak + 1} (Idah 1 Thn • Boleh Rujuk)` }] : []),
+            { id: 'talak3', label: '🚫 Talak 3 (Talak Bain Kubra — Kekal)' },
+            { id: 'khuluk', label: '🤝 Khuluk (Tebus Talak)' }
+          ]
+        : [
+            { id: 'fasakh', label: '⚖️ Tuntutan Fasakh (Hakim Syarie)' },
+            { id: 'khuluk', label: '💸 Khuluk (Tebus Talak)' },
+            ...(meta.initiatedBy === 'spouse' ? [{ id: priorTalak >= 2 ? 'talak3' : 'talak1', label: `📜 Suami Lafaz Talak ${Math.min(3, priorTalak + 1)}` }] : [])
+          ];
+
+      controlsHtml = `
+        <div class="section-heading">1. Laluan Penceraian Syariah</div>
+        <div class="tab-pills" style="margin-bottom:10px;">
+          ${pathOptions.map(p => `
+            <button type="button" class="tab-pill div-path-pill ${p.id === selectedPath ? 'active' : ''}" data-path="${p.id}">${p.label}</button>
+          `).join('')}
+        </div>
+        <div class="section-heading">2. Kaedah Penyelesaian Harta Sepencarian</div>
+        <div class="tab-pills" style="margin-bottom:10px;">
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'sulh' ? 'active' : ''}" data-mode="sulh">🤝 Runding Secara Baik (Sulh)</button>
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'peguam' ? 'active' : ''}" data-mode="peguam">⚖️ Lantik Peguam Syariah</button>
+        </div>
+      `;
+
+      breakdownHtml = `
+        <div class="info-banner" style="line-height:1.65;">
+          <strong>⚖️ Anggaran Perintah Mahkamah Syariah</strong><br/>
+          Laluan: <strong>${Utils.escapeHtml(prev.pathLabel)}</strong><br/>
+          Harta Sepencarian (${prev.sepencarianPct}% daripada ${fmt(prev.maritalAssets)}): <strong>${fmtSigned(prev.sepencarianDelta)}</strong><br/>
+          ${Utils.escapeHtml(prev.mutaahLabel)}: <strong>${fmtSigned(prev.mutaahIdahDelta)}</strong><br/>
+          Kos Guaman / Mahkamah Syariah: <strong>-${fmt(prev.legalFee)}</strong><br/>
+          ${prev.minorKidsCount > 0 ? `Nafkah Anak Tahunan (${prev.minorKidsCount} anak, ${prev.nafkahYears} thn): <strong>${fmtSigned(prev.nafkahAnakAnnual)}/thn</strong><br/>Hadanah: <small>${Utils.escapeHtml(prev.hadanahText)}</small><br/>` : ''}
+          <strong>Kesan Tunai Serta-Merta: ${fmtSigned(prev.netCashDelta)}</strong>
+        </div>
+        ${prev.inIdah
+          ? `<div class="info-banner" style="background:#f0fdf4;border-color:#86efac;">⏳ <strong>Tempoh Idah (1 Tahun):</strong> Pilihan sekali <strong>Rujuk Semula</strong> akan dibuka di tab Hubungan sepanjang tempoh Idah.</div>`
+          : `<div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">🚫 <strong>Penceraian Kekal:</strong> Tiada pilihan Rujuk Semula untuk laluan ini.</div>`
+        }
+      `;
+    } else {
+      controlsHtml = `
+        ${prev.hasPrenup
+          ? `<div class="info-banner" style="background:#eff6ff;border-color:#93c5fd;">🛡️ <strong>Prenup Aktif!</strong> Aset sebelum kahwin bernilai <strong>${fmt(prev.protectedAmount)}</strong> dilindungi 100% dan Alimoni dikecualikan.</div>`
+          : `<div class="info-banner" style="background:#fff7ed;border-color:#fdba74;">⚠️ <strong>Tiada Prenup:</strong> Aset perkahwinan dibahagi <strong>40–50%</strong> dan Alimoni boleh dikenakan jika terdapat jurang pendapatan.</div>`
+        }
+        <div class="section-heading">Kaedah Prosiding Sivil</div>
+        <div class="tab-pills" style="margin-bottom:10px;">
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'mediasi' ? 'active' : ''}" data-mode="mediasi">🤝 Mediasi / Rundingan Baik</button>
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'litigasi' ? 'active' : ''}" data-mode="litigasi">⚖️ Litigasi Peguam Sivil</button>
+        </div>
+      `;
+
+      breakdownHtml = `
+        <div class="info-banner" style="line-height:1.65;">
+          <strong>⚖️ Anggaran Perintah ${Utils.escapeHtml(prev.courtName)}</strong><br/>
+          Pembahagian Aset (${prev.splitPct}% daripada ${fmt(prev.maritalAssets)}): <strong>-${fmt(prev.assetSplitLoss)}</strong><br/>
+          Yuran Guaman Sivil: <strong>-${fmt(prev.legalFee)}</strong><br/>
+          ${prev.alimonyAnnual !== 0 ? `Alimoni (${prev.alimonyYears} tahun): <strong>${fmtSigned(prev.alimonyAnnual)}/thn</strong><br/>` : 'Alimoni: <strong>Tiada</strong><br/>'}
+          ${prev.minorKidsCount > 0 ? `Nafkah Anak Sivil (${prev.minorKidsCount} anak, ${prev.childSupportYears} thn): <strong>${fmtSigned(prev.childSupportAnnual)}/thn</strong><br/>Hak Jagaan: <small>${Utils.escapeHtml(prev.custodyText)}</small><br/>` : ''}
+          <strong>Kesan Tunai Serta-Merta: ${fmtSigned(prev.netCashDelta)}</strong>
+        </div>
+      `;
+    }
+
+    const isForced = meta && meta.initiatedBy === 'spouse';
+    this.open({
+      icon: '⚖️',
+      title: `${prev.courtName} — Penceraian`,
+      subtitle: `${partner.name} • Tempoh perkahwinan: ${prev.yearsMarried} tahun`,
+      locked: isForced,
+      bodyHtml: `
+        ${isForced ? `<div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">💔 <strong>${Utils.escapeHtml(partner.name)}</strong> telah memfailkan tuntutan penceraian (${Utils.escapeHtml(meta.reason || 'kepercayaan runtuh')}).</div>` : ''}
+        ${controlsHtml}
+        ${breakdownHtml}
+        <button class="primary-btn" id="btn-confirm-divorce" style="background:linear-gradient(135deg,#dc2626,#b91c1c);">⚖️ Sahkan Keputusan ${Utils.escapeHtml(prev.courtName)}</button>
+        ${!isForced ? `<button class="ghost-btn" id="btn-cancel-divorce" style="margin-top:8px;">← Batalkan &amp; Kembali</button>` : ''}
+      `
+    });
+
+    document.querySelectorAll('.div-path-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        this.showDivorceModal(partnerId, meta, { path: pill.dataset.path, settlementMode: selectedMode });
+      });
+    });
+    document.querySelectorAll('.div-mode-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        this.showDivorceModal(partnerId, meta, { path: selectedPath, settlementMode: pill.dataset.mode });
+      });
+    });
+    document.getElementById('btn-confirm-divorce').addEventListener('click', () => {
+      const res = LegalInheritanceEngine.executeDivorce(s, partnerId, { path: selectedPath, settlementMode: selectedMode });
+      this.close(true);
+      App.renderAll();
+      App.toast(res.msg, 'error');
+    });
+    const cancelBtn = document.getElementById('btn-cancel-divorce');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.showRelationDetail(partnerId));
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // 4D. MODAL PENGURUSAN WASIAT SEMASA HIDUP (ISLAM & SIVIL)
+  // --------------------------------------------------------------------------
+  showWasiatModal(onBack = null) {
+    const s = GameState.current;
+    GameState.ensureUpgradedState();
+    const islamic = LegalInheritanceEngine.isIslamic(s);
+    const c = Utils.getCountry(s.countryId);
+    const livingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+
+    let bodyHtml = '';
+    if (islamic) {
+      const curPct = (s.wasiat && s.wasiat.islamicPct) || 0;
+      const pctOpts = [
+        { val: 0, label: '0% (100% Faraid)' },
+        { val: 10, label: '10% Wakaf / Kebajikan' },
+        { val: 20, label: '20% Wakaf / Kebajikan' },
+        { val: 33.33, label: '33.3% (Maksimum 1/3 Syarak)' }
+      ];
+      bodyHtml = `
+        <div class="info-banner highlight">
+          <strong>☪️ Wasiat Islam &amp; Hukum Faraid</strong><br/>
+          Menurut hukum syarak, anda boleh mewasiatkan <strong>maksimum 1/3 (33.3%)</strong> daripada harta pusaka bersih kepada badan kebajikan, wakaf atau bukan waris. Baki harta akan dibahagikan secara tepat mengikut <strong>Faraid</strong>.
+        </div>
+        <div class="section-heading">Pilih Peruntukan Wasiat (Semasa: ${curPct}%)</div>
+        <div class="action-list">
+          ${pctOpts.map(o => `
+            <button class="action-item wasiat-islamic-btn ${Math.abs(curPct - o.val) < 0.1 ? 'active' : ''}" data-pct="${o.val}">
+              <span class="ai-icon">📜</span>
+              <span class="ai-content">
+                <span class="ai-title">${o.label}</span>
+                <span class="ai-desc">${o.val === 0 ? 'Semua harta bersih diagihkan kepada waris Faraid' : 'Ditolak selepas hutang sebelum pengiraan Faraid'}</span>
+              </span>
+              <span class="ai-right">${Math.abs(curPct - o.val) < 0.1 ? '✓ Aktif' : 'Pilih'}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      const curMode = (s.wasiat && s.wasiat.civilMode) || 'none';
+      const curTarget = (s.wasiat && s.wasiat.civilTargetHeirId) || (livingKids[0] && livingKids[0].id) || '';
+      const heirSelectHtml = livingKids.length > 0
+        ? `
+          <div style="margin:8px 0 12px;">
+            <label class="creator-label">Pilih Waris Tunggal (jika pilih 1 Waris Utama)</label>
+            <select id="wasiat-single-heir-select" class="input-field">
+              ${livingKids.map(k => `<option value="${k.id}" ${k.id === curTarget ? 'selected' : ''}>${Utils.escapeHtml(k.name)} (${k.role}, Umur ${k.age})</option>`).join('')}
+            </select>
+          </div>
+        `
+        : `<div class="info-banner">Tiada anak hidup buat masa ini — jika pilih 1 Waris Utama, harta akan disalurkan kepada pasangan/waris terdekat.</div>`;
+
+      const modeOpts = [
+        { id: 'none', icon: '⚖️', title: 'Tiada Wasiat (Intestate)', desc: 'Lalai sivil: 50% pasangan + 50% anak-anak (atau 100% anak-anak)' },
+        { id: 'equal', icon: '🤝', title: 'Wasiat Sama Rata', desc: 'Semua harta bersih dibahagi sama rata antara pasangan & anak-anak' },
+        { id: 'single_heir', icon: '👑', title: 'Wasiat 1 Waris Utama', desc: 'Serahkan 100% harta bersih kepada seorang waris pilihan anda' },
+        { id: 'charity', icon: '💚', title: 'Wasiat Amal & Kebajikan', desc: `Dermakan 100% harta bersih kepada tabung kebajikan ${c.name}` }
+      ];
+
+      bodyHtml = `
+        <div class="info-banner highlight">
+          <strong>⚖️ Wasiat Sivil (${c.name})</strong><br/>
+          Tentukan bagaimana harta bersih anda (selepas hutang &amp; Cukai Pusaka ${c.name}) akan diagihkan apabila anda meninggal dunia.
+        </div>
+        ${heirSelectHtml}
+        <div class="action-list">
+          ${modeOpts.map(m => `
+            <button class="action-item wasiat-civil-btn" data-mode="${m.id}">
+              <span class="ai-icon">${m.icon}</span>
+              <span class="ai-content">
+                <span class="ai-title">${m.title}</span>
+                <span class="ai-desc">${m.desc}</span>
+              </span>
+              <span class="ai-right">${curMode === m.id ? '✓ Aktif' : 'Pilih'}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    this.open({
+      icon: '📜',
+      title: 'Pengurusan Wasiat & Pusaka',
+      subtitle: islamic ? 'Sistem Faraid & Wasiat Islam' : `Undang-undang Sivil ${c.name}`,
+      bodyHtml: `${bodyHtml}<button class="ghost-btn" id="btn-wasiat-back" style="margin-top:10px;">← Kembali</button>`
+    });
+
+    document.querySelectorAll('.wasiat-islamic-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LegalInheritanceEngine.setIslamicWasiat(s, Number(btn.dataset.pct));
+        App.toast(res.msg, 'success');
+        this.showWasiatModal(onBack);
+      });
+    });
+
+    document.querySelectorAll('.wasiat-civil-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sel = document.getElementById('wasiat-single-heir-select');
+        const targetId = sel ? sel.value : null;
+        const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode, targetId);
+        App.toast(res.msg, 'success');
+        this.showWasiatModal(onBack);
+      });
+    });
+
+    document.getElementById('btn-wasiat-back').addEventListener('click', () => {
+      if (typeof onBack === 'function') onBack();
+      else this.close(true);
+    });
+  },
+
+  // --------------------------------------------------------------------------
+  // 4E. MODAL PENYATA HARTA PUSAKA (DIPAPARKAN SEBELUM PEWARIS MENYAMBUNG)
+  // --------------------------------------------------------------------------
+  showEstateStatementModal(preselectedKidId = null) {
+    const s = GameState.current;
+    if (!s || !window.LegalInheritanceEngine) return;
+    const report = LegalInheritanceEngine.calculateEstateStatement(s);
+    const fmt = (val) => Utils.formatMoney(val, report.countryId);
+    const livingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+
+    const sharesRowsHtml = report.shares.map(sh => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(148,163,184,0.25);font-size:12.5px;">
+        <div>
+          <strong>${Utils.escapeHtml(sh.name)}</strong> <small style="opacity:0.75;">(${Utils.escapeHtml(sh.role)})</small><br/>
+          <small style="opacity:0.8;">${Utils.escapeHtml(sh.fractionLabel)} • ${sh.pct}%</small>
+        </div>
+        <strong style="color:#0f766e;">${fmt(sh.amount)}</strong>
+      </div>
+    `).join('');
+
+    const heirloomsHtml = report.heirlooms.length > 0
+      ? `
+        <div class="info-banner" style="background:#fefce8;border-color:#fde047;">
+          <strong>🏛️ Pusaka Keluarga Bertanda (${report.heirlooms.length}):</strong><br/>
+          ${report.heirlooms.map(h => `• ${Utils.escapeHtml(h.name)} (${fmt(h.value)})`).join('<br/>')}
+          <br/><small>Semua Pusaka Keluarga bertanda akan diwarisi secara terus oleh pewaris pilihan anda.</small>
+        </div>
+      `
+      : '';
+
+    const heirButtonsHtml = livingKids.length > 0
+      ? `
+        <div class="section-heading">👑 Pilih Pewaris Untuk Sambung Generasi ${(s.generation || 1) + 1}</div>
+        <div class="action-list">
+          ${livingKids.map(k => {
+            const exactAmt = report.getHeirAmount(k.id);
+            const isPre = preselectedKidId && preselectedKidId === k.id;
+            return `
+              <button class="action-item estate-continue-kid-btn ${isPre ? 'highlight' : ''}" data-kid-id="${k.id}">
+                <span class="ai-icon">${k.gender === 'female' ? '👧' : '👦'}</span>
+                <span class="ai-content">
+                  <span class="ai-title">Sambung sebagai ${Utils.escapeHtml(k.name)} (Umur ${k.age})</span>
+                  <span class="ai-desc">Mewarisi bahagian tepat: <strong>${fmt(exactAmt)}</strong>${report.heirlooms.length > 0 ? ` + ${report.heirlooms.length} Pusaka Keluarga` : ''}</span>
+                </span>
+                <span class="ai-right">Warisi →</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `
+      : `
+        <button class="primary-btn" id="btn-estate-continue-fallback" style="margin-top:8px;background:linear-gradient(135deg,#6d28d9,#4f46e5);">
+          👑 Sahkan &amp; Sambung Sebagai Pewaris Waris Terdekat (Gen ${(s.generation || 1) + 1})
+        </button>
+      `;
+
+    this.open({
+      icon: '📜',
+      title: 'Penyata Harta Pusaka',
+      subtitle: `${report.systemLabel} • ${s.name}`,
+      locked: true,
+      bodyHtml: `
+        <div class="info-banner highlight" style="line-height:1.65;">
+          <strong>📊 Ringkasan Pengiraan Harta Pusaka</strong><br/>
+          Sistem Undang-undang: <strong>${Utils.escapeHtml(report.systemLabel)}</strong><br/>
+          Jumlah Harta Kasar: <strong>${fmt(report.grossEstate)}</strong><br/>
+          Tolak Hutang &amp; Gadai Janji: <strong style="color:#dc2626;">-${fmt(report.totalDebts)}</strong><br/>
+          <strong>Harta Pusaka Bersih: ${fmt(report.netEstate)}</strong><br/>
+          ${report.isIslamic && report.wasiatAmount > 0 ? `Tolak ${Utils.escapeHtml(report.wasiatLabel)}: <strong>-${fmt(report.wasiatAmount)}</strong><br/>` : ''}
+          ${!report.isIslamic && report.estateTaxAmount > 0 ? `Tolak Cukai Pusaka ${Utils.escapeHtml(report.countryName)} (${report.estateTaxRate}%): <strong style="color:#dc2626;">-${fmt(report.estateTaxAmount)}</strong><br/>` : ''}
+          ${!report.isIslamic ? `Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>` : ''}
+          <strong>Jumlah Diagihkan Kepada Waris: ${fmt(report.distributableEstate)}</strong>
+        </div>
+
+        <div class="section-heading">🧾 Pecahan Agihan Harta Pusaka</div>
+        <div class="info-banner" style="padding:8px 12px;">
+          ${sharesRowsHtml || '<small>Tiada baki harta bersih untuk diagihkan.</small>'}
+        </div>
+
+        ${heirloomsHtml}
+        ${heirButtonsHtml}
+        <button class="ghost-btn" id="btn-estate-back-obituary" style="margin-top:8px;">← Kembali ke Obituari</button>
+      `
+    });
+
+    document.querySelectorAll('.estate-continue-kid-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = GameState.continueFamilyLegacy(btn.dataset.kidId, report);
+        if (next) {
+          this.close(true);
+          App.renderAll();
+          App.toast(`👑 Menyambung legasi sebagai ${next.name} (Gen ${next.generation})!`, 'culture');
+          if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
+            setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
+          }
+        }
+      });
+    });
+
+    const fbBtn = document.getElementById('btn-estate-continue-fallback');
+    if (fbBtn) {
+      fbBtn.addEventListener('click', () => {
+        const next = GameState.continueFamilyLegacy(null, report);
+        if (next) {
+          this.close(true);
+          App.renderAll();
+          App.toast(`👑 Menyambung Dinasti Gen ${next.generation} sebagai ${next.name}!`, 'culture');
+          if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
+            setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
+          }
+        }
+      });
+    }
+
+    document.getElementById('btn-estate-back-obituary').addEventListener('click', () => {
+      this.showDeathSummary();
+    });
   },
 
   // --------------------------------------------------------------------------
@@ -904,17 +1563,31 @@ window.Modals = {
         ? `<br/><small style="opacity:0.85;">Sumber: ${inc.breakdown.map(b => `${b.icon} ${Utils.escapeHtml(b.label)} (${Utils.formatMoney(b.gross, s.countryId)}/thn)`).join(' • ')}</small>`
         : '';
 
+      const relMeta = window.LegalInheritanceEngine
+        ? LegalInheritanceEngine.getReligionMeta(s.religion)
+        : { icon: beliefObj.icon, label: s.religion || beliefObj.name };
+      const islamic = window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic(s);
+      const wasiatSummary = islamic
+        ? ((s.wasiat && s.wasiat.islamicPct > 0) ? `Wasiat Islam ${s.wasiat.islamicPct}% (${s.wasiat.islamicBeneficiary})` : '100% Faraid (Tiada Wasiat)')
+        : ((s.wasiat && s.wasiat.civilMode === 'equal') ? 'Wasiat Sama Rata'
+          : (s.wasiat && s.wasiat.civilMode === 'single_heir') ? 'Wasiat 1 Waris Utama'
+          : (s.wasiat && s.wasiat.civilMode === 'charity') ? 'Wasiat Amal 100%'
+          : 'Tiada Wasiat (Intestate)');
+
       contentHtml += `
         <div class="info-banner highlight">
           <strong>🛂 Biodata &amp; Pasport ${Utils.escapeHtml(displayName)}</strong><br/>
           Pekerjaan / Peranan: <strong>${occ.icon || '👤'} ${Utils.escapeHtml(occ.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(occ.badge)}</span>${occ.secondaryRole ? `<br/>Peranan Sampingan: <strong>${Utils.escapeHtml(occ.secondaryRole)}</strong>` : ''}<br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
-          Kepercayaan / Pegangan: <strong>${beliefObj.icon} ${beliefObj.name}</strong> (Ketahanan Jiwa: ${s.devotion || 40}%)<br/>
+          Agama: <strong>${relMeta.icon} ${Utils.escapeHtml(relMeta.label)}</strong> • Ketahanan Jiwa: ${s.devotion || 40}%<br/>
+          Status Perkahwinan: <strong>${s.married ? '💍 Berkahwin' : (s.maritalStatus ? `🕊️ ${Utils.escapeHtml(s.maritalStatus)}` : 'Bujang')}</strong><br/>
+          Status Wasiat: <strong>${Utils.escapeHtml(wasiatSummary)}</strong><br/>
           Latar Keluarga: ${famBeliefObj.icon} ${famBeliefObj.name}<br/>
           Status Semasa: <strong>${c.flag} ${c.name} — ${App._residencyLabel(s.residencyStatus)}</strong> (${s.yearsInCurrentCountry} tahun)<br/>
           Kewarganegaraan: ${s.citizenships.map(id => `${Utils.getCountry(id).flag} ${Utils.getCountry(id).name}`).join(', ')}
         </div>
+        ${s.age >= 18 && window.LegalInheritanceEngine ? `<button class="secondary-btn" id="btn-biodata-wasiat" style="width:100%;margin-bottom:10px;">📜 Urus Wasiat &amp; Perancangan Pusaka</button>` : ''}
       `;
 
       if (s.spiritualHistory && s.spiritualHistory.length > 0) {
@@ -1157,6 +1830,13 @@ window.Modals = {
         }
       });
     });
+
+    const biodataWasiatBtn = document.getElementById('btn-biodata-wasiat');
+    if (biodataWasiatBtn) {
+      biodataWasiatBtn.addEventListener('click', () => {
+        this.showWasiatModal(() => this.showActivities('passport'));
+      });
+    }
 
     const resBtn = document.getElementById('btn-upgrade-residency');
     if (resBtn) {
@@ -1511,6 +2191,10 @@ window.Modals = {
 
     document.querySelectorAll('.continue-kid-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (window.LegalInheritanceEngine) {
+          this.showEstateStatementModal(btn.dataset.kidId);
+          return;
+        }
         const next = GameState.continueAsChild(btn.dataset.kidId);
         if (next) {
           this.close(true);

@@ -171,11 +171,25 @@
           </div>
         </div>
 
-        <div class="creator-section">
-          <label class="creator-label">4. Nama Watak</label>
-          <div class="name-input-row">
-            <input type="text" id="custom-name-input" class="input-field" placeholder="Kosongkan atau tekan dadu..." maxlength="36" />
-            <button type="button" id="btn-random-name" class="secondary-btn" title="Jana nama tempatan">🎲</button>
+        <div class="creator-row">
+          <div class="creator-section flex-1">
+            <label class="creator-label">4. Agama</label>
+            <select id="religion-select" class="input-field">
+              <option value="Islam">☪️ Islam</option>
+              <option value="Kristian">✝️ Kristian</option>
+              <option value="Buddha">☸️ Buddha</option>
+              <option value="Hindu">🕉️ Hindu</option>
+              <option value="Lain-lain">🕊️ Lain-lain</option>
+              <option value="Tiada">⚛️ Tiada</option>
+            </select>
+          </div>
+
+          <div class="creator-section flex-1">
+            <label class="creator-label">5. Nama Watak</label>
+            <div class="name-input-row">
+              <input type="text" id="custom-name-input" class="input-field" placeholder="Kosongkan atau tekan dadu..." maxlength="36" />
+              <button type="button" id="btn-random-name" class="secondary-btn" title="Jana nama tempatan">🎲</button>
+            </div>
           </div>
         </div>
 
@@ -212,6 +226,7 @@
   <script defer src="js/data/world_countries.js"></script>
   <script defer src="js/data/events.js"></script>
   <script defer src="js/data/life_events.js"></script>
+  <script defer src="js/data/relationshipDramaData.js"></script>
   <script defer src="js/data/quotes.js"></script>
   <script defer src="js/data/activities_data.js"></script>
   <script defer src="js/data/activities_deck.js"></script>
@@ -224,6 +239,7 @@
   <script defer src="js/engine/dynasty.js"></script>
   <script defer src="js/engine/state.js"></script>
   <script defer src="js/engine/karma_endings.js"></script>
+  <script defer src="js/engine/legalInheritanceEngine.js"></script>
   <script defer src="js/engine/relationships.js"></script>
   <script defer src="js/engine/prison_fugitive.js"></script>
   <script defer src="js/engine/education_career.js"></script>

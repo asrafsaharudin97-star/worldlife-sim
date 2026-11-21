@@ -5,7 +5,10 @@
 
 window.Relationships = {
   isMuslim(s) {
-    return Boolean(s && s.belief === 'islam');
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic) {
+      return LegalInheritanceEngine.isIslamic(s);
+    }
+    return Boolean(s && (s.religion === 'Islam' || s.belief === 'islam'));
   },
 
   ensureRelationshipFields(s) {
@@ -30,6 +33,25 @@ window.Relationships = {
       if (r.id === s.partnerId && !r.stage) {
         if (s.married) r.stage = 'married';
         else r.stage = this.isMuslim(s) ? 'taaruf' : 'dating';
+      }
+      if (typeof r.isAlive !== 'boolean') r.isAlive = Boolean(r.alive);
+      if (r.category === 'partner' || r.category === 'spouse' || r.id === s.partnerId) {
+        if (typeof r.wantsChildren !== 'boolean') r.wantsChildren = Utils.chance(0.85);
+        if (r.gender === 'female') {
+          if (typeof r.fertility !== 'number') r.fertility = Utils.randInt(58, 96);
+          if (typeof r.isInfertile !== 'boolean') r.isInfertile = Utils.chance(0.065);
+          if (typeof r.menopauseAge !== 'number') r.menopauseAge = Utils.randInt(45, 52);
+        }
+      }
+      if (['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role)) {
+        if (typeof r.educationCare !== 'number') r.educationCare = Utils.randInt(58, 76);
+        if (typeof r.healthCare !== 'number') r.healthCare = Utils.randInt(66, 86);
+        if (typeof r.morals !== 'number') r.morals = Utils.randInt(60, 80);
+        if (typeof r.rebelliousness !== 'number') r.rebelliousness = Utils.randInt(5, 18);
+        if (typeof r.isDelinquent !== 'boolean') r.isDelinquent = false;
+        if (!r.stats || typeof r.stats !== 'object') {
+          r.stats = { smarts: Utils.randInt(52, 85), health: Utils.randInt(74, 96) };
+        }
       }
     }
   },
@@ -161,7 +183,12 @@ window.Relationships = {
       trust: Utils.randInt(58, 82),
       compatibility: compat,
       belief: partnerBelief,
+      wantsChildren: Utils.chance(0.85),
+      fertility: targetGender === 'female' ? Utils.randInt(58, 96) : null,
+      isInfertile: targetGender === 'female' ? Utils.chance(0.065) : false,
+      menopauseAge: targetGender === 'female' ? Utils.randInt(45, 52) : null,
       alive: true,
+      isAlive: true,
       job
     };
 
@@ -199,7 +226,7 @@ window.Relationships = {
   // --------------------------------------------------------------------------
   // 3. INTERAKSI HUBUNGAN (Keluarga, Rakan, Pasangan, Suami/Isteri)
   // --------------------------------------------------------------------------
-  interactRelation(relId, action) {
+  interactRelation(relId, action, opts = {}) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
@@ -370,9 +397,20 @@ window.Relationships = {
       }
       if (rel.closeness < 70) return { ok: false, msg: `${rel.name} belum bersedia — eratkan kemesraan ke 70%+ dahulu!` };
       const ringCost = Utils.usdToLocal(1800, s.countryId);
-      if (s.money < ringCost) return { ok: false, msg: `Kos akad nikah / kenduri kahwin ialah ${Utils.formatMoney(ringCost, s.countryId)}.` };
-      s.money -= ringCost;
+      const usePrenup = Boolean(!muslim && opts && opts.hasPrenup);
+      const prenupFee = (usePrenup && window.LegalInheritanceEngine)
+        ? LegalInheritanceEngine.getPrenupFeeLocal(s.countryId)
+        : 0;
+      const totalCost = ringCost + prenupFee;
+      if (s.money < totalCost) {
+        return { ok: false, msg: `Kos perkahwinan${usePrenup ? ' + Prenup' : ''} ialah ${Utils.formatMoney(totalCost, s.countryId)}.` };
+      }
+      if (window.LegalInheritanceEngine && LegalInheritanceEngine.recordMarriageStart) {
+        LegalInheritanceEngine.recordMarriageStart(s, rel, usePrenup);
+      }
+      s.money -= totalCost;
       s.married = true;
+      s.maritalStatus = null;
       rel.category = 'spouse';
       rel.stage = 'married';
       rel.role = rel.gender === 'female' ? 'Isteri' : 'Suami';
@@ -382,7 +420,7 @@ window.Relationships = {
       GameState.addJournalEntry(
         muslim
           ? `💍 Alhamdulillah! Dengan sekali lafaz akad nikah, anda dan ${rel.name} sah bergelar suami isteri di ${s.city}, ${c.name} ${c.flag}!`
-          : `💍 Anda selamat berkahwin dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!`,
+          : `💍 Anda selamat berkahwin dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!${usePrenup ? ' (Perjanjian Pranikah / Prenup ditandatangani untuk melindungi aset sebelum kahwin).' : ''}`,
         'romance'
       );
       GameState.save();
@@ -404,56 +442,108 @@ window.Relationships = {
       return { ok: true, msg: 'Rumah tangga semakin harmoni!' };
     }
 
-    // --- Timang Cahaya Mata (WAJIB berkahwin untuk watak Islam!) ---
+    // --- Timang Cahaya Mata (Kesuburan Realistik, Menopaus, Ketidaksuburan & Pasangan Tidak Mahu Anak) ---
     if (action === 'have_kid') {
       if (s.age < 18) return { ok: false, msg: 'Tunggu sehingga dewasa!' };
       if (muslim && !s.married) {
         return { ok: false, msg: 'Bagi watak beragama Islam, cahaya mata hanya selepas akad nikah yang sah.' };
       }
-      if (s.yearlyActions.had_kid) return { ok: false, msg: 'Anda sudah menimang cahaya mata tahun ini!' };
+      if (s.pregnancy && s.pregnancy.active) {
+        return { ok: false, msg: 'Kehamilan sedang berlangsung — bayi akan dilahirkan pada tahun hadapan!' };
+      }
+      if (s.yearlyActions.tried_kid || s.yearlyActions.had_kid) {
+        return { ok: false, msg: 'Anda sudah mencuba untuk mendapatkan cahaya mata tahun ini.' };
+      }
+
+      // 1. Semak jika pasangan tidak mahu anak
+      if (rel.wantsChildren === false) {
+        return {
+          ok: false,
+          msg: 'Pasangan anda tidak mahu mempunyai anak.',
+          followUpEvent: window.RelationshipDramaData
+            ? RelationshipDramaData.buildChildfreeRefusalEvent(s, rel)
+            : null
+        };
+      }
+
+      // 2. Kenal pasti pihak ibu (wanita)
+      const mother = s.gender === 'female' ? s : (rel.gender === 'female' ? rel : null);
+      if (!mother) {
+        return {
+          ok: false,
+          msg: 'Kehamilan semula jadi memerlukan pasangan berlawanan jantina. Anda boleh pertimbangkan Ambil Anak Angkat.'
+        };
+      }
+
+      // 3. Semak fasa menopaus
+      const menoAge = mother.menopauseAge || 49;
+      if (mother.age >= menoAge) {
+        const msg = 'Sudah mencapai fasa menopaus — tidak lagi boleh mengandung secara semula jadi.';
+        GameState.addJournalEntry(`🩺 ${mother === s ? 'Anda' : rel.name} (${mother.age} thn): ${msg}`, 'culture');
+        GameState.save();
+        return { ok: false, msg };
+      }
+
+      s.yearlyActions.tried_kid = true;
+
+      // 4. Semak ketidaksuburan (isInfertile)
+      if (mother.isInfertile) {
+        s.conceptionAttempts = (s.conceptionAttempts || 0) + 1;
+        if (s.conceptionAttempts >= 2) {
+          s.infertilityDiagnosed = true;
+          const diagMsg = `🩺 Diagnosis Pakar Kesuburan: ${mother === s ? 'Anda' : rel.name} disahkan mengalami masalah ketidaksuburan dan tidak dapat hamil secara semula jadi. Anda boleh mempertimbangkan alternatif Ambil Anak Angkat di tab Hubungan.`;
+          GameState.addJournalEntry(diagMsg, 'warning');
+          GameState.save();
+          return {
+            ok: false,
+            diagnosedInfertile: true,
+            msg: 'Disahkan mengalami masalah ketidaksuburan — pertimbangkan Ambil Anak Angkat sebagai alternatif.'
+          };
+        }
+        GameState.addJournalEntry(`💭 Percubaan untuk mendapatkan cahaya mata bersama ${rel.name} belum membuahkan hasil tahun ini.`, 'normal');
+        GameState.save();
+        return { ok: false, msg: 'Belum ada rezeki kehamilan tahun ini. Cuba lagi atau jalani pemeriksaan kesihatan.' };
+      }
+
+      // 5. Kira peluang kesuburan mengikut usia (menurun perlahan selepas 35, mendadak selepas 40)
+      const chance = this.computeConceptionChance(mother);
+      if (!Utils.chance(chance)) {
+        GameState.addJournalEntry(`💭 Anda dan ${rel.name} mencuba untuk menimang cahaya mata tahun ini, namun belum ada rezeki kehamilan.`, 'normal');
+        GameState.save();
+        return { ok: false, msg: 'Belum ada rezeki kehamilan tahun ini. Cuba lagi tahun hadapan!' };
+      }
+
+      // 6. Kehamilan berjaya! Bayi akan dilahirkan (atau diuji risiko keguguran) semasa +UMUR
+      s.pregnancy = {
+        active: true,
+        partnerId: rel.id,
+        partnerName: rel.name,
+        motherIsPlayer: mother === s,
+        motherAge: mother.age,
+        isOutOfWedlock: !s.married,
+        conceivedYear: s.year,
+        countryId: s.countryId
+      };
       s.yearlyActions.had_kid = true;
-      const kidGender = Utils.chance(0.5) ? 'male' : 'female';
-      const heritage = (s.heritageId && c.names[s.heritageId]) ? s.heritageId : Utils.pick(c.heritages).id;
-      const fatherFullName = s.gender === 'male' ? s.name : rel.name;
-      const isOutOfWedlock = !s.married;
-      const kidName = Utils.generateChildName({
-        countryId: s.countryId,
-        gender: kidGender,
-        heritageId: heritage,
-        belief: s.belief || 'unassigned',
-        fatherFullName,
-        isAdopted: false,
-        isOutOfWedlock
-      });
-      s.relationships.push({
-        id: 'rel_kid_' + Date.now(),
-        name: kidName,
-        role: kidGender === 'male' ? 'Anak Lelaki' : 'Anak Perempuan',
-        category: 'family',
-        gender: kidGender,
-        age: 0,
-        countryId: s.countryId,
-        closeness: 100,
-        trust: 100,
-        compatibility: 95,
-        belief: s.belief || 'unassigned',
-        isAdopted: false,
-        isOutOfWedlock,
-        alive: true,
-        job: 'Bayi'
-      });
-      GameState.adjustStats({ happiness: 22 });
+      GameState.adjustStats({ happiness: 14 });
       GameState.addJournalEntry(
-        `👶 Tahniah! Anda dan ${rel.name} menimang cahaya mata ${kidGender === 'male' ? 'lelaki' : 'perempuan'}, ${kidName}, lahir di ${s.city}, ${c.name} ${c.flag}!`,
+        `🤰 Berita gembira! ${mother === s ? 'Anda' : rel.name} telah disahkan hamil (usia ibu ${mother.age} thn)! Jaga kesihatan & kurangkan stres sementara menanti kelahiran tahun hadapan.`,
         'milestone'
       );
       GameState.save();
-      return { ok: true, msg: `Bayi ${kidName} selamat dilahirkan!` };
+      return { ok: true, msg: `🤰 Tahniah! ${mother === s ? 'Anda' : rel.name} disahkan hamil — bayi bakal lahir tahun hadapan!` };
     }
 
     // --- Putus / Bercerai ---
     if (action === 'breakup') {
       const wasMarried = s.married;
+      if (wasMarried && window.LegalInheritanceEngine && !(opts && opts.forceSimple)) {
+        return {
+          ok: true,
+          msg: 'Membuka prosiding penceraian mahkamah...',
+          openDivorceModal: { partnerId: rel.id, initiatedBy: 'player', reason: 'Permohonan penceraian' }
+        };
+      }
       s.partnerId = null;
       s.married = false;
       rel.category = 'ex';
@@ -479,14 +569,148 @@ window.Relationships = {
     return { ok: false, msg: 'Tindakan tidak dikenali.' };
   },
 
+  computeConceptionChance(mother) {
+    if (!mother || mother.isInfertile) return 0;
+    const menoAge = mother.menopauseAge || 49;
+    if (mother.age >= menoAge) return 0;
+    const baseFertility = Utils.clamp(mother.fertility ?? 75, 5, 100) / 100;
+    let ageFactor = 1.0;
+    if (mother.age > 40) {
+      ageFactor = Math.max(0.10, 0.55 - (mother.age - 40) * 0.10);
+    } else if (mother.age > 35) {
+      ageFactor = 1.0 - (mother.age - 35) * 0.09;
+    }
+    return Math.max(0.05, Math.min(0.92, baseFertility * ageFactor * 0.90));
+  },
+
+  generateBabyDraft(s, opts = {}) {
+    const c = Utils.getCountry(s.countryId);
+    const gender = opts.gender || (Utils.chance(0.5) ? 'male' : 'female');
+    const isAdopted = Boolean(opts.isAdopted);
+    const isOutOfWedlock = Boolean(opts.isOutOfWedlock);
+    const kidAge = typeof opts.kidAge === 'number' ? opts.kidAge : 0;
+    const partner = opts.partnerId ? (s.relationships || []).find(r => r.id === opts.partnerId) : null;
+    const heritage = (s.heritageId && c.names[s.heritageId]) ? s.heritageId : Utils.pick(c.heritages).id;
+    const fatherFullName = isAdopted
+      ? null
+      : (s.gender === 'male' ? s.name : (partner ? partner.name : null));
+
+    const suggestedName = Utils.generateChildName({
+      countryId: s.countryId,
+      gender,
+      heritageId: heritage,
+      belief: s.belief || 'unassigned',
+      fatherFullName,
+      isAdopted,
+      isOutOfWedlock
+    });
+
+    const stats = opts.stats || {
+      smarts: Utils.randInt(48, 92),
+      health: Utils.randInt(72, 98),
+      looks: Utils.randInt(50, 94)
+    };
+
+    return {
+      gender,
+      isAdopted,
+      isOutOfWedlock,
+      kidAge,
+      partnerId: opts.partnerId || null,
+      partnerName: partner ? partner.name : (opts.partnerName || null),
+      heritage,
+      fatherFullName,
+      suggestedName,
+      stats
+    };
+  },
+
+  finalizeChildBirth(s, draft, customInputName = '') {
+    if (!s || !draft) return { ok: false, msg: 'Data kelahiran tidak sah.' };
+    const c = Utils.getCountry(s.countryId);
+    const trimmed = String(customInputName || '').trim();
+    let finalName = draft.suggestedName;
+
+    if (trimmed) {
+      // Jika pemain memasukkan nama penuh sendiri (ada bin/binti atau ruang nama keluarga), kekalkan;
+      // jika hanya nama panggilan tunggal, formatkan dengan bin/binti atau nama keluarga dengan kemas.
+      if (/\s+(?:bin|binti|binte)\s+/i.test(trimmed) || trimmed.includes(' ')) {
+        finalName = trimmed;
+      } else {
+        finalName = Utils.generateChildName({
+          countryId: s.countryId,
+          gender: draft.gender,
+          heritageId: draft.heritage,
+          belief: s.belief || 'unassigned',
+          fatherFullName: draft.fatherFullName,
+          isAdopted: draft.isAdopted,
+          isOutOfWedlock: draft.isOutOfWedlock,
+          customGivenName: trimmed
+        });
+      }
+    }
+
+    if (draft.isAdopted) {
+      const fee = Utils.usdToLocal(900, s.countryId);
+      if (s.money < fee) return { ok: false, msg: `Kos dokumentasi pengambilan anak angkat ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+      s.money -= fee;
+      s.yearlyActions.adoptedChild = true;
+    }
+
+    const childObj = {
+      id: (draft.isAdopted ? 'rel_adopt_' : 'rel_kid_') + Date.now() + '_' + Utils.randInt(10, 99),
+      name: finalName,
+      role: draft.gender === 'male' ? 'Anak Lelaki' : 'Anak Perempuan',
+      category: 'family',
+      gender: draft.gender,
+      age: draft.kidAge || 0,
+      countryId: s.countryId,
+      closeness: draft.isAdopted ? 90 : 100,
+      trust: draft.isAdopted ? 90 : 100,
+      compatibility: 95,
+      belief: s.belief || 'unassigned',
+      isAdopted: Boolean(draft.isAdopted),
+      isOutOfWedlock: Boolean(draft.isOutOfWedlock),
+      educationCare: 68,
+      healthCare: 78,
+      morals: 72,
+      rebelliousness: 8,
+      isDelinquent: false,
+      stats: {
+        smarts: (draft.stats && draft.stats.smarts) || Utils.randInt(55, 88),
+        health: (draft.stats && draft.stats.health) || Utils.randInt(76, 98)
+      },
+      alive: true,
+      isAlive: true,
+      job: (draft.kidAge || 0) < 5 ? 'Bayi' : 'Pelajar'
+    };
+
+    s.relationships.push(childObj);
+    GameState.adjustStats({ happiness: draft.isAdopted ? 20 : 24 });
+    GameState.addJournalEntry(
+      draft.isAdopted
+        ? `🏡 Anda mengambil seorang anak angkat ${draft.gender === 'male' ? 'lelaki' : 'perempuan'} berusia ${draft.kidAge} tahun, ${finalName}, ke dalam keluarga anda di ${s.city}!`
+        : `👶 Tahniah! Bayi ${draft.gender === 'male' ? 'lelaki' : 'perempuan'} anda${draft.partnerName ? ` bersama ${draft.partnerName}` : ''}, ${finalName}, selamat dilahirkan di ${s.city}, ${c.name} ${c.flag}!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, child: childObj, msg: `Selamat datang ke keluarga, ${finalName}!` };
+  },
+
+  rujukSpouse() {
+    if (!window.LegalInheritanceEngine) {
+      return { ok: false, msg: 'Sistem Rujuk Semula tidak tersedia.' };
+    }
+    return LegalInheritanceEngine.rujukSpouse(GameState.current);
+  },
+
   // --------------------------------------------------------------------------
-  // 4. AMBIL ANAK ANGKAT (Menggunakan bin/binti Abdullah bagi watak Islam)
+  // 4. AMBIL ANAK ANGKAT (Membuka Modal Penamaan Anak)
   // --------------------------------------------------------------------------
   adoptChild() {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
-    const c = Utils.getCountry(s.countryId);
 
     if (s.age < 21) return { ok: false, msg: 'Anda perlu berumur sekurang-kurangnya 21 tahun untuk mengambil anak angkat.' };
     if (s.yearlyActions.adoptedChild) return { ok: false, msg: 'Anda sudah mengambil anak angkat tahun ini.' };
@@ -494,45 +718,89 @@ window.Relationships = {
     const fee = Utils.usdToLocal(900, s.countryId);
     if (s.money < fee) return { ok: false, msg: `Kos dokumentasi pengambilan anak angkat ialah ${Utils.formatMoney(fee, s.countryId)}.` };
 
-    s.money -= fee;
-    s.yearlyActions.adoptedChild = true;
-    const kidGender = Utils.chance(0.5) ? 'male' : 'female';
-    const heritage = (s.heritageId && c.names[s.heritageId]) ? s.heritageId : Utils.pick(c.heritages).id;
-    const kidAge = Utils.randInt(0, 5);
-    const kidName = Utils.generateChildName({
-      countryId: s.countryId,
-      gender: kidGender,
-      heritageId: heritage,
-      belief: s.belief || 'unassigned',
-      fatherFullName: null,
+    const draft = this.generateBabyDraft(s, {
       isAdopted: true,
-      isOutOfWedlock: false
+      kidAge: Utils.randInt(0, 5)
     });
+    return { ok: true, msg: 'Sila namakan anak angkat baharu anda!', openBabyNamingModal: draft };
+  },
 
-    s.relationships.push({
-      id: 'rel_adopt_' + Date.now(),
-      name: kidName,
-      role: kidGender === 'male' ? 'Anak Lelaki' : 'Anak Perempuan',
-      category: 'family',
-      gender: kidGender,
-      age: kidAge,
-      countryId: s.countryId,
-      closeness: 90,
-      trust: 90,
-      compatibility: 92,
-      belief: s.belief || 'unassigned',
-      isAdopted: true,
-      isOutOfWedlock: false,
-      alive: true,
-      job: kidAge < 5 ? 'Kanak-kanak' : 'Pelajar'
-    });
+  // --------------------------------------------------------------------------
+  // 5. KEIBUBAPAAN & DIDIKAN ANAK (UMUR 0–17, MAKSIMUM 3 TINDAKAN/TAHUN/ANAK)
+  // --------------------------------------------------------------------------
+  parentChild(childId, action) {
+    const s = GameState.current;
+    GameState.ensureUpgradedState();
+    this.ensureRelationshipFields(s);
 
-    GameState.adjustStats({ happiness: 20 });
-    GameState.addJournalEntry(
-      `🏡 Anda mengambil seorang anak angkat ${kidGender === 'male' ? 'lelaki' : 'perempuan'} berusia ${kidAge} tahun, ${kidName}, ke dalam keluarga anda di ${s.city}!`,
-      'milestone'
-    );
-    GameState.save();
-    return { ok: true, msg: `Selamat datang ke keluarga, ${kidName}!` };
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child) return { ok: false, msg: 'Anak tidak ditemui.' };
+    if (child.age >= 18) return { ok: false, msg: `${child.name} sudah dewasa (${child.age} tahun).` };
+
+    const countKey = `parent_cnt_${childId}`;
+    const used = s.yearlyActions[countKey] || 0;
+    if (used >= 3) {
+      return { ok: false, msg: `Anda sudah mencapai had 3 tindakan didikan tahun ini untuk ${child.name}.` };
+    }
+
+    const actKey = `parent_${childId}_${action}`;
+    if (s.yearlyActions[actKey]) {
+      return { ok: false, msg: `Anda sudah melakukan tindakan ini untuk ${child.name} tahun ini.` };
+    }
+
+    if (!child.stats) child.stats = { smarts: 65, health: 80 };
+
+    if (action === 'education') {
+      const cost = Utils.usdToLocal(180, s.countryId);
+      if (s.money < cost) return { ok: false, msg: `Kos tuisyen & pendidikan ialah ${Utils.formatMoney(cost, s.countryId)}.` };
+      s.money -= cost;
+      s.yearlyActions[actKey] = true;
+      s.yearlyActions[countKey] = used + 1;
+      child.educationCare = Utils.clamp((child.educationCare ?? 60) + Utils.randInt(14, 22), 0, 100);
+      child.stats.smarts = Utils.clamp((child.stats.smarts ?? 65) + Utils.randInt(5, 10), 0, 100);
+      child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - 4, 0, 100);
+      GameState.addJournalEntry(`📚 Anda mendaftarkan ${child.name} ke kelas tuisyen & pendidikan (${Utils.formatMoney(cost, s.countryId)}). Kepintaran & penjagaan pendidikannya meningkat!`);
+      GameState.save();
+      return { ok: true, msg: `Pendidikan ${child.name} meningkat (${child.educationCare}%)!` };
+    }
+
+    if (action === 'health') {
+      const cost = Utils.usdToLocal(120, s.countryId);
+      if (s.money < cost) return { ok: false, msg: `Kos pemeriksaan & rawatan kesihatan ialah ${Utils.formatMoney(cost, s.countryId)}.` };
+      s.money -= cost;
+      s.yearlyActions[actKey] = true;
+      s.yearlyActions[countKey] = used + 1;
+      child.healthCare = Utils.clamp((child.healthCare ?? 70) + Utils.randInt(14, 22), 0, 100);
+      child.stats.health = Utils.clamp((child.stats.health ?? 80) + Utils.randInt(6, 12), 0, 100);
+      GameState.addJournalEntry(`🩺 Anda membawa ${child.name} menjalani pemeriksaan kesihatan & rawatan berkhasiat (${Utils.formatMoney(cost, s.countryId)}).`);
+      GameState.save();
+      return { ok: true, msg: `Kesihatan ${child.name} semakin baik (${child.healthCare}%)!` };
+    }
+
+    if (action === 'morals') {
+      s.yearlyActions[actKey] = true;
+      s.yearlyActions[countKey] = used + 1;
+      child.morals = Utils.clamp((child.morals ?? 65) + Utils.randInt(12, 20), 0, 100);
+      child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - Utils.randInt(10, 18), 0, 100);
+      if (child.rebelliousness <= 55 && child.morals >= 45) child.isDelinquent = false;
+      GameState.adjustStats({ happiness: 4 });
+      GameState.addJournalEntry(`🌟 Anda meluangkan masa mendidik akhlak, adab dan nilai murni kepada ${child.name} (Akhlak ${child.morals}%, Pemberontakan ${child.rebelliousness}%).`);
+      GameState.save();
+      return { ok: true, msg: `Akhlak ${child.name} bertambah baik (${child.morals}%)!` };
+    }
+
+    if (action === 'quality_time') {
+      s.yearlyActions[actKey] = true;
+      s.yearlyActions[countKey] = used + 1;
+      child.closeness = Utils.clamp((child.closeness ?? 75) + Utils.randInt(10, 16), 0, 100);
+      child.trust = Utils.clamp((child.trust ?? 75) + Utils.randInt(8, 14), 0, 100);
+      child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - Utils.randInt(5, 10), 0, 100);
+      GameState.adjustStats({ happiness: 9 });
+      GameState.addJournalEntry(`🎡 Anda meluangkan masa berkualiti yang menggembirakan bersama ${child.name}!`);
+      GameState.save();
+      return { ok: true, msg: `Ikatan kasih sayang dengan ${child.name} makin erat!` };
+    }
+
+    return { ok: false, msg: 'Tindakan keibubapaan tidak dikenali.' };
   }
 };

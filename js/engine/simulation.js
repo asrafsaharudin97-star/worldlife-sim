@@ -9,6 +9,7 @@ window.Sim = {
     if (!s || !s.alive) return { event: null, died: false };
     GameState.ensureUpgradedState();
 
+    const prevYearlyActions = { ...(s.yearlyActions || {}) };
     s.age += 1;
     s.year += 1;
     s.yearsInCurrentCountry += 1;
@@ -29,29 +30,140 @@ window.Sim = {
       s.peakNetWorth = Math.max(s.peakNetWorth || 0, GameState.getNetWorth());
     } catch (e) {}
 
-    // 1. Umur ahli keluarga, pasangan & rakan
+    let priorityNpcDeathEvent = null;
+    let priorityMiscarriageEvent = null;
+    let priorityTeenEvent = null;
+    let babyBirth = null;
+
+    // 1. Umur ahli keluarga, pasangan & rakan + Kematian Orang Terdekat Realistik
     for (const rel of s.relationships) {
       if (!rel.alive) continue;
       rel.age += 1;
-      if (rel.age > 74 && Utils.chance((rel.age - 72) * 0.025)) {
+      const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
+
+      // Kemas kini kerja anak bila membesar
+      if (isChild) {
+        if (rel.age >= 18 && rel.job === 'Pelajar') rel.job = rel.isDelinquent ? 'Penganggur / Berisiko' : 'Belia / Bekerja';
+        else if (rel.age >= 6 && rel.job === 'Bayi') rel.job = 'Pelajar';
+      }
+
+      const deathInfo = this._rollNpcMortality(rel, isChild);
+      if (deathInfo) {
         rel.alive = false;
+        rel.isAlive = false;
+        rel.deathCause = deathInfo.cause;
         const wasSpouse = s.partnerId === rel.id && s.married;
+        rel._wasSpouse = wasSpouse;
+
+        const baseDrop = (wasSpouse || isChild) ? Utils.randInt(34, 45) : Utils.randInt(20, 34);
+        const closenessScale = 0.7 + ((rel.closeness ?? 70) / 100) * 0.35;
+        const happyDrop = -Utils.clamp(Math.round(baseDrop * closenessScale), 20, 45);
+
         GameState.addJournalEntry(
           wasSpouse
-            ? `🕊️💔 Pasangan hidup anda, ${rel.name} (${rel.role}), telah menghembuskan nafas terakhir pada usia ${rel.age} tahun. Anda kini hidup sebagai ${s.gender === 'male' ? 'duda' : 'balu'}.`
-            : `💔 ${rel.role} anda, ${rel.name}, telah meninggal dunia dengan tenang pada usia ${rel.age} tahun.`,
+            ? `🕊️💔 Berita Duka: Pasangan hidup anda, ${rel.name} (${rel.role}, ${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}. Status anda kini ialah ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
+            : `🕊️💔 Berita Duka: ${rel.role} anda, ${rel.name} (${rel.age} thn), telah meninggal dunia akibat ${deathInfo.cause}.`,
           'warning'
         );
-        GameState.adjustStats({ happiness: wasSpouse ? -26 : -18 });
+        GameState.adjustStats({ happiness: happyDrop });
         GameState.recordCrisis('grief');
+
         if (s.partnerId === rel.id) {
+          if (wasSpouse) {
+            s.maritalStatus = s.gender === 'male' ? 'Duda' : 'Balu';
+          }
           s.partnerId = null;
           s.married = false;
+          s.marriageMeta = null;
+          s.idahState = null;
+          if (s.pregnancy && s.pregnancy.partnerId === rel.id && !s.pregnancy.motherIsPlayer) {
+            s.pregnancy = null;
+          }
         }
-      } else if (rel.countryId !== s.countryId) {
+        if (!priorityNpcDeathEvent && window.RelationshipDramaData && RelationshipDramaData.buildNpcDeathEvent) {
+          priorityNpcDeathEvent = RelationshipDramaData.buildNpcDeathEvent(s, rel, deathInfo.cause);
+        }
+        continue;
+      }
+
+      if (rel.countryId !== s.countryId) {
         rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
       } else if (rel.category === 'friend') {
         rel.closeness = Utils.clamp(rel.closeness - Utils.randInt(1, 3), 10, 100);
+      }
+
+      // 1B. Penjagaan & Didikan Anak (Umur 1–17) + Kesan Pengabaian
+      if (isChild && rel.age >= 1 && rel.age <= 17) {
+        const caredEdu = Boolean(prevYearlyActions[`parent_${rel.id}_education`]);
+        const caredHealth = Boolean(prevYearlyActions[`parent_${rel.id}_health`]);
+        const caredMorals = Boolean(prevYearlyActions[`parent_${rel.id}_morals`]);
+
+        if (!caredEdu) rel.educationCare = Utils.clamp((rel.educationCare ?? 65) - Utils.randInt(7, 12), 0, 100);
+        if (!caredHealth) rel.healthCare = Utils.clamp((rel.healthCare ?? 75) - Utils.randInt(6, 10), 0, 100);
+        if (!caredMorals) rel.morals = Utils.clamp((rel.morals ?? 70) - Utils.randInt(7, 12), 0, 100);
+
+        const neglected = (rel.educationCare < 35) || (rel.healthCare < 35) || (rel.morals < 35);
+        if (neglected) {
+          rel.rebelliousness = Utils.clamp((rel.rebelliousness ?? 10) + Utils.randInt(14, 24), 0, 100);
+          rel.closeness = Utils.clamp((rel.closeness ?? 80) - Utils.randInt(5, 10), 0, 100);
+          if (rel.healthCare < 30 && rel.stats) {
+            rel.stats.health = Utils.clamp((rel.stats.health ?? 75) - Utils.randInt(6, 12), 10, 100);
+          }
+        } else if (rel.rebelliousness > 10) {
+          rel.rebelliousness = Utils.clamp(rel.rebelliousness - Utils.randInt(2, 5), 0, 100);
+        }
+
+        if (rel.rebelliousness > 80 || rel.morals < 25) {
+          if (!rel.isDelinquent) {
+            rel.isDelinquent = true;
+            GameState.addJournalEntry(
+              `⚠️ Amaran Didikan: Akibat kurang perhatian, ${rel.name} (${rel.age} thn) kini terjerumus sebagai remaja bermasalah (Delinkuen)!`,
+              'warning'
+            );
+          }
+          if (rel.age >= 13 && Utils.chance(0.35)) {
+            if (window.Dynasty) Dynasty.adjustReputation(-6);
+            GameState.addJournalEntry(
+              `🚔 ${rel.name} (${rel.age} thn) ditahan pihak berkuasa atas kesalahan juvana! Reputasi keluarga turut tercalar.`,
+              'warning'
+            );
+          }
+        }
+
+        if (!priorityTeenEvent && rel.age >= 10 && rel.age <= 17 && (rel.rebelliousness > 65 || rel.isDelinquent) && Utils.chance(0.70)) {
+          if (window.RelationshipDramaData && RelationshipDramaData.buildChildRebellionEvent) {
+            priorityTeenEvent = RelationshipDramaData.buildChildRebellionEvent(s, rel);
+          }
+        }
+      }
+    }
+
+    // 1C. Semakan Kehamilan & Risiko Keguguran (sebelum kelahiran)
+    if (s.pregnancy && s.pregnancy.active) {
+      const preg = s.pregnancy;
+      s.pregnancy = null;
+      const partner = preg.partnerId ? s.relationships.find(r => r.id === preg.partnerId && r.alive) : null;
+      const motherAge = (preg.motherAge || s.age) + 1;
+      const miscChance = this.computeMiscarriageChance(s, motherAge);
+
+      if (Utils.chance(miscChance)) {
+        GameState.adjustStats({ happiness: -Utils.randInt(18, 26), health: -Utils.randInt(6, 12) });
+        GameState.recordCrisis('grief');
+        GameState.addJournalEntry(
+          `🕊️💔 Dugaan berat: Kehamilan (usia ibu ${motherAge} tahun) berakhir dengan keguguran. Semoga anda${partner ? ` dan ${partner.name}` : ''} diberi ketabahan.`,
+          'warning'
+        );
+        if (window.RelationshipDramaData && RelationshipDramaData.buildMiscarriageEvent) {
+          priorityMiscarriageEvent = RelationshipDramaData.buildMiscarriageEvent(s, partner, motherAge);
+        }
+      } else if (window.Relationships && Relationships.generateBabyDraft) {
+        babyBirth = Relationships.generateBabyDraft(s, {
+          partnerId: preg.partnerId,
+          partnerName: preg.partnerName,
+          isOutOfWedlock: preg.isOutOfWedlock,
+          isAdopted: false,
+          kidAge: 0
+        });
       }
     }
 
@@ -84,6 +196,9 @@ window.Sim = {
     }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
+    }
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.tickYearlyLegal) {
+      LegalInheritanceEngine.tickYearlyLegal(s);
     }
     if (window.Dynasty && Dynasty.tickYear) {
       Dynasty.tickYear(s);
@@ -129,8 +244,11 @@ window.Sim = {
       return { event: null, died: true };
     }
 
-    // 7. Pilih peristiwa pilihan tahunan
-    const event = this._pickYearlyEvent(s, c);
+    // 7. Pilih peristiwa pilihan tahunan (utamakan Berita Duka / Keguguran / Krisis Remaja)
+    const event = priorityNpcDeathEvent
+      || priorityMiscarriageEvent
+      || priorityTeenEvent
+      || this._pickYearlyEvent(s, c);
 
     const curBlock = s.journal[s.journal.length - 1];
     if (curBlock.entries.length === 0) {
@@ -140,7 +258,45 @@ window.Sim = {
     }
 
     GameState.save();
-    return { event, died: false };
+    return { event, died: false, babyBirth };
+  },
+
+  computeMiscarriageChance(s, motherAge) {
+    let base = 0.09; // 8–10% (umur < 35)
+    if (motherAge > 42) base = 0.38; // 35%+ (umur > 42)
+    else if (motherAge >= 35) base = 0.18 + ((motherAge - 35) / 7) * 0.07; // 18–25% (umur 35–42)
+
+    if (s.stats && s.stats.health < 30) base += 0.07;
+    if (s.alignment && s.alignment.stress >= 70) base += 0.06;
+    return Math.max(0.05, Math.min(0.72, base));
+  },
+
+  _rollNpcMortality(rel, isChild) {
+    if (!rel || !rel.alive) return null;
+
+    // 1. Kematian faktor usia tua (bermula umur 65+)
+    if (rel.age >= 65) {
+      const oldProb = Math.min(0.38, 0.012 + (rel.age - 65) * 0.014);
+      if (Utils.chance(oldProb)) {
+        return { cause: 'sakit tua secara semula jadi' };
+      }
+    }
+
+    // 2. Tragedi mengejut (kemalangan / sakit tenat): 0.5–1.5%/thn, lebih tinggi jika kesihatan/healthCare amat rendah
+    let suddenProb = 0.008;
+    if (isChild && (rel.healthCare ?? 75) < 25) {
+      suddenProb += 0.025;
+    } else if (rel.stats && typeof rel.stats.health === 'number' && rel.stats.health < 30) {
+      suddenProb += 0.022;
+    }
+
+    if (Utils.chance(suddenProb)) {
+      const cause = (isChild && (rel.healthCare ?? 75) < 25)
+        ? 'komplikasi sakit tenat akibat kurang rawatan kesihatan'
+        : Utils.pick(['kemalangan jalan raya mengejut', 'komplikasi sakit tenat mengejut', 'serangan jantung mengejut']);
+      return { cause };
+    }
+    return null;
   },
 
   _processEducation(s, c) {
@@ -449,6 +605,12 @@ window.Sim = {
       if (rfEv) return rfEv;
     }
 
+    // 0B2. Konflik Hubungan / Rumah Tangga Tahunan (20–30%+ peluang jika stres/jenayah/Mod Khas)
+    if (window.RelationshipDramaData && RelationshipDramaData.maybeBuildYearlyConflictEvent) {
+      const dramaEv = RelationshipDramaData.maybeBuildYearlyConflictEvent(s);
+      if (dramaEv) return dramaEv;
+    }
+
     // 0C. Arka Cerita Cliffhanger "Wow" & Ujian Karma (Good vs Bad Trials)
     if (window.KarmaEndings) {
       const kaEv = KarmaEndings.pickKarmaOrArcEvent(s, c);
@@ -623,12 +785,14 @@ window.Sim = {
 
     let outcome = choice.outcome || '';
     let nextEvent = null;
+    let openDivorceModal = null;
     let toastType = choice.journalType === 'warning' ? 'error' : 'culture';
 
     if (typeof choice.customAction === 'function') {
       const res = choice.customAction(s, c) || {};
       if (res.outcome) outcome = res.outcome;
       if (res.nextEvent) nextEvent = res.nextEvent;
+      if (res.openDivorceModal) openDivorceModal = res.openDivorceModal;
       if (res.toastType) toastType = res.toastType;
     }
 
@@ -636,7 +800,7 @@ window.Sim = {
       GameState.addJournalEntry(`${event.icon} ${event.title}: ${outcome}`, choice.journalType || 'culture');
     }
     GameState.save();
-    return { outcome, nextEvent, toastType };
+    return { outcome, nextEvent, openDivorceModal, toastType };
   },
 
   // --------------------------------------------------------------------------
@@ -1030,12 +1194,16 @@ window.Sim = {
     return Relationships.meetLocalDate();
   },
 
-  interactRelation(relId, action) {
-    return Relationships.interactRelation(relId, action);
+  interactRelation(relId, action, opts) {
+    return Relationships.interactRelation(relId, action, opts);
   },
 
   adoptChild() {
     return Relationships.adoptChild();
+  },
+
+  parentChild(childId, action) {
+    return Relationships.parentChild(childId, action);
   },
 
   visitDoctor(isPrivate = false) {

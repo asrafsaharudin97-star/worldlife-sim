@@ -7,7 +7,7 @@ window.GameState = {
   HISTORY_KEY: 'worldlife_graveyard_v1',
   current: null,
 
-  createNewLife({ countryId, gender, heritageId, customName, isAdopted = false, isOutOfWedlock = false }) {
+  createNewLife({ countryId, gender, heritageId, religion, customName, isAdopted = false, isOutOfWedlock = false }) {
     const country = Utils.getCountry(countryId);
     const validHeritage = heritageId && country.names[heritageId]
       ? heritageId
@@ -16,10 +16,13 @@ window.GameState = {
     const city = Utils.pick(country.cities);
     const startYear = 2004 + Utils.randInt(0, 20);
 
-    const familyBelief = window.LIFE_EVENTS
-      ? window.LIFE_EVENTS.pickFamilyBelief(countryId, validHeritage)
-      : 'unassigned';
-    const beliefObj = (window.BELIEFS && window.BELIEFS[familyBelief]) || { icon: '❔', name: 'Belum Ditentukan' };
+    const chosenReligion = religion || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.pickReligionByDemographics(countryId, validHeritage)
+      : 'Islam');
+    const familyBelief = window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.religionToBelief(chosenReligion)
+      : (window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(countryId, validHeritage) : 'unassigned');
+    const beliefObj = (window.BELIEFS && window.BELIEFS[familyBelief]) || { icon: '❔', name: chosenReligion };
 
     const rawFatherName = Utils.generateName(countryId, 'male', validHeritage);
     const rawMotherName = Utils.generateName(countryId, 'female', validHeritage);
@@ -120,6 +123,7 @@ window.GameState = {
       alive: true,
       causeOfDeath: null,
 
+      religion: chosenReligion,
       belief: familyBelief,
       familyBelief,
       devotion: familyBelief === 'unassigned' ? 20 : Utils.randInt(35, 65),
@@ -183,6 +187,16 @@ window.GameState = {
       relationships,
       partnerId: null,
       married: false,
+      maritalStatus: null,
+
+      // Kesuburan, menopaus & kehamilan (untuk watak wanita)
+      fertility: gender === 'female' ? Utils.randInt(58, 96) : null,
+      isInfertile: gender === 'female' ? Utils.chance(0.065) : false,
+      menopauseAge: gender === 'female' ? Utils.randInt(45, 52) : null,
+      wantsChildren: Utils.chance(0.85),
+      pregnancy: null,
+      conceptionAttempts: 0,
+      infertilityDiagnosed: false,
 
       yearlyActions: {},
       seenEventIds: [],
@@ -327,6 +341,20 @@ window.GameState = {
       s.yearlyDeck = [];
     }
 
+    if (s.gender === 'female') {
+      if (typeof s.fertility !== 'number') s.fertility = Utils.randInt(58, 96);
+      if (typeof s.isInfertile !== 'boolean') s.isInfertile = Utils.chance(0.065);
+      if (typeof s.menopauseAge !== 'number') s.menopauseAge = Utils.randInt(45, 52);
+    }
+    if (typeof s.wantsChildren !== 'boolean') s.wantsChildren = true;
+    if (!('pregnancy' in s)) s.pregnancy = null;
+    if (typeof s.conceptionAttempts !== 'number') s.conceptionAttempts = 0;
+    if (typeof s.infertilityDiagnosed !== 'boolean') s.infertilityDiagnosed = false;
+    if (!('maritalStatus' in s)) s.maritalStatus = null;
+
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
+      LegalInheritanceEngine.ensureLegalFields(s);
+    }
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
     }
@@ -407,7 +435,7 @@ window.GameState = {
     return Math.round(total);
   },
 
-  continueAsChild(childId) {
+  continueAsChild(childId, estateReport = null) {
     const parent = this.current;
     if (!parent) return null;
     const child = parent.relationships.find(r => r.id === childId && r.alive);
@@ -418,9 +446,14 @@ window.GameState = {
     const parentC = Utils.getCountry(parent.countryId);
     const city = cId === parent.countryId ? parent.city : Utils.pick(country.cities);
 
+    const report = estateReport || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.calculateEstateStatement(parent)
+      : null);
     const livingKids = parent.relationships.filter(r => (r.role === 'Anak Lelaki' || r.role === 'Anak Perempuan' || r.role === 'Son' || r.role === 'Daughter') && r.alive);
-    const parentNet = Math.max(0, this.getNetWorth());
-    const shareLocal = Utils.convertMoney(Math.round(parentNet / Math.max(1, livingKids.length)), parent.countryId, cId);
+    const exactParentShare = report
+      ? report.getHeirAmount(child.id)
+      : Math.round(Math.max(0, this.getNetWorth()) / Math.max(1, livingKids.length));
+    const shareLocal = Utils.convertMoney(exactParentShare, parent.countryId, cId);
 
     const siblings = livingKids
       .filter(k => k.id !== child.id)
@@ -457,6 +490,10 @@ window.GameState = {
       : childAge < 18 ? 'secondary'
       : 'highschool_done';
 
+    const heirReligion = parent.religion || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.beliefToReligion(parent.belief)
+      : 'Islam');
+
     const state = {
       id: 'life_' + Date.now(),
       name: child.name,
@@ -470,7 +507,8 @@ window.GameState = {
       alive: true,
       causeOfDeath: null,
 
-      belief: parent.belief || 'unassigned',
+      religion: heirReligion,
+      belief: parent.belief || (window.LegalInheritanceEngine ? LegalInheritanceEngine.religionToBelief(heirReligion) : 'unassigned'),
       familyBelief: parent.belief || 'unassigned',
       devotion: Utils.randInt(35, 65),
       lastSpiritualAge: -99,
@@ -492,9 +530,9 @@ window.GameState = {
       countriesLivedIn: [cId],
 
       stats: {
-        happiness: Utils.randInt(60, 82),
-        health: Utils.randInt(78, 96),
-        smarts: Utils.randInt(55, 88),
+        happiness: child.isDelinquent ? Utils.randInt(42, 64) : Utils.randInt(60, 82),
+        health: (child.stats && typeof child.stats.health === 'number') ? Utils.clamp(child.stats.health, 25, 100) : Utils.randInt(78, 96),
+        smarts: (child.stats && typeof child.stats.smarts === 'number') ? Utils.clamp(child.stats.smarts, 20, 100) : Utils.randInt(55, 88),
         looks: Utils.randInt(55, 88)
       },
 
@@ -502,9 +540,26 @@ window.GameState = {
       investments: 0,
       retirementFund: 0,
       annualExpensesMultiplier: 1,
-      criminalRecord: 0,
+      criminalRecord: child.isDelinquent ? 1 : 0,
       hasDriverLicense: childAge >= 18,
       generation: (parent.generation || 1) + 1,
+
+      alignment: {
+        karma: child.isDelinquent ? -30 : ((typeof child.morals === 'number' && child.morals >= 75) ? 20 : 0),
+        fame: 0,
+        peakFame: 0,
+        notoriety: child.isDelinquent ? 25 : 0,
+        stress: child.isDelinquent ? 35 : 12
+      },
+
+      fertility: child.gender === 'female' ? Utils.randInt(58, 96) : null,
+      isInfertile: child.gender === 'female' ? Utils.chance(0.065) : false,
+      menopauseAge: child.gender === 'female' ? Utils.randInt(45, 52) : null,
+      wantsChildren: Utils.chance(0.85),
+      pregnancy: null,
+      conceptionAttempts: 0,
+      infertilityDiagnosed: false,
+      maritalStatus: null,
 
       education: {
         stage: edStage,
@@ -519,7 +574,7 @@ window.GameState = {
       job: null,
       peakSalaryUsd: 0,
 
-      assets: { vehicles: [], properties: [] },
+      assets: { vehicles: [], properties: [], collectibles: [] },
       relationships: siblings,
       partnerId: null,
       married: false,
@@ -540,7 +595,9 @@ window.GameState = {
             },
             {
               type: 'culture',
-              text: `💰 Anda mewarisi ${Utils.formatMoney(shareLocal, cId)} daripada harta pusaka ${parent.name}!`
+              text: report
+                ? `📜 Penyata Harta Pusaka (${report.systemLabel}): Anda mewarisi bahagian tepat sebanyak ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}.`
+                : `💰 Anda mewarisi ${Utils.formatMoney(shareLocal, cId)} daripada harta pusaka ${parent.name}!`
             }
           ]
         }
@@ -549,15 +606,22 @@ window.GameState = {
 
     this.current = state;
     this.ensureUpgradedState();
-    if (window.AssetsEngine && AssetsEngine.transferInheritanceToHeir) {
-      const inh = AssetsEngine.transferInheritanceToHeir(parent, state);
-      if (inh && (inh.props > 0 || inh.vehs > 0 || inh.heirlooms > 0)) {
-        this.addJournalEntry(
-          `🏛️ Pewarisan Aset Keluarga: ${inh.props} Hartanah, ${inh.vehs} Kenderaan & ${inh.heirlooms} Pusaka Keluarga berjaya diwarisi!`,
-          'milestone'
-        );
-      }
+
+    // Pindahkan Pusaka Keluarga bertanda (Heirlooms) secara terus kepada pewaris terpilih
+    const markedHeirlooms = ((parent.assets && parent.assets.collectibles) || []).filter(col => col && col.isHeirloom);
+    if (markedHeirlooms.length > 0) {
+      state.assets.collectibles = markedHeirlooms.map(col => ({
+        ...col,
+        ageInGenerations: (col.ageInGenerations || 1) + 1,
+        value: Math.round(Utils.convertMoney(col.value, parent.countryId, cId) * 1.15)
+      }));
+      if (window.Dynasty) Dynasty.adjustReputation(Math.min(10, markedHeirlooms.length * 3));
+      this.addJournalEntry(
+        `🏛️ Anda turut mewarisi ${markedHeirlooms.length} Pusaka Keluarga bertanda (${markedHeirlooms.map(h => h.name).join(', ')})!`,
+        'milestone'
+      );
     }
+
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();
       if (bonuses.startingWealthMult && state.money > 0) {
@@ -573,17 +637,17 @@ window.GameState = {
   },
 
   // Sambung Legasi Keluarga — gunakan anak hidup jika ada, atau pewaris waris terdekat jika tiada anak
-  continueFamilyLegacy(childId = null) {
+  continueFamilyLegacy(childId = null, estateReport = null) {
     const parent = this.current;
     if (!parent) return null;
     if (window.Dynasty) Dynasty.recordMemberDeath(parent);
 
     if (childId) {
-      return this.continueAsChild(childId);
+      return this.continueAsChild(childId, estateReport);
     }
     const livingKids = parent.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
     if (livingKids.length > 0) {
-      return this.continueAsChild(livingKids[0].id);
+      return this.continueAsChild(livingKids[0].id, estateReport);
     }
 
     // Jika tiada anak hidup: lantik pewaris waris keluarga (anak saudara / waris terdekat) supaya dinasti tidak putus!
@@ -604,7 +668,17 @@ window.GameState = {
       isOutOfWedlock: false
     });
 
-    const netWorth = this.getNetWorth(); // Kekalkan harta ATAU hutang legasi!
+    const report = estateReport || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.calculateEstateStatement(parent)
+      : null);
+    const nonEntityShares = report ? report.shares.filter(sh => !sh.isEntity) : [];
+    const inheritedAmount = report
+      ? (nonEntityShares.length > 0 ? nonEntityShares[0].amount : 0)
+      : Math.max(0, this.getNetWorth());
+    const heirReligion = parent.religion || (window.LegalInheritanceEngine
+      ? LegalInheritanceEngine.beliefToReligion(belief)
+      : 'Islam');
+    const netWorth = inheritedAmount;
     const newGen = (parent.generation || 1) + 1;
     const heirAge = Utils.randInt(16, 22);
 
@@ -621,6 +695,7 @@ window.GameState = {
       alive: true,
       causeOfDeath: null,
 
+      religion: heirReligion,
       belief,
       familyBelief: belief,
       devotion: Utils.randInt(35, 65),

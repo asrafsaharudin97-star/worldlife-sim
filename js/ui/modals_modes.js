@@ -308,8 +308,8 @@ window.ModeModals = {
             <span class="val">⭐ ${s.alignment.peakFame || s.alignment.fame}% • ${SocialMedia.formatFollowers(s.socialMedia.followers)} Pengikut</span>
           </div>
           <div class="summary-stat">
-            <span class="lbl">Pegangan Akhir</span>
-            <span class="val">${beliefObj.icon} ${beliefObj.name}</span>
+            <span class="lbl">Agama</span>
+            <span class="val">${window.LegalInheritanceEngine ? `${LegalInheritanceEngine.getReligionMeta(s.religion).icon} ${LegalInheritanceEngine.getReligionMeta(s.religion).label}` : `${beliefObj.icon} ${beliefObj.name}`}</span>
           </div>
           <div class="summary-stat">
             <span class="lbl">Status Dinasti (Gen ${s.generation || 1})</span>
@@ -328,7 +328,7 @@ window.ModeModals = {
 
         ${kidsHtml}
         <button class="primary-btn" id="btn-continue-legacy-heir" style="margin-top:10px;background:linear-gradient(135deg,#6d28d9,#4f46e5);">
-          👑 Sambung Legasi Keluarga (Main Sebagai Pewaris — Gen ${(s.generation || 1) + 1})
+          📜 Lihat Penyata Harta Pusaka &amp; Sambung Legasi (Gen ${(s.generation || 1) + 1})
         </button>
         <button class="ghost-btn" id="btn-death-new-life" style="margin-top:8px;">✨ Mula Dinasti &amp; Kehidupan Baru (Gen 1)</button>
       `
@@ -337,6 +337,10 @@ window.ModeModals = {
     const heirBtn = document.getElementById('btn-continue-legacy-heir');
     if (heirBtn) {
       heirBtn.addEventListener('click', () => {
+        if (window.LegalInheritanceEngine && Modals.showEstateStatementModal) {
+          Modals.showEstateStatementModal(null);
+          return;
+        }
         const next = GameState.continueFamilyLegacy();
         if (next) {
           Modals.close(true);
@@ -351,6 +355,10 @@ window.ModeModals = {
 
     document.querySelectorAll('.continue-kid-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (window.LegalInheritanceEngine && Modals.showEstateStatementModal) {
+          Modals.showEstateStatementModal(btn.dataset.kidId);
+          return;
+        }
         const next = GameState.continueFamilyLegacy(btn.dataset.kidId);
         if (next) {
           Modals.close(true);

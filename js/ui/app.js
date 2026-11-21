@@ -6,7 +6,8 @@ window.App = {
   creator: {
     countryId: 'MY',
     gender: 'male',
-    heritageId: 'malay'
+    heritageId: 'malay',
+    religion: 'Islam'
   },
 
   init() {
@@ -151,8 +152,16 @@ window.App = {
 
     document.getElementById('heritage-select').addEventListener('change', (e) => {
       this.creator.heritageId = e.target.value;
+      this._syncCreatorReligion();
       this._refreshRandomPlaceholder();
     });
+
+    const relSel = document.getElementById('religion-select');
+    if (relSel) {
+      relSel.addEventListener('change', (e) => {
+        this.creator.religion = e.target.value;
+      });
+    }
 
     document.getElementById('btn-random-name').addEventListener('click', () => {
       const name = Utils.generateName(this.creator.countryId, this.creator.gender, this.creator.heritageId);
@@ -165,6 +174,7 @@ window.App = {
         countryId: this.creator.countryId,
         gender: this.creator.gender,
         heritageId: this.creator.heritageId,
+        religion: this.creator.religion,
         customName
       });
       this.showGameScreen();
@@ -254,7 +264,17 @@ window.App = {
       </div>
     `;
 
+    this._syncCreatorReligion();
     this._refreshRandomPlaceholder();
+  },
+
+  _syncCreatorReligion() {
+    const picked = (window.LegalInheritanceEngine && LegalInheritanceEngine.pickReligionByDemographics)
+      ? LegalInheritanceEngine.pickReligionByDemographics(this.creator.countryId, this.creator.heritageId)
+      : 'Islam';
+    this.creator.religion = picked;
+    const relSel = document.getElementById('religion-select');
+    if (relSel) relSel.value = picked;
   },
 
   _refreshRandomPlaceholder() {
@@ -303,11 +323,17 @@ window.App = {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
-    const { event, died } = Sim.ageUp();
+    const { event, died, babyBirth } = Sim.ageUp();
     this.renderAll();
 
     if (died) {
       setTimeout(() => Modals.showDeathSummary(), 260);
+    } else if (babyBirth && Modals.showBabyNamingModal) {
+      setTimeout(() => {
+        Modals.showBabyNamingModal(babyBirth, () => {
+          if (event) setTimeout(() => Modals.showEvent(event), 160);
+        });
+      }, 160);
     } else if (event) {
       setTimeout(() => Modals.showEvent(event), 160);
     }
@@ -356,8 +382,13 @@ window.App = {
     document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}`;
 
     const genPrefix = (s.generation && s.generation > 1) ? `Gen ${s.generation} • ` : '';
+    const relMeta = (window.LegalInheritanceEngine && s.religion)
+      ? LegalInheritanceEngine.getReligionMeta(s.religion)
+      : null;
     const beliefObj = GameState.getBeliefObj(s.belief);
-    const beliefSnippet = ` • ${beliefObj.icon} ${beliefObj.name}`;
+    const beliefSnippet = relMeta
+      ? ` • ${relMeta.icon} ${relMeta.label}`
+      : ` • ${beliefObj.icon} ${beliefObj.name}`;
     const cultureTag = s.countryId === s.birthCountryId
       ? `${genPrefix}${birthC.flag} ${s.heritageLabel}${beliefSnippet}`
       : `${genPrefix}Lahir ${birthC.flag} → ${c.flag} ${c.name}${beliefSnippet}`;
