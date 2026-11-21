@@ -1574,10 +1574,18 @@ window.Modals = {
           : (s.wasiat && s.wasiat.civilMode === 'charity') ? 'Wasiat Amal 100%'
           : 'Tiada Wasiat (Intestate)');
 
+      const edObj = s.education || {};
+      const edLvlInfo = (window.EducationData && EducationData.LEVEL_INFO[edObj.educationLevel || 'none']) || { icon: '📄', label: 'Tiada/Sekolah' };
+      const edFieldObj = (window.EducationData && edObj.educationField) ? EducationData.getField(edObj.educationField) : null;
+      const earnedCerts = (window.EducationData && Array.isArray(edObj.certificates))
+        ? edObj.certificates.map(cid => EducationData.CERTIFICATES.find(x => x.id === cid)).filter(Boolean)
+        : [];
+
       contentHtml += `
         <div class="info-banner highlight">
           <strong>🛂 Biodata &amp; Pasport ${Utils.escapeHtml(displayName)}</strong><br/>
           Pekerjaan / Peranan: <strong>${occ.icon || '👤'} ${Utils.escapeHtml(occ.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(occ.badge)}</span>${occ.secondaryRole ? `<br/>Peranan Sampingan: <strong>${Utils.escapeHtml(occ.secondaryRole)}</strong>` : ''}<br/>
+          Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong><br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
           Agama: <strong>${relMeta.icon} ${Utils.escapeHtml(relMeta.label)}</strong> • Ketahanan Jiwa: ${s.devotion || 40}%<br/>
@@ -1587,6 +1595,12 @@ window.Modals = {
           Status Semasa: <strong>${c.flag} ${c.name} — ${App._residencyLabel(s.residencyStatus)}</strong> (${s.yearsInCurrentCountry} tahun)<br/>
           Kewarganegaraan: ${s.citizenships.map(id => `${Utils.getCountry(id).flag} ${Utils.getCountry(id).name}`).join(', ')}
         </div>
+        ${earnedCerts.length > 0 ? `
+          <div class="info-banner" style="background:#f0fdf4;border-color:#bbf7d0;">
+            <strong>📜 Sijil &amp; Kursus Profesional Dimiliki (${earnedCerts.length})</strong><br/>
+            ${earnedCerts.map(ct => `• ${ct.icon} <strong>${Utils.escapeHtml(ct.title)}</strong> <small style="opacity:0.8;">(${Utils.escapeHtml(ct.group)} • +${ct.salaryBonusPct}% gaji)</small>`).join('<br/>')}
+          </div>
+        ` : ''}
         ${s.age >= 18 && window.LegalInheritanceEngine ? `<button class="secondary-btn" id="btn-biodata-wasiat" style="width:100%;margin-bottom:10px;">📜 Urus Wasiat &amp; Perancangan Pusaka</button>` : ''}
       `;
 

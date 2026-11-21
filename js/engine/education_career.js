@@ -387,7 +387,7 @@ window.EduCareerEngine = {
   checkCertificateEligibility(s, cert) {
     this.ensureFields(s);
     const ed = s.education;
-    if (s.age < 17) return { ok: false, reason: 'Dibuka bermula umur 17 tahun.' };
+    if (!cert.noAgeLimit && s.age < 17) return { ok: false, reason: 'Dibuka bermula umur 17 tahun.' };
     if (s.prison && s.prison.inPrison) return { ok: false, reason: 'Tidak tersedia ketika di dalam penjara.' };
     if (ed.certificates.includes(cert.id)) return { ok: false, reason: 'Sudah Dimiliki' };
 
@@ -415,44 +415,75 @@ window.EduCareerEngine = {
     return { ok: true, reason: '' };
   },
 
+  getMatchedCertificatesForCareer(s, career) {
+    const certs = (s && s.education && s.education.certificates) || [];
+    if (!certs.length || !career || !window.EducationData) return [];
+    const reqFields = Array.isArray(career.requiredFields) ? career.requiredFields : [];
+    const prefCerts = Array.isArray(career.preferredCerts) ? career.preferredCerts : [];
+    const matched = [];
+    for (const cid of certs) {
+      if (prefCerts.includes(cid)) {
+        matched.push(cid);
+        continue;
+      }
+      const cObj = EducationData.CERTIFICATES.find(x => x.id === cid);
+      if (cObj && Array.isArray(cObj.matchFields) && reqFields.length > 0 && cObj.matchFields.some(f => reqFields.includes(f))) {
+        matched.push(cid);
+      }
+    }
+    return matched;
+  },
+
   takeCertificate(certId) {
     const s = GameState.current;
     this.ensureFields(s);
     const cert = EducationData.CERTIFICATES.find(c => c.id === certId);
-    if (!cert) return { ok: false, msg: 'Sijil tidak ditemui.' };
-    if (s.yearlyActions.tookCert) return { ok: false, msg: 'Anda hanya boleh mengambil 1 peperiksaan sijil profesional setahun!' };
+    if (!cert) return { ok: false, msg: 'Sijil / kursus tidak ditemui.' };
+    if (s.yearlyActions.tookCert && !cert.isModernCourse) {
+      return { ok: false, msg: 'Anda hanya boleh mengambil 1 peperiksaan sijil profesional setahun!' };
+    }
+    if (cert.isModernCourse && (s.yearlyActions.modernCoursesTaken || 0) >= 2) {
+      return { ok: false, msg: 'Had 2 Kursus Profesional setahun telah dicapai.' };
+    }
 
     const elig = this.checkCertificateEligibility(s, cert);
     if (!elig.ok) return { ok: false, msg: elig.reason };
 
     const costLocal = Utils.usdToLocal(cert.costUsd, s.countryId);
     if (s.money < costLocal) {
-      return { ok: false, msg: `Yuran kursus & peperiksaan ialah ${Utils.formatMoney(costLocal, s.countryId)}.` };
+      return { ok: false, msg: `Yuran kursus & pensijilan ialah ${Utils.formatMoney(costLocal, s.countryId)}.` };
     }
 
     s.money -= costLocal;
-    s.yearlyActions.tookCert = true;
+    if (typeof s.activityEnergyLeft === 'number' && s.activityEnergyLeft > 0) {
+      s.activityEnergyLeft -= 1;
+    }
+    if (cert.isModernCourse) {
+      s.yearlyActions.modernCoursesTaken = (s.yearlyActions.modernCoursesTaken || 0) + 1;
+    } else {
+      s.yearlyActions.tookCert = true;
+    }
 
-    const passChance = Utils.clamp(0.62 + ((s.stats.smarts - (cert.smartsReq || 40)) * 0.008), 0.30, 0.96);
+    const passChance = Math.max(0.30, Math.min(0.96, 0.65 + ((s.stats.smarts - (cert.smartsReq || 40)) * 0.008)));
     if (Utils.chance(passChance)) {
       s.education.certificates.push(cert.id);
       GameState.adjustStats({ smarts: Utils.randInt(4, 7), happiness: 11 });
       if (window.Dynasty) Dynasty.adjustReputation(2);
       if (window.Utils && Utils.playTone) Utils.playTone('achievement');
       GameState.addJournalEntry(
-        `📜 LULUS SIJIL! Anda memperoleh ${cert.icon} ${cert.title}! Bonus gaji +${cert.salaryBonusPct}% & peluang temu duga lebih tinggi dalam bidang berkaitan.`,
+        `📜 TAMAT KURSUS & SIJIL! Anda memperoleh ${cert.icon} ${cert.title} (Umur ${s.age} thn)! Bonus gaji +${cert.salaryBonusPct}% & kelebihan temu duga dalam bidang berkaitan.`,
         'milestone'
       );
       GameState.save();
-      return { ok: true, msg: `Tahniah! Lulus ${cert.title} (+${cert.salaryBonusPct}% bonus gaji)!` };
+      return { ok: true, msg: `Tahniah! Memperoleh ${cert.title} (+${cert.salaryBonusPct}% bonus gaji)!` };
     } else {
       GameState.adjustStats({ smarts: 2, happiness: -4 });
       GameState.addJournalEntry(
-        `📜 Anda tidak sempat mencapai markah lulus untuk peperiksaan ${cert.title} kali ini, namun ilmu kursus meningkatkan Kepintaran (+2%).`,
+        `📜 Anda tidak sempat mencapai markah lulus untuk pensijilan ${cert.title} kali ini, namun ilmu kursus meningkatkan Kepintaran (+2%).`,
         'warning'
       );
       GameState.save();
-      return { ok: false, msg: `Gagal peperiksaan ${cert.title} kali ini — tingkatkan Kepintaran & cuba lagi tahun depan!` };
+      return { ok: false, msg: `Belum lulus penilaian ${cert.title} kali ini — tingkatkan Kepintaran & cuba lagi!` };
     }
   },
 
@@ -464,16 +495,12 @@ window.EduCareerEngine = {
     const mult = c.salaryMultiplier || 0.55;
     const rankMult = 1 + (rankIndex * 0.28);
     let certBonus = 1;
-    const certs = (s.education && s.education.certificates) || [];
-    if (Array.isArray(career.preferredCerts)) {
-      for (const cid of career.preferredCerts) {
-        if (certs.includes(cid)) {
-          const cObj = EducationData.CERTIFICATES.find(x => x.id === cid);
-          certBonus += ((cObj ? cObj.salaryBonusPct : 12) / 100);
-        }
-      }
+    const matchedCerts = this.getMatchedCertificatesForCareer(s, career);
+    for (const cid of matchedCerts) {
+      const cObj = EducationData.CERTIFICATES.find(x => x.id === cid);
+      certBonus += ((cObj ? cObj.salaryBonusPct : 12) / 100);
     }
-    certBonus = Math.min(1.40, certBonus);
+    certBonus = Math.min(1.45, certBonus);
     const usdAnnual = Math.round(career.baseSalary * mult * rankMult * certBonus);
     return Utils.usdToLocal(usdAnnual, s.countryId);
   },
@@ -603,11 +630,10 @@ window.EduCareerEngine = {
       mod += (lvlRank >= 4 || lvlRank > reqRank) ? 15 : 10;
     }
 
-    // 2) Sijil Profesional Sepadan (+8% hingga +12%)
-    const certs = ed.certificates || [];
-    const matchedCerts = (career.preferredCerts || []).filter(cid => certs.includes(cid));
+    // 2) Sijil & Kursus Profesional Sepadan (+8% hingga +14%)
+    const matchedCerts = this.getMatchedCertificatesForCareer(s, career);
     if (matchedCerts.length > 0) {
-      mod += matchedCerts.length >= 2 ? 12 : 8;
+      mod += matchedCerts.length >= 2 ? 14 : 9;
     }
 
     // 3) Kepintaran / Rupa / Pengalaman Tinggi (+5% hingga +12%)
