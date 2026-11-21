@@ -728,6 +728,48 @@ window.Relationships = {
   // --------------------------------------------------------------------------
   // 5. KEIBUBAPAAN & DIDIKAN ANAK (UMUR 0–17, MAKSIMUM 3 TINDAKAN/TAHUN/ANAK)
   // --------------------------------------------------------------------------
+  getChildEduActionMeta(age) {
+    const a = Number(age) || 0;
+    if (a <= 3) {
+      return {
+        icon: '🧸',
+        title: 'Stimulasi Awal & Rangsangan Bayi',
+        desc: 'Rangsang perkembangan otak, deria & kemahiran motor bayi',
+        costUsd: 90,
+        logFn: (name, costStr) => `🧸 Anda menyediakan aktiviti stimulasi awal & rangsangan minda untuk ${name} (${costStr}). Perkembangan awal bayinya amat memberangsangkan!`,
+        toastFn: (name, care) => `Perkembangan awal ${name} meningkat (${care}%)!`
+      };
+    }
+    if (a <= 6) {
+      return {
+        icon: '🎨',
+        title: 'Hantar ke Tadika / Prasekolah',
+        desc: 'Bina asas membaca, mengira & kemahiran sosial prasekolah',
+        costUsd: 140,
+        logFn: (name, costStr) => `🎨 Anda menghantar ${name} ke Tadika / Prasekolah (${costStr}). Asas pembelajaran & keyakinan dirinya semakin menyerlah!`,
+        toastFn: (name, care) => `Asas prasekolah ${name} meningkat (${care}%)!`
+      };
+    }
+    if (a <= 12) {
+      return {
+        icon: '📚',
+        title: 'Beri Tuisyen & Bimbingan Belajar',
+        desc: 'Tingkatkan Kepintaran & penguasaan subjek sekolah rendah',
+        costUsd: 180,
+        logFn: (name, costStr) => `📚 Anda mendaftarkan ${name} ke kelas tuisyen & bimbingan belajar (${costStr}). Kepintaran & prestasi sekolah rendahnya meningkat!`,
+        toastFn: (name, care) => `Prestasi belajar ${name} meningkat (${care}%)!`
+      };
+    }
+    return {
+      icon: '🎓',
+      title: 'Tuisyen & Bimbingan Akademik / Kerjaya',
+      desc: 'Persediaan peperiksaan, kepintaran & hala tuju masa depan remaja',
+      costUsd: 220,
+      logFn: (name, costStr) => `🎓 Anda mendaftarkan ${name} ke program tuisyen & bimbingan akademik/kerjaya (${costStr}). Kepintaran & persediaan masa depannya semakin mantap!`,
+      toastFn: (name, care) => `Bimbingan akademik ${name} meningkat (${care}%)!`
+    };
+  },
+
   parentChild(childId, action) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
@@ -751,17 +793,18 @@ window.Relationships = {
     if (!child.stats) child.stats = { smarts: 65, health: 80 };
 
     if (action === 'education') {
-      const cost = Utils.usdToLocal(180, s.countryId);
-      if (s.money < cost) return { ok: false, msg: `Kos tuisyen & pendidikan ialah ${Utils.formatMoney(cost, s.countryId)}.` };
+      const eduMeta = this.getChildEduActionMeta(child.age);
+      const cost = Utils.usdToLocal(eduMeta.costUsd, s.countryId);
+      if (s.money < cost) return { ok: false, msg: `Kos ${eduMeta.title} ialah ${Utils.formatMoney(cost, s.countryId)}.` };
       s.money -= cost;
       s.yearlyActions[actKey] = true;
       s.yearlyActions[countKey] = used + 1;
       child.educationCare = Utils.clamp((child.educationCare ?? 60) + Utils.randInt(14, 22), 0, 100);
       child.stats.smarts = Utils.clamp((child.stats.smarts ?? 65) + Utils.randInt(5, 10), 0, 100);
       child.rebelliousness = Utils.clamp((child.rebelliousness ?? 10) - 4, 0, 100);
-      GameState.addJournalEntry(`📚 Anda mendaftarkan ${child.name} ke kelas tuisyen & pendidikan (${Utils.formatMoney(cost, s.countryId)}). Kepintaran & penjagaan pendidikannya meningkat!`);
+      GameState.addJournalEntry(eduMeta.logFn(child.name, Utils.formatMoney(cost, s.countryId)));
       GameState.save();
-      return { ok: true, msg: `Pendidikan ${child.name} meningkat (${child.educationCare}%)!` };
+      return { ok: true, msg: eduMeta.toastFn(child.name, child.educationCare) };
     }
 
     if (action === 'health') {

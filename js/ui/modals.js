@@ -661,14 +661,17 @@ window.Modals = {
       : '';
 
     const parentCountUsed = s.yearlyActions[`parent_cnt_${rel.id}`] || 0;
-    const eduCost = Utils.usdToLocal(180, s.countryId);
+    const eduMeta = (isMinorChild && window.Relationships && Relationships.getChildEduActionMeta)
+      ? Relationships.getChildEduActionMeta(rel.age)
+      : { icon: '📚', title: 'Beri Tuisyen & Bimbingan Belajar', desc: 'Tingkatkan Kepintaran & penjagaan pendidikan anak', costUsd: 180 };
+    const eduCost = Utils.usdToLocal(eduMeta.costUsd || 180, s.countryId);
     const healthCost = Utils.usdToLocal(120, s.countryId);
 
     const childUpbringingHtml = isMinorChild ? `
       <div class="info-banner ${rel.isDelinquent ? '' : 'highlight'}" style="${rel.isDelinquent ? 'background:#fef2f2;border-color:#fecaca;' : ''}line-height:1.6;">
         <strong>👶 Perkembangan &amp; Didikan Anak (Umur ${rel.age}/17)</strong>
         ${rel.isDelinquent ? ' <span class="cat-badge" style="background:#dc2626;color:#fff;">⚠️ DELINKUEN</span>' : ''}<br/>
-        📚 Penjagaan Pendidikan: <strong>${rel.educationCare ?? 65}%</strong> (Kepintaran: ${(rel.stats && rel.stats.smarts) ?? 65}%)<br/>
+        ${eduMeta.icon} Penjagaan Pendidikan / Perkembangan: <strong>${rel.educationCare ?? 65}%</strong> (Kepintaran: ${(rel.stats && rel.stats.smarts) ?? 65}%)<br/>
         🩺 Penjagaan Kesihatan: <strong>${rel.healthCare ?? 75}%</strong> (Kesihatan: ${(rel.stats && rel.stats.health) ?? 80}%)<br/>
         🌟 Akhlak &amp; Moral: <strong>${rel.morals ?? 70}%</strong> • 🔥 Pemberontakan: <strong style="color:${(rel.rebelliousness ?? 10) > 65 ? '#dc2626' : 'inherit'};">${rel.rebelliousness ?? 10}%</strong><br/>
         <small style="opacity:0.8;">Tindakan keibubapaan tahun ini: <strong>${parentCountUsed}/3</strong></small>
@@ -676,10 +679,10 @@ window.Modals = {
       <div class="section-heading">👨‍👩‍👧 Tindakan Keibubapaan (${parentCountUsed}/3 Tahun Ini)</div>
       <div class="action-list" style="margin-bottom:10px;">
         <button class="action-item parent-act-btn" data-pact="education" ${parentCountUsed >= 3 || s.yearlyActions[`parent_${rel.id}_education`] ? 'disabled' : ''}>
-          <span class="ai-icon">📚</span>
+          <span class="ai-icon">${eduMeta.icon}</span>
           <span class="ai-content">
-            <span class="ai-title">Beri Pendidikan / Tuisyen</span>
-            <span class="ai-desc">Tingkatkan Kepintaran &amp; penjagaan pendidikan anak</span>
+            <span class="ai-title">${Utils.escapeHtml(eduMeta.title)}</span>
+            <span class="ai-desc">${Utils.escapeHtml(eduMeta.desc)}</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(eduCost, s.countryId)}</span>
         </button>
