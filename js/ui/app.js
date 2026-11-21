@@ -29,6 +29,9 @@ window.App = {
     document.getElementById('btn-menu').addEventListener('click', () => Modals.showMenu());
     document.getElementById('btn-passport').addEventListener('click', () => Modals.showActivities('passport'));
     document.getElementById('char-avatar').addEventListener('click', () => Modals.showActivities('passport'));
+    document.getElementById('btn-open-legacy').addEventListener('click', () => {
+      if (GameState.current && GameState.current.alive && window.LegacyModals) LegacyModals.showFamilyLegacy();
+    });
     document.getElementById('btn-open-modes').addEventListener('click', () => {
       if (GameState.current && GameState.current.alive) ModeModals.showLifeModes('crime');
     });
@@ -48,7 +51,7 @@ window.App = {
         if (tab === 'occupation') Modals.showOccupation();
         else if (tab === 'assets') Modals.showAssets();
         else if (tab === 'relationships') Modals.showRelationships();
-        else if (tab === 'activities') Modals.showActivities('culture');
+        else if (tab === 'activities') Modals.showActivities('deck');
       });
     });
   },
@@ -273,6 +276,14 @@ window.App = {
       } else {
         prisonBar.classList.add('hidden');
       }
+    }
+    const legBtn = document.getElementById('btn-open-legacy');
+    if (legBtn && window.Dynasty) {
+      const d = Dynasty.getData();
+      const st = Dynasty.getStatusBadge(d.legacyStatus);
+      legBtn.textContent = `${d.legacyStatus === 'Tarnished' ? '💔' : d.legacyStatus === 'Redeemed' ? '🌟' : '👑'} Gen ${s.generation || d.generation || 1}`;
+      legBtn.classList.toggle('tarnished', d.legacyStatus === 'Tarnished');
+      legBtn.title = `Legasi Keluarga • ${st.label} (Reputasi ${d.familyReputation}%)`;
     }
 
     this._renderStat('happiness', s.stats.happiness);

@@ -714,8 +714,8 @@ window.ModeModals = {
             <span class="val">${beliefObj.icon} ${beliefObj.name}</span>
           </div>
           <div class="summary-stat">
-            <span class="lbl">Tempat Lahir</span>
-            <span class="val">${birthC.flag} ${birthC.name}</span>
+            <span class="lbl">Status Dinasti (Gen ${s.generation || 1})</span>
+            <span class="val">${window.Dynasty ? `${Dynasty.getStatusBadge(Dynasty.getData().legacyStatus).icon} ${Dynasty.getStatusBadge(Dynasty.getData().legacyStatus).label} (${Dynasty.getData().familyReputation}%)` : '🛡️ Utuh'}</span>
           </div>
           <div class="summary-stat">
             <span class="lbl">Negara Didiami</span>
@@ -729,17 +729,38 @@ window.ModeModals = {
         <div class="endings-grid">${endingsGrid}</div>
 
         ${kidsHtml}
-        <button class="primary-btn" id="btn-death-new-life" style="margin-top:10px;">✨ Cuba Takdir &amp; Kehidupan Baru</button>
+        <button class="primary-btn" id="btn-continue-legacy-heir" style="margin-top:10px;background:linear-gradient(135deg,#6d28d9,#4f46e5);">
+          👑 Sambung Legasi Keluarga (Main Sebagai Pewaris — Gen ${(s.generation || 1) + 1})
+        </button>
+        <button class="ghost-btn" id="btn-death-new-life" style="margin-top:8px;">✨ Mula Dinasti &amp; Kehidupan Baru (Gen 1)</button>
       `
     });
 
-    document.querySelectorAll('.continue-kid-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const next = GameState.continueAsChild(btn.dataset.kidId);
+    const heirBtn = document.getElementById('btn-continue-legacy-heir');
+    if (heirBtn) {
+      heirBtn.addEventListener('click', () => {
+        const next = GameState.continueFamilyLegacy();
         if (next) {
           Modals.close(true);
           App.renderAll();
-          App.toast(`Menyambung legasi sebagai ${next.name} (Gen ${next.generation})!`, 'culture');
+          App.toast(`👑 Menyambung Dinasti Generasi ${next.generation} sebagai ${next.name}!`, 'culture');
+          if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
+            setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
+          }
+        }
+      });
+    }
+
+    document.querySelectorAll('.continue-kid-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = GameState.continueFamilyLegacy(btn.dataset.kidId);
+        if (next) {
+          Modals.close(true);
+          App.renderAll();
+          App.toast(`👑 Menyambung legasi sebagai ${next.name} (Gen ${next.generation})!`, 'culture');
+          if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
+            setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
+          }
         }
       });
     });

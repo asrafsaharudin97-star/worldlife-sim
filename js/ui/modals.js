@@ -741,22 +741,25 @@ window.Modals = {
   // --------------------------------------------------------------------------
   // 5. HAB AKTIVITI (Budaya Tempatan, Hijrah, Pasport, Kesihatan & Lain)
   // --------------------------------------------------------------------------
-  showActivities(activeSubTab = 'culture') {
+  showActivities(activeSubTab = 'deck') {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
 
     const tabsHtml = `
       <div class="tab-pills">
-        <button class="tab-pill ${activeSubTab === 'culture' ? 'active' : ''}" data-sub="culture">${c.flag} Budaya Tempatan</button>
-        <button class="tab-pill ${activeSubTab === 'migrate' ? 'active' : ''}" data-sub="migrate">✈️ Hijrah Luar Negara</button>
-        <button class="tab-pill ${activeSubTab === 'passport' ? 'active' : ''}" data-sub="passport">🛂 Pasport &amp; PR</button>
+        <button class="tab-pill ${activeSubTab === 'deck' ? 'active' : ''}" data-sub="deck">🎲 Dek Aktiviti</button>
+        <button class="tab-pill ${activeSubTab === 'culture' ? 'active' : ''}" data-sub="culture">${c.flag} Budaya</button>
+        <button class="tab-pill ${activeSubTab === 'migrate' ? 'active' : ''}" data-sub="migrate">✈️ Hijrah</button>
+        <button class="tab-pill ${activeSubTab === 'passport' ? 'active' : ''}" data-sub="passport">🛂 Pasport</button>
         <button class="tab-pill ${activeSubTab === 'lifestyle' ? 'active' : ''}" data-sub="lifestyle">💪 Gaya Hidup</button>
       </div>
     `;
 
     let contentHtml = '';
 
-    if (activeSubTab === 'culture') {
+    if (activeSubTab === 'deck' && window.LegacyModals && LegacyModals.renderDynamicActivitiesTab) {
+      contentHtml += LegacyModals.renderDynamicActivitiesTab(s, c);
+    } else if (activeSubTab === 'culture') {
       const adapt = GameState.getCurrentAdaptation();
       contentHtml += `
         <div class="info-banner culture-box">
@@ -1013,6 +1016,10 @@ window.Modals = {
       pill.addEventListener('click', () => this.showActivities(pill.dataset.sub));
     });
 
+    if (activeSubTab === 'deck' && window.LegacyModals && LegacyModals.bindDynamicActivities) {
+      LegacyModals.bindDynamicActivities(() => this.showActivities('deck'));
+    }
+
     document.querySelectorAll('.culture-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const act = c.cultureActivities.find(a => a.id === btn.dataset.actId);
@@ -1185,6 +1192,13 @@ window.Modals = {
       subtitle: 'Laluan Hidup, Legasi & Penamat Rahsia',
       bodyHtml: `
         <div class="action-list">
+          <button class="action-item" id="menu-open-legacy">
+            <span class="ai-icon">👑</span>
+            <span class="ai-content">
+              <span class="ai-title">Legasi Keluarga &amp; Pencapaian Dinasti</span>
+              <span class="ai-desc">Salasilah, Reputasi Keluarga, Status Legasi &amp; Generasi Perdana</span>
+            </span>
+          </button>
           <button class="action-item" id="menu-open-modes">
             <span class="ai-icon">🎭</span>
             <span class="ai-content">
@@ -1220,6 +1234,9 @@ window.Modals = {
       `
     });
 
+    document.getElementById('menu-open-legacy').addEventListener('click', () => {
+      if (GameState.current && window.LegacyModals) LegacyModals.showFamilyLegacy();
+    });
     document.getElementById('menu-open-modes').addEventListener('click', () => {
       if (GameState.current && GameState.current.alive && window.ModeModals) ModeModals.showLifeModes('crime');
     });

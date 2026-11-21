@@ -67,6 +67,14 @@ window.Sim = {
     // 4B. Penjara, Pendapatan 5 Mod Khas, Laman Sosial & Penyelarasan Stres/Haba Polis
     this._processModesAndAlignment(s, c);
 
+    // 4C. Rombak Dek Aktiviti Tahunan & Kemas Kini Dinasti / Timer Penebusan
+    if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
+      ActivitiesDeck.generateYearlyDeck(s);
+    }
+    if (window.Dynasty && Dynasty.tickYear) {
+      Dynasty.tickYear(s);
+    }
+
     // 5. Perubahan statistik semula jadi & ketahanan rohani
     if (s.age > 55) {
       const healthDrop = Utils.randInt(1, Math.min(8, Math.floor((s.age - 50) / 5) + 1));
@@ -389,6 +397,12 @@ window.Sim = {
   _pickYearlyEvent(s, c) {
     if (s.age < 5) return null;
     if (s.prison && s.prison.inPrison) return null;
+
+    // 0A. Sabotaj Legasi & Peluang Penebusan Dinasti (Timer Penebusan / Serangan Musuh)
+    if (window.Dynasty && Dynasty.pickLegacyEvent) {
+      const legEv = Dynasty.pickLegacyEvent(s, c);
+      if (legEv) return legEv;
+    }
 
     // 0. Peristiwa Khusus Dunia Bawah (Serbuan Pasukan Khas / Omertà) & Mod Kemasyhuran (Kontrak / Siasatan Politik)
     if (window.UnderworldModes) {

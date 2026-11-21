@@ -207,8 +207,14 @@ window.GameState = {
       ]
     };
 
+    if (window.Dynasty && Dynasty.resetForFreshDynasty) {
+      Dynasty.resetForFreshDynasty();
+    }
     this.current = state;
     this.ensureUpgradedState();
+    if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
+      ActivitiesDeck.generateYearlyDeck(state);
+    }
     this.save();
     return state;
   },
@@ -295,6 +301,14 @@ window.GameState = {
     if (!s.activeArcs || typeof s.activeArcs !== 'object') s.activeArcs = {};
     if (!Array.isArray(s.highlights)) s.highlights = [];
     if (!Array.isArray(s.modesVisited)) s.modesVisited = [];
+    if (!Array.isArray(s.traits) || s.traits.length === 0) {
+      s.traits = (window.ActivitiesDeck && ActivitiesDeck.pickInitialTraits)
+        ? ActivitiesDeck.pickInitialTraits()
+        : ['ambitious', 'charismatic'];
+    }
+    if (!Array.isArray(s.yearlyDeck)) {
+      s.yearlyDeck = [];
+    }
 
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
@@ -496,6 +510,159 @@ window.GameState = {
 
     this.current = state;
     this.ensureUpgradedState();
+    if (window.Dynasty) {
+      const bonuses = Dynasty.getBloodlineBonuses();
+      if (bonuses.startingWealthMult && state.money > 0) {
+        state.money = Math.round(state.money * (1 + bonuses.startingWealthMult));
+      }
+      Dynasty.checkPrimeGeneration(state.generation, state);
+    }
+    if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
+      ActivitiesDeck.generateYearlyDeck(state);
+    }
+    this.save();
+    return state;
+  },
+
+  // Sambung Legasi Keluarga — gunakan anak hidup jika ada, atau pewaris waris terdekat jika tiada anak
+  continueFamilyLegacy(childId = null) {
+    const parent = this.current;
+    if (!parent) return null;
+    if (window.Dynasty) Dynasty.recordMemberDeath(parent);
+
+    if (childId) {
+      return this.continueAsChild(childId);
+    }
+    const livingKids = parent.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+    if (livingKids.length > 0) {
+      return this.continueAsChild(livingKids[0].id);
+    }
+
+    // Jika tiada anak hidup: lantik pewaris waris keluarga (anak saudara / waris terdekat) supaya dinasti tidak putus!
+    const cId = parent.countryId;
+    const country = Utils.getCountry(cId);
+    const city = parent.city || Utils.pick(country.cities);
+    const heirGender = Utils.chance(0.5) ? 'male' : 'female';
+    const validHeritage = (parent.heritageId && country.names[parent.heritageId]) ? parent.heritageId : country.heritages[0].id;
+    const belief = parent.belief || parent.familyBelief || 'unassigned';
+    const fatherRef = parent.gender === 'male' ? parent.name : Utils.generateName(cId, 'male', validHeritage);
+    const heirName = Utils.generateChildName({
+      countryId: cId,
+      gender: heirGender,
+      heritageId: validHeritage,
+      belief,
+      fatherFullName: fatherRef,
+      isAdopted: false,
+      isOutOfWedlock: false
+    });
+
+    const netWorth = this.getNetWorth(); // Kekalkan harta ATAU hutang legasi!
+    const newGen = (parent.generation || 1) + 1;
+    const heirAge = Utils.randInt(16, 22);
+
+    const state = {
+      id: 'life_' + Date.now(),
+      name: heirName,
+      gender: heirGender,
+      heritageId: validHeritage,
+      heritageLabel: parent.heritageLabel,
+      isAdopted: false,
+      isOutOfWedlock: false,
+      age: heirAge,
+      year: parent.year,
+      alive: true,
+      causeOfDeath: null,
+
+      belief,
+      familyBelief: belief,
+      devotion: Utils.randInt(35, 65),
+      lastSpiritualAge: -99,
+      spiritualHistory: [],
+      hiddenFlags: {},
+      recentCrises: [],
+
+      birthCountryId: cId,
+      birthCity: city,
+      countryId: cId,
+      city,
+      residencyStatus: 'Citizen',
+      yearsInCurrentCountry: heirAge,
+      citizenships: [cId],
+      culturalAdaptation: { [cId]: 100 },
+      passportStamps: [
+        { countryId: cId, city, year: parent.year - heirAge, age: 0, type: 'Kelahiran Pewaris', status: 'Citizen' }
+      ],
+      countriesLivedIn: [cId],
+
+      stats: {
+        happiness: Utils.randInt(60, 82),
+        health: Utils.randInt(78, 96),
+        smarts: Utils.randInt(55, 88),
+        looks: Utils.randInt(55, 88)
+      },
+
+      money: netWorth,
+      investments: 0,
+      retirementFund: 0,
+      annualExpensesMultiplier: 1,
+      criminalRecord: 0,
+      hasDriverLicense: heirAge >= 18,
+      generation: newGen,
+
+      education: {
+        stage: heirAge < 18 ? 'secondary' : 'highschool_done',
+        schoolName: heirAge < 18 ? `${city} ${country.education.secondary.name}` : null,
+        universityName: null,
+        uniYearsLeft: 0,
+        hasHighSchool: heirAge >= 18,
+        hasDegree: false,
+        examGrade: heirAge >= 18 ? 'Lulus' : null
+      },
+      job: null,
+      peakSalaryUsd: 0,
+
+      assets: { vehicles: [], properties: [] },
+      relationships: [],
+      partnerId: null,
+      married: false,
+
+      yearlyActions: {},
+      seenEventIds: [],
+
+      journal: [
+        {
+          age: heirAge,
+          year: parent.year,
+          countryId: cId,
+          city,
+          entries: [
+            {
+              type: 'milestone',
+              text: `👑 Legasi Dinasti Generasi ${newGen}! Sebagai pewaris waris keluarga, ${heirName} (Umur ${heirAge}) menyambung obor keluarga selepas pemergian ${parent.name}.`
+            },
+            {
+              type: netWorth >= 0 ? 'culture' : 'warning',
+              text: netWorth >= 0
+                ? `💰 Anda mewarisi harta pusaka bernilai ${Utils.formatMoney(netWorth, cId)} daripada ${parent.name}!`
+                : `💸 Anda terpaksa menanggung legasi hutang sebanyak ${Utils.formatMoney(netWorth, cId)} daripada ${parent.name}!`
+            }
+          ]
+        }
+      ]
+    };
+
+    this.current = state;
+    this.ensureUpgradedState();
+    if (window.Dynasty) {
+      const bonuses = Dynasty.getBloodlineBonuses();
+      if (bonuses.startingWealthMult && state.money > 0) {
+        state.money = Math.round(state.money * (1 + bonuses.startingWealthMult));
+      }
+      Dynasty.checkPrimeGeneration(newGen, state);
+    }
+    if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
+      ActivitiesDeck.generateYearlyDeck(state);
+    }
     this.save();
     return state;
   },
@@ -540,6 +707,9 @@ window.GameState = {
   archiveCurrentLife() {
     const s = this.current;
     if (!s) return;
+    if (window.Dynasty && Dynasty.recordMemberDeath) {
+      Dynasty.recordMemberDeath(s);
+    }
     const ribbon = this.computeRibbon(s);
     const history = this.getHistory();
     history.unshift({

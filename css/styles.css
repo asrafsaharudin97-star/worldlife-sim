@@ -1262,3 +1262,193 @@ html, body {
   background: #f1f5f9;
   color: #94a3b8;
 }
+
+/* ==========================================================================
+   DEK AKTIVITI DINAMIK, CIRI PERSONALITI & LEGASI DINASTI
+   ========================================================================== */
+.quick-hub-btn.legacy-btn {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+.quick-hub-btn.legacy-btn.tarnished {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.traits-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.trait-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.action-item.rare-activity {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1.5px solid #f59e0b;
+  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.18);
+}
+.cat-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #334155;
+  margin-right: 4px;
+  margin-bottom: 2px;
+}
+.cat-badge.rare {
+  background: #f59e0b;
+  color: #fff;
+}
+.cat-badge.synergy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.legacy-hero {
+  border-radius: 14px;
+  padding: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  margin-bottom: 10px;
+}
+.legacy-hero.tarnished {
+  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+}
+.legacy-hero.redeemed {
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%);
+}
+.lh-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lh-gen {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  opacity: 0.85;
+}
+.lh-name {
+  font-size: 16px;
+  font-weight: 800;
+  font-family: 'Outfit', sans-serif;
+}
+.legacy-status-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.lh-rep-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.lh-tarnish-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.prime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.prime-card {
+  border-radius: 12px;
+  padding: 10px;
+  border: 1.5px solid var(--border-subtle);
+  background: #f8fafc;
+}
+.prime-card.unlocked {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+.prime-card.locked {
+  opacity: 0.72;
+}
+.pc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.pc-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+.prime-card.unlocked .pc-tag {
+  background: #16a34a;
+  color: #fff;
+}
+.pc-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+.pc-desc {
+  font-size: 11px;
+  line-height: 1.38;
+  color: var(--text-secondary);
+}
+
+.dynasty-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dynasty-node {
+  border-left: 3px solid #6366f1;
+  background: #f8fafc;
+  padding: 9px 11px;
+  border-radius: 0 10px 10px 0;
+}
+.dn-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.dn-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.dn-sub {
+  font-size: 11.5px;
+  color: #475569;
+  margin-top: 2px;
+}
+.dn-event {
+  font-size: 11.5px;
+  color: #334155;
+  margin-top: 4px;
+  font-style: italic;
+}
