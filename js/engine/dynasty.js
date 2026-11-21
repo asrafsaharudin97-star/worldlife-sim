@@ -195,8 +195,13 @@ window.Dynasty = {
 
     const alias = (s.fugitive && s.fugitive.aliasName) ? s.fugitive.aliasName : null;
     const trueName = (s.fugitive && s.fugitive.trueName) ? s.fugitive.trueName : s.name;
+    const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
+    const finalOcc = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: 'Tiada Pekerjaan' };
+    const peakRole = s.peakRole || finalOcc.title;
     if (alias) {
       topHighlight = `Hidup dalam buangan dengan nama samaran ${alias} (Nama asal: ${trueName}) • ${topHighlight}`;
+    } else if (peakRole && peakRole !== 'Tiada Pekerjaan') {
+      topHighlight = `Peranan Utama: ${peakRole} • ${topHighlight}`;
     }
 
     const netWorth = GameState.getNetWorth();
@@ -207,8 +212,9 @@ window.Dynasty = {
       d.dynastyHistory.unshift({
         id: s.id,
         generation: s.generation || d.generation || 1,
-        name: alias ? `${trueName} (a.k.a. ${alias})` : s.name,
+        name: alias ? `${trueName} (a.k.a. ${alias})` : titledName,
         alias,
+        peakRole,
         age: s.age,
         lifespan: s.age,
         yearDied: s.year,

@@ -311,8 +311,38 @@ window.ModeModals = {
               </span>
               <span class="ai-right cost">Korup</span>
             </button>
+            <button class="action-item pol-act-btn" data-polact="leave" ${s.prison.inPrison ? 'disabled' : ''}>
+              <span class="ai-icon">🚪</span>
+              <span class="ai-content">
+                <span class="ai-title">Letak Jawatan &amp; Bersara Politik</span>
+                <span class="ai-desc">Keluar daripada arena politik aktif secara bersih</span>
+              </span>
+              <span class="ai-right cost">Keluar</span>
+            </button>
           </div>
         `;
+      }
+    }
+
+    // Papan Tindakan Dinamik 5–6 Pilihan Tahunan untuk Mod Aktif (Politik, Mafia, Jenayah, Artis, Pelakon)
+    let dynamicModeBoardHtml = '';
+    if (window.ModeEngine) {
+      const modeActiveMap = {
+        crime: true,
+        mafia: Boolean(s.modes.mafia && s.modes.mafia.active),
+        artist: Boolean(s.modes.artist && s.modes.artist.active),
+        actor: Boolean(s.modes.actor && s.modes.actor.active),
+        politic: Boolean(s.modes.politic && s.modes.politic.active)
+      };
+      const modeTitles = {
+        crime: 'Operasi Dinamik Jenayah',
+        mafia: 'Operasi Dinamik Sindiket',
+        artist: 'Peluang Dinamik Artis',
+        actor: 'Peluang Dinamik Pelakon',
+        politic: 'Agenda Dinamik Politik & Menteri'
+      };
+      if (modeActiveMap[activeTab]) {
+        dynamicModeBoardHtml = ModeEngine.renderDynamicBoardHtml(s, activeTab, modeTitles[activeTab]);
       }
     }
 
@@ -320,8 +350,12 @@ window.ModeModals = {
       icon: '🎭',
       title: 'Laluan Hidup & 5 Mod Khas',
       subtitle: `Karma: ${s.alignment.karma} • Populariti: ${s.alignment.fame}% • Haba Polis: ${s.alignment.notoriety}%`,
-      bodyHtml: prisonHtml + tabsHtml + body
+      bodyHtml: prisonHtml + tabsHtml + body + dynamicModeBoardHtml
     });
+
+    if (window.ModeEngine) {
+      ModeEngine.bindDynamicBoard(() => this.showLifeModes(activeTab));
+    }
 
     document.querySelectorAll('.mode-tab').forEach(btn => {
       btn.addEventListener('click', () => this.showLifeModes(btn.dataset.mtab));
@@ -676,16 +710,21 @@ window.ModeModals = {
       `;
     }).join('');
 
+    const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
+    const finalOcc = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: s.job ? s.job.title : 'Tiada Pekerjaan', icon: '💼' };
+    const peakRoleText = s.peakRole || finalOcc.title;
+
     Modals.open({
       icon: ending.icon,
       title: 'Obituari & Laporan Legasi',
-      subtitle: `${s.name} • Gen ${s.generation || 1} (${s.year - s.age} – ${s.year})`,
+      subtitle: `${titledName} • Gen ${s.generation || 1} (${s.year - s.age} – ${s.year})`,
       locked: true,
       bodyHtml: `
         <div class="ribbon-hero">
           <div style="font-size:42px;line-height:1;">${ending.icon}</div>
-          <h3 style="margin:6px 0 2px;font-family:'Outfit',sans-serif;">${Utils.escapeHtml(s.name)}</h3>
+          <h3 style="margin:6px 0 2px;font-family:'Outfit',sans-serif;">${Utils.escapeHtml(titledName)}</h3>
           <div style="font-size:12px;opacity:0.88;">Meninggal dunia pada umur ${s.age} tahun di ${s.city}, ${c.name} ${c.flag} (${Utils.escapeHtml(s.causeOfDeath || 'Sakit tua')})</div>
+          <div style="font-size:12px;opacity:0.92;margin-top:3px;">${finalOcc.icon || '💼'} Peranan Akhir: <strong>${Utils.escapeHtml(finalOcc.title)}</strong>${peakRoleText && peakRoleText !== finalOcc.title ? ` • Puncak Kerjaya: <strong>${Utils.escapeHtml(peakRoleText)}</strong>` : ''}</div>
           <div class="ribbon-badge">🏆 Gelaran: ${ending.title}</div>
           <div style="font-size:12px;margin-top:8px;opacity:0.92;">${Utils.escapeHtml(ending.desc)}</div>
         </div>

@@ -342,6 +342,12 @@ window.GameState = {
     if (window.EduCareerEngine && EduCareerEngine.ensureFields) {
       EduCareerEngine.ensureFields(s);
     }
+    if (window.ModeEngine && ModeEngine.ensureFields) {
+      ModeEngine.ensureFields(s);
+    }
+    if (window.CharacterStatus && CharacterStatus.reconcileCharacterState) {
+      CharacterStatus.reconcileCharacterState(s);
+    }
   },
 
   setHiddenFlag(key, data = {}) {

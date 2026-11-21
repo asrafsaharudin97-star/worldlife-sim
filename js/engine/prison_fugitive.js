@@ -290,6 +290,7 @@ window.PrisonFugitive = {
 
   enterPrisonState(s, crimeName, years, securityLevel = 'minimum') {
     this.ensureFields(s);
+    if (window.CharacterStatus) CharacterStatus.syncCharacterModeTransitions(s, 'enter_prison');
     s.criminalRecord = (s.criminalRecord || 0) + 1;
     s.job = null;
     s.fugitive.isFugitive = false;

@@ -72,12 +72,18 @@ window.Sim = {
     // 4B. Penjara, Pendapatan 5 Mod Khas, Laman Sosial & Penyelarasan Stres/Haba Polis
     this._processModesAndAlignment(s, c);
 
-    // 4C. Rombak Dek Aktiviti Tahunan, Pasaran Kerja Dinamik & Kemas Kini Dinasti / Timer Penebusan
+    // 4C. Rombak Dek Aktiviti Tahunan, Pasaran Kerja Dinamik, Papan Mod Dinamik & Kemas Kini Dinasti
     if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
       ActivitiesDeck.generateYearlyDeck(s);
     }
     if (s.age >= 18 && window.EduCareerEngine && EduCareerEngine.generateYearlyJobMarket) {
       EduCareerEngine.generateYearlyJobMarket(s);
+    }
+    if (window.ModeEngine && ModeEngine.refreshAllYearlyBoards) {
+      ModeEngine.refreshAllYearlyBoards(s);
+    }
+    if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
+      CharacterStatus.recordPeakRole(s);
     }
     if (window.Dynasty && Dynasty.tickYear) {
       Dynasty.tickYear(s);
@@ -218,18 +224,21 @@ window.Sim = {
   },
 
   _processFinances(s, c) {
-    if (s.job) {
+    // Gunakan CharacterStatus.getTotalAnnualIncome sebagai SUMBER TUNGGAL untuk semua pendapatan!
+    const inc = window.CharacterStatus
+      ? CharacterStatus.getTotalAnnualIncome(s)
+      : { grossLocal: s.job ? s.job.salary : 0, netLocal: s.job ? Math.round(s.job.salary * (1 - c.taxRate)) : 0, retireContribLocal: s.job ? Math.round(s.job.salary * 0.09) : 0 };
+
+    if (inc.netLocal > 0) {
+      s.money += inc.netLocal;
+      s.retirementFund += (inc.retireContribLocal || 0);
+      const usdGross = Utils.localToUsd(inc.grossLocal, s.countryId);
+      if (usdGross > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdGross);
+    }
+
+    if (s.job && !(s.prison && s.prison.inPrison)) {
       s.job.years += 1;
-      const gross = s.job.salary;
-      const tax = Math.round(gross * c.taxRate);
-      const retireContrib = Math.round(gross * 0.09);
-      const net = gross - tax - Math.round(retireContrib * 0.5);
-
-      s.money += net;
-      s.retirementFund += retireContrib;
-
-      const usdSalary = Utils.localToUsd(gross, s.countryId);
-      if (usdSalary > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdSalary);
+      const retireContrib = Math.round(s.job.salary * 0.09);
 
       let promoted = false;
       if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(0.45)) {
@@ -285,9 +294,9 @@ window.Sim = {
         p.value = Math.round(p.value * (1 + Utils.randInt(2, 6) / 100));
       }
 
-      if (s.job || s.money > livingLocal) {
+      if (inc.grossLocal > 0 || s.money > livingLocal) {
         s.money -= (livingLocal + assetUpkeep);
-      } else if (s.education.stage === 'university') {
+      } else if (s.education.stage === 'university' || s.education.activeStudy) {
         s.money -= Math.round(livingLocal * 0.35);
       } else {
         s.money -= Math.round(livingLocal * 0.65);
@@ -371,27 +380,7 @@ window.Sim = {
       if (s.prison && s.prison.inPrison) return;
     }
 
-    // 2. Pendapatan tahunan Mod Khas (Mafia, Artis, Pelakon, Politik)
-    if (s.modes.mafia.active && window.UnderworldModes) {
-      const r = UnderworldModes.MAFIA_RANKS[s.modes.mafia.rankIndex] || UnderworldModes.MAFIA_RANKS[0];
-      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
-      s.money += pay;
-    }
-    if (s.modes.artist.active && window.FameModes) {
-      const r = FameModes.ARTIST_RANKS[s.modes.artist.rankIndex] || FameModes.ARTIST_RANKS[0];
-      const pay = Utils.usdToLocal(Math.round(r.annualUsd * (s.modes.artist.contractType === 'predatory' ? 0.6 : 1)), s.countryId);
-      s.money += pay;
-    }
-    if (s.modes.actor.active && window.FameModes) {
-      const r = FameModes.ACTOR_RANKS[s.modes.actor.rankIndex] || FameModes.ACTOR_RANKS[0];
-      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
-      s.money += pay;
-    }
-    if (s.modes.politic.active && window.FameModes) {
-      const r = FameModes.POLITIC_RANKS[s.modes.politic.rankIndex] || FameModes.POLITIC_RANKS[0];
-      const pay = Utils.usdToLocal(r.annualUsd, s.countryId);
-      s.money += pay;
-    }
+    // (Pendapatan tahunan semua Mod Khas kini dikreditkan secara bersepadu melalui CharacterStatus.getTotalAnnualIncome dalam _processFinances!)
 
     // 3. Pertumbuhan pasif Laman Sosial
     if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers > 0) {

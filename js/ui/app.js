@@ -336,7 +336,9 @@ window.App = {
 
     document.querySelector('#char-avatar .avatar-emoji').textContent = (s.fugitive && s.fugitive.avatarOverride) || Utils.getAvatar(s.age, s.gender);
     document.getElementById('char-age-badge').textContent = s.age;
-    document.getElementById('char-name').textContent = window.EduCareerEngine ? EduCareerEngine.getDisplayName(s) : s.name;
+    document.getElementById('char-name').textContent = window.CharacterStatus
+      ? CharacterStatus.getDisplayNameWithTitles(s)
+      : (window.EduCareerEngine ? EduCareerEngine.getDisplayName(s) : s.name);
 
     const badge = document.getElementById('residency-badge');
     badge.textContent = this._residencyLabel(s.residencyStatus);
@@ -346,19 +348,10 @@ window.App = {
         : 'visa'
     );
 
-    const activeStudyText = (s.education && s.education.activeStudy)
-      ? `Pelajar ${(EducationData.LEVEL_INFO[s.education.activeStudy.level] || { short: 'Universiti' }).short} (${s.education.activeStudy.fieldName})`
-      : null;
-
-    const roleText = s.job
-      ? (activeStudyText ? `${s.job.title} + ${activeStudyText}` : s.job.title)
-      : activeStudyText
-        ? activeStudyText
-        : s.education.stage === 'university'
-          ? `Pelajar di ${s.education.universityName}`
-          : s.education.schoolName
-            ? s.education.schoolName
-            : s.age < 5 ? 'Kanak-kanak' : 'Tiada Pekerjaan';
+    const occ = window.CharacterStatus
+      ? CharacterStatus.getDisplayOccupation(s)
+      : { title: s.job ? s.job.title : 'Tiada Pekerjaan', secondaryRole: null };
+    const roleText = occ.secondaryRole ? `${occ.title} (${occ.secondaryRole})` : occ.title;
 
     document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}`;
 

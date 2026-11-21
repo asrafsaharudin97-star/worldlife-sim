@@ -893,9 +893,18 @@ window.Modals = {
       const beliefObj = GameState.getBeliefObj(s.belief);
       const famBeliefObj = GameState.getBeliefObj(s.familyBelief);
 
+      const displayName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
+      const occ = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: 'Tiada Pekerjaan', badge: '—', secondaryRole: null };
+      const inc = window.CharacterStatus ? CharacterStatus.getTotalAnnualIncome(s) : { grossLocal: 0, netLocal: 0, breakdown: [] };
+      const incBreakdownStr = inc.breakdown.length > 0
+        ? `<br/><small style="opacity:0.85;">Sumber: ${inc.breakdown.map(b => `${b.icon} ${Utils.escapeHtml(b.label)} (${Utils.formatMoney(b.gross, s.countryId)}/thn)`).join(' • ')}</small>`
+        : '';
+
       contentHtml += `
         <div class="info-banner highlight">
-          <strong>🛂 Pasport &amp; Profil ${Utils.escapeHtml(s.name)}</strong><br/>
+          <strong>🛂 Biodata &amp; Pasport ${Utils.escapeHtml(displayName)}</strong><br/>
+          Pekerjaan / Peranan: <strong>${occ.icon || '👤'} ${Utils.escapeHtml(occ.title)}</strong> <span class="cat-badge synergy">${Utils.escapeHtml(occ.badge)}</span>${occ.secondaryRole ? `<br/>Peranan Sampingan: <strong>${Utils.escapeHtml(occ.secondaryRole)}</strong>` : ''}<br/>
+          Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
           Kepercayaan / Pegangan: <strong>${beliefObj.icon} ${beliefObj.name}</strong> (Ketahanan Jiwa: ${s.devotion || 40}%)<br/>
           Latar Keluarga: ${famBeliefObj.icon} ${famBeliefObj.name}<br/>

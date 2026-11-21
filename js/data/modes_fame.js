@@ -239,6 +239,7 @@ window.FameModes = {
     s.modes.politic.rankIndex = 0;
     s.modes.politic.approval = 42;
     s.modes.politic.faction = faction;
+    if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
     KarmaEndings.markModeVisited('politic');
     KarmaEndings.adjustAlignment({ fame: 8 });
     KarmaEndings.addHighlight('🏛️', `Menyertai arena politik melalui kem ${faction}`);
@@ -253,6 +254,12 @@ window.FameModes = {
     const p = s.modes.politic;
     if (!p.active) return { ok: false, msg: 'Sertai Mod Politik dahulu!' };
     if (s.prison.inPrison) return { ok: false, msg: 'Anda di penjara!' };
+    if (action === 'leave') {
+      if (window.CharacterStatus) CharacterStatus.syncCharacterModeTransitions(s, 'leave_politic');
+      else p.active = false;
+      GameState.save();
+      return { ok: true, msg: 'Anda telah meletak jawatan daripada arena politik.' };
+    }
     if (s.yearlyActions.politicAct) return { ok: false, msg: 'Anda sudah menjalankan kempen/dasar utama tahun ini.' };
     s.yearlyActions.politicAct = true;
 
@@ -267,6 +274,11 @@ window.FameModes = {
       if (Utils.chance(winChance)) {
         p.rankIndex += 1;
         p.approval = Utils.clamp(p.approval + 10, 0, 100);
+        if (p.rankIndex >= 2 && window.CharacterStatus) {
+          CharacterStatus.syncCharacterModeTransitions(s, 'enter_politic_office');
+        } else if (window.CharacterStatus) {
+          CharacterStatus.recordPeakRole(s);
+        }
         KarmaEndings.adjustAlignment({ fame: 18, stress: 12 });
         KarmaEndings.addHighlight('🏛️', `Menang pilihan raya sebagai ${nextRank.title}`);
         GameState.adjustStats({ happiness: 20 });
