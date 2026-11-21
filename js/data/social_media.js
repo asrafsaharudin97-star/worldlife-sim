@@ -292,6 +292,29 @@ window.SocialMedia = {
       return { ok: false, msg: `${cand.name} rupanya sudah berkahwin secara rahsia! Dibatalkan.` };
     }
 
+    // Semak penerimaan atau penolakan semasa Mula Kenal / Ta'aruf
+    if (window.Relationships && Relationships.evaluateCourtingAcceptance) {
+      const courtRes = Relationships.evaluateCourtingAcceptance(s, {
+        name: cand.name,
+        age: cand.age,
+        belief: cand.belief,
+        job: cand.job
+      });
+      if (!courtRes.accepted) {
+        GameState.adjustStats({ happiness: -Utils.randInt(5, 11) });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 4 });
+        GameState.addJournalEntry(courtRes.logText, 'warning');
+        s._datingPool = (s._datingPool || []).filter(x => x.uid !== uid);
+        GameState.save();
+        return {
+          ok: false,
+          rejected: true,
+          reasonTag: courtRes.reasonTag,
+          msg: courtRes.shortMsg
+        };
+      }
+    }
+
     const roleLabel = muslim
       ? (cand.gender === 'female' ? 'Calon Ta\'aruf (Wanita)' : 'Calon Ta\'aruf (Lelaki)')
       : (cand.gender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
@@ -310,6 +333,8 @@ window.SocialMedia = {
       trust: cand.hiddenTraitId === 'soulmate' ? Utils.randInt(78, 92) : Utils.randInt(42, 68),
       compatibility: cand.compatibility,
       belief: cand.belief,
+      yearsTogether: 0,
+      unresolvedConflict: false,
       hiddenTraitId: cand.hiddenTraitId,
       traitRevealed: false,
       alive: true,

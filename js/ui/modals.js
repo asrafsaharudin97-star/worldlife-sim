@@ -902,7 +902,7 @@ window.Modals = {
         App.renderAll();
         if (res.followUpEvent) {
           this.showEvent(res.followUpEvent);
-        } else if (act === 'breakup' || act === 'cut_ties') {
+        } else if (act === 'breakup' || act === 'cut_ties' || res.brokeUp || res.weddingCancelled) {
           this.showRelationships();
         } else {
           this.showRelationDetail(relId);
@@ -1115,18 +1115,20 @@ window.Modals = {
       `
     });
 
-    document.getElementById('btn-marry-with-prenup').addEventListener('click', () => {
-      const res = Sim.interactRelation(relId, 'propose', { hasPrenup: true });
+    const handleCivilPropose = (hasPrenup) => {
+      const res = Sim.interactRelation(relId, 'propose', { hasPrenup });
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
-      this.showRelationDetail(relId);
-    });
-    document.getElementById('btn-marry-no-prenup').addEventListener('click', () => {
-      const res = Sim.interactRelation(relId, 'propose', { hasPrenup: false });
-      App.toast(res.msg, res.ok ? 'success' : 'error');
-      App.renderAll();
-      this.showRelationDetail(relId);
-    });
+      if (res.followUpEvent) {
+        this.showEvent(res.followUpEvent);
+      } else if (res.brokeUp || res.weddingCancelled) {
+        this.showRelationships();
+      } else {
+        this.showRelationDetail(relId);
+      }
+    };
+    document.getElementById('btn-marry-with-prenup').addEventListener('click', () => handleCivilPropose(true));
+    document.getElementById('btn-marry-no-prenup').addEventListener('click', () => handleCivilPropose(false));
     document.getElementById('btn-prenup-back').addEventListener('click', () => this.showRelationDetail(relId));
   },
 

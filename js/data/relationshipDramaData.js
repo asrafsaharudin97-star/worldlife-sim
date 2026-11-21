@@ -210,7 +210,24 @@ window.RelationshipDramaData = {
   maybeBuildYearlyConflictEvent(s) {
     const partner = this.getActivePartner(s);
     if (!partner) return null;
+    partner.yearsTogether = (partner.yearsTogether || 0) + 1;
     if (s.age < 18) return null;
+
+    // Jika sedang BERTUNANG dan Kepercayaan < 55%, Kemesraan < 65%, atau ada konflik belum selesai -> peluang "💔 Putus Tunang" atau "🚨 Pasangan Tarik Diri Saat Akhir (Cold Feet)"
+    if (!s.married && partner.stage === 'engaged') {
+      const trust = partner.trust ?? 70;
+      const closeness = partner.closeness ?? 70;
+      const smoothEngaged = closeness >= 80 && trust >= 75 && !partner.unresolvedConflict && !partner.familyApprovalPending;
+      if (!smoothEngaged && (trust < 55 || closeness < 65 || partner.unresolvedConflict)) {
+        let cancelProb = 0.25;
+        if (trust < 55) cancelProb += 0.25;
+        if (closeness < 65) cancelProb += 0.20;
+        if (partner.unresolvedConflict) cancelProb += 0.25;
+        if (Utils.chance(Math.min(0.85, cancelProb))) {
+          return this.buildBrokenEngagementEvent(s, partner);
+        }
+      }
+    }
 
     // Jika kepercayaan atau kemesraan sudah kritikal (< 20), pasangan terus tuntut cerai/putus!
     if ((partner.trust ?? 70) < 20 || (partner.closeness ?? 70) < 20) {
@@ -224,6 +241,57 @@ window.RelationshipDramaData = {
     if (eligible.length === 0) return null;
     const sc = Utils.pick(eligible);
     return this.buildConflictEvent(s, partner, sc);
+  },
+
+  buildBrokenEngagementEvent(s, partner) {
+    const muslim = window.Relationships ? Relationships.isMuslim(s) : (s.religion === 'Islam');
+    const isColdFeet = Utils.chance(0.42);
+    const depositLost = Math.min(Math.max(0, s.money || 0), Math.round(Utils.usdToLocal(950, s.countryId)));
+    const reason = partner.unresolvedConflict
+      ? 'konflik kecurangan serta salah faham yang tidak pernah diselesaikan'
+      : ((partner.trust ?? 60) < 55)
+        ? 'kepercayaan yang semakin pudar'
+        : 'pertelingkahan keluarga serta isu hantaran perkahwinan';
+
+    return {
+      id: `broken_engagement_${partner.id}_${s.age}_${Date.now()}`,
+      icon: isColdFeet ? '🚨' : '💔',
+      title: isColdFeet ? 'Pasangan Tarik Diri Saat Akhir (Cold Feet)!' : 'Putus Tunang & Batal Nikah!',
+      text: isColdFeet
+        ? `Menjelang tarikh ${muslim ? 'majlis akad nikah' : 'perkahwinan'} yang semakin hampir, ${partner.name} tiba-tiba menghubungi anda dalam keadaan sebak dan membatalkan perkahwinan saat akhir (Cold Feet) akibat ${reason}!\n\nMajlis terpaksa dibatalkan serta-merta dan wang deposit persiapan hangus.`
+        : `Pertunangan anda bersama ${partner.name} tidak dapat diselamatkan lagi akibat ${reason}. Keluarga kedua-dua belah pihak memulangkan cincin tanda dan membatalkan segala persiapan ${muslim ? 'akad nikah' : 'perkahwinan'}.`,
+      choices: [
+        {
+          label: '💔 Terima Hakikat & Batalkan Tempahan Majlis',
+          hint: `Pertunangan putus • Deposit ${Utils.formatMoney(depositLost, s.countryId)} hangus • Gembira ---`,
+          journalType: 'warning',
+          customAction: (state) => {
+            const p = state.relationships.find(r => r.id === partner.id);
+            state.money = Math.max(0, (state.money || 0) - depositLost);
+            const hapHit = -Utils.randInt(30, 45);
+            const stressHit = Utils.randInt(16, 26);
+            GameState.adjustStats({ happiness: hapHit });
+            if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + stressHit, 0, 100);
+            GameState.recordCrisis('heartbreak');
+
+            state.partnerId = null;
+            state.married = false;
+            if (p) {
+              p.category = 'ex';
+              p.stage = 'ex';
+              p.role = 'Bekas Tunang';
+              p.closeness = 12;
+              p.trust = 12;
+            }
+            const logMsg = isColdFeet
+              ? `🚨 PASANGAN TARIK DIRI SAAT AKHIR (Cold Feet): ${partner.name} membatalkan ${muslim ? 'akad nikah' : 'perkahwinan'} akibat ${reason}. Deposit persiapan ${Utils.formatMoney(depositLost, state.countryId)} hangus (Gembira ${hapHit}, Stres +${stressHit}%).`
+              : `💔 PUTUS TUNANG: Ikatan pertunangan dengan ${partner.name} terlerai akibat ${reason}. Deposit majlis ${Utils.formatMoney(depositLost, state.countryId)} hangus tidak dapat dikembalikan (Gembira ${hapHit}, Stres +${stressHit}%).`;
+            GameState.addJournalEntry(logMsg, 'warning');
+            return { outcome: logMsg, toastType: 'error' };
+          }
+        }
+      ]
+    };
   },
 
   buildConflictEvent(s, partner, sc) {
@@ -247,6 +315,7 @@ window.RelationshipDramaData = {
             if (Utils.chance(Math.min(0.88, successChance))) {
               p.trust = Utils.clamp((p.trust ?? 65) + Utils.randInt(5, 10), 0, 100);
               p.closeness = Utils.clamp((p.closeness ?? 65) + Utils.randInt(4, 9), 0, 100);
+              p.unresolvedConflict = false;
               GameState.adjustStats({ happiness: 4 });
               return {
                 outcome: `Anda mendengar luahan ${p.name} dengan sabar dan berbincang dari hati ke hati. Salah faham berjaya dijernihkan (Kepercayaan ${p.trust}%, Kemesraan ${p.closeness}%).`,
@@ -255,6 +324,7 @@ window.RelationshipDramaData = {
             }
             p.trust = Utils.clamp((p.trust ?? 65) - Utils.randInt(6, 12), 0, 100);
             p.closeness = Utils.clamp((p.closeness ?? 65) - Utils.randInt(5, 10), 0, 100);
+            p.unresolvedConflict = true;
             GameState.adjustStats({ happiness: -6 });
             if (p.trust < 20 || p.closeness < 20) {
               return {
@@ -293,6 +363,7 @@ window.RelationshipDramaData = {
             state.money -= counselCost;
             p.trust = Utils.clamp((p.trust ?? 65) + Utils.randInt(11, 18), 0, 100);
             p.closeness = Utils.clamp((p.closeness ?? 65) + Utils.randInt(9, 15), 0, 100);
+            p.unresolvedConflict = false;
             if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) - 6, 0, 100);
             GameState.adjustStats({ happiness: 8 });
             return {
@@ -312,6 +383,7 @@ window.RelationshipDramaData = {
             const closeDrop = Utils.randInt(10, 18);
             p.trust = Utils.clamp((p.trust ?? 65) - trustDrop, 0, 100);
             p.closeness = Utils.clamp((p.closeness ?? 65) - closeDrop, 0, 100);
+            p.unresolvedConflict = true;
             if (state.alignment) state.alignment.stress = Utils.clamp((state.alignment.stress || 0) + 10, 0, 100);
             GameState.adjustStats({ happiness: -12 });
 
