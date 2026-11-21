@@ -1057,7 +1057,7 @@ window.Modals = {
       return;
     }
 
-    const islamic = LegalInheritanceEngine.isIslamic(s);
+    const islamic = LegalInheritanceEngine.isSyariahApplicable(s);
     const isHusband = s.gender === 'male';
     const priorTalak = Math.max((s.marriageMeta && s.marriageMeta.talakCount) || 0, partner.talakCount || 0);
 
@@ -1189,7 +1189,7 @@ window.Modals = {
   showWasiatModal(onBack = null) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    const islamic = LegalInheritanceEngine.isIslamic(s);
+    const islamic = LegalInheritanceEngine.isSyariahApplicable(s);
     const c = Utils.getCountry(s.countryId);
     const livingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
 
@@ -1350,12 +1350,17 @@ window.Modals = {
         </button>
       `;
 
+    const jurisdictionBadge = report.isIslamic
+      ? `<div class="info-banner" style="background:#ecfdf5;border-color:#6ee7b7;margin-bottom:8px;font-weight:700;">⚖️ Jurisdiksi: Undang-Undang Syariah (Muslim • ${Utils.escapeHtml(report.countryName)})</div>`
+      : `<div class="info-banner" style="background:#eff6ff;border-color:#93c5fd;margin-bottom:8px;font-weight:700;">⚖️ Jurisdiksi: Undang-Undang Sivil (${Utils.escapeHtml(report.countryName)})</div>`;
+
     this.open({
       icon: '📜',
       title: 'Penyata Harta Pusaka',
       subtitle: `${report.systemLabel} • ${s.name}`,
       locked: true,
       bodyHtml: `
+        ${jurisdictionBadge}
         <div class="info-banner highlight" style="line-height:1.65;">
           <strong>📊 Ringkasan Pengiraan Harta Pusaka</strong><br/>
           Sistem Undang-undang: <strong>${Utils.escapeHtml(report.systemLabel)}</strong><br/>
@@ -1572,7 +1577,7 @@ window.Modals = {
       const relMeta = window.LegalInheritanceEngine
         ? LegalInheritanceEngine.getReligionMeta(s.religion)
         : { icon: beliefObj.icon, label: s.religion || beliefObj.name };
-      const islamic = window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic(s);
+      const islamic = window.LegalInheritanceEngine && LegalInheritanceEngine.isSyariahApplicable(s);
       const wasiatSummary = islamic
         ? ((s.wasiat && s.wasiat.islamicPct > 0) ? `Wasiat Islam ${s.wasiat.islamicPct}% (${s.wasiat.islamicBeneficiary})` : '100% Faraid (Tiada Wasiat)')
         : ((s.wasiat && s.wasiat.civilMode === 'equal') ? 'Wasiat Sama Rata'

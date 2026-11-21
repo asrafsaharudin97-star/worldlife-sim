@@ -31,10 +31,29 @@ window.LegalInheritanceEngine = {
     return 'Tiada';
   },
 
+  MUSLIM_COUNTRIES: new Set([
+    'MY', 'ID', 'BN', 'SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'YE',
+    'JO', 'EG', 'MA', 'DZ', 'TN', 'LY', 'SD', 'IQ', 'SY', 'PS',
+    'LB', 'TR', 'IR', 'PK', 'BD', 'AF', 'MV', 'KZ', 'UZ', 'AZ',
+    'NG', 'SN', 'ML', 'NE', 'SO', 'MR', 'KM', 'DJ', 'GM', 'GN',
+    'TD', 'BF', 'SL', 'AL', 'BA', 'XK', 'TM', 'KG', 'TJ'
+  ]),
+
   isIslamic(s) {
     if (!s) return false;
     if (s.religion) return s.religion === 'Islam';
     return s.belief === 'islam';
+  },
+
+  isMuslimCountry(country) {
+    if (!country) return false;
+    const cid = typeof country === 'string' ? country : country.id;
+    return this.MUSLIM_COUNTRIES.has(String(cid || '').toUpperCase());
+  },
+
+  isSyariahApplicable(s, country = null) {
+    if (!s) return false;
+    return this.isIslamic(s) && this.isMuslimCountry(country || s.countryId);
   },
 
   // --------------------------------------------------------------------------
@@ -158,7 +177,7 @@ window.LegalInheritanceEngine = {
       preMaritalNetWorth: netNow,
       preMaritalMoney: Math.max(0, s.money || 0),
       preMaritalPropertyIds: ((s.assets && s.assets.properties) || []).map(p => p.id),
-      hasPrenup: Boolean(hasPrenup && !this.isIslamic(s)),
+      hasPrenup: Boolean(hasPrenup && !this.isSyariahApplicable(s)),
       talakCount: priorTalak,
       spouseIncomeEst: spouseInc
     };
@@ -193,7 +212,7 @@ window.LegalInheritanceEngine = {
   previewDivorce(s, partner, options = {}) {
     this.ensureLegalFields(s);
     const c = Utils.getCountry(s.countryId);
-    const islamic = this.isIslamic(s);
+    const islamic = this.isSyariahApplicable(s);
     const meta = s.marriageMeta || {
       marriedYear: Math.max(s.year - 2, s.year),
       preMaritalNetWorth: Math.round(Math.max(0, GameState.getNetWorth()) * 0.4),
@@ -516,7 +535,7 @@ window.LegalInheritanceEngine = {
   // --------------------------------------------------------------------------
   canRujuk(s) {
     this.ensureLegalFields(s);
-    if (!s || !this.isIslamic(s) || s.married || s.partnerId) return false;
+    if (!s || !this.isSyariahApplicable(s) || s.married || s.partnerId) return false;
     if (!s.idahState || !s.idahState.active || !s.idahState.inIdah || s.idahState.yearsLeft <= 0) return false;
     if ((s.idahState.talakCount || 0) >= 3) return false;
     const ex = (s.relationships || []).find(r => r.id === s.idahState.exSpouseId && r.alive);
@@ -614,7 +633,7 @@ window.LegalInheritanceEngine = {
   // --------------------------------------------------------------------------
   setIslamicWasiat(s, pct, beneficiary = 'Wakaf & Kebajikan') {
     this.ensureLegalFields(s);
-    if (!this.isIslamic(s)) {
+    if (!this.isSyariahApplicable(s)) {
       return { ok: false, msg: 'Wasiat Islam hanya untuk watak beragama Islam.' };
     }
     const clamped = Math.max(0, Math.min(33.33, Number(pct) || 0));
@@ -632,7 +651,7 @@ window.LegalInheritanceEngine = {
 
   setCivilWasiat(s, mode, targetHeirId = null) {
     this.ensureLegalFields(s);
-    if (this.isIslamic(s)) {
+    if (this.isSyariahApplicable(s)) {
       return { ok: false, msg: 'Watak beragama Islam menggunakan Wasiat Islam & Hukum Faraid.' };
     }
     const validModes = ['none', 'equal', 'single_heir', 'charity'];
@@ -676,7 +695,7 @@ window.LegalInheritanceEngine = {
   calculateEstateStatement(s) {
     this.ensureLegalFields(s);
     const c = Utils.getCountry(s.countryId);
-    const islamic = this.isIslamic(s);
+    const islamic = this.isSyariahApplicable(s);
 
     // 1. Kira Harta Kasar & Tolak Hutang / Gadai Janji terlebih dahulu
     const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
