@@ -284,7 +284,14 @@ window.LIFE_EVENTS = {
     const newBelief = GameState.getBeliefObj(newBeliefId);
     const famBelief = GameState.getBeliefObj(s.familyBelief);
 
-    s.belief = newBeliefId;
+    if (window.GameState && GameState.setReligion) {
+      GameState.setReligion(s, newBeliefId);
+    } else {
+      s.belief = newBeliefId;
+      if (window.LegalInheritanceEngine) {
+        s.religion = LegalInheritanceEngine.beliefToReligion(newBeliefId);
+      }
+    }
     s.devotion = newBelief.isReligious ? Utils.randInt(58, 78) : Utils.randInt(45, 65);
     s.lastSpiritualAge = s.age;
     s.spiritualHistory = s.spiritualHistory || [];
@@ -293,8 +300,11 @@ window.LIFE_EVENTS = {
       year: s.year,
       fromBelief: oldBelief.id,
       toBelief: newBelief.id,
+      toReligion: s.religion,
       reason
     });
+    if (window.GameState && GameState.save) GameState.save();
+    if (window.App && App.renderAll) App.renderAll();
 
     const notes = [`Anda kini berpegang kepada ${newBelief.icon} ${newBelief.name}.`];
     let happinessDelta = 6;

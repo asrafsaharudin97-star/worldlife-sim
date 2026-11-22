@@ -305,6 +305,30 @@ window.GameState = {
     };
   },
 
+  setReligion(s, newValue) {
+    const target = s || this.current;
+    if (!target || !newValue) return target;
+    const raw = String(newValue).trim();
+    const isReligionId = window.LegalInheritanceEngine
+      && LegalInheritanceEngine.RELIGIONS.some(r => r.id === raw);
+
+    let canonicalReligion;
+    let canonicalBelief;
+    if (isReligionId) {
+      canonicalReligion = raw;
+      canonicalBelief = LegalInheritanceEngine.religionToBelief(raw);
+    } else {
+      canonicalBelief = raw;
+      canonicalReligion = window.LegalInheritanceEngine
+        ? LegalInheritanceEngine.beliefToReligion(raw)
+        : (raw === 'islam' ? 'Islam' : raw);
+    }
+
+    target.religion = canonicalReligion;
+    target.belief = canonicalBelief;
+    return target;
+  },
+
   ensureUpgradedState() {
     const s = this.current;
     if (!s) return;
@@ -313,7 +337,18 @@ window.GameState = {
         ? window.LIFE_EVENTS.pickFamilyBelief(s.birthCountryId || s.countryId, s.heritageId)
         : 'unassigned';
     }
-    if (!s.belief) s.belief = s.familyBelief;
+    if (s.religion && window.LegalInheritanceEngine) {
+      if (!s.belief || s.belief === 'unassigned') {
+        s.belief = LegalInheritanceEngine.religionToBelief(s.religion);
+      }
+    } else if (s.belief && s.belief !== 'unassigned') {
+      this.setReligion(s, s.belief);
+    } else {
+      s.belief = s.familyBelief;
+      if (window.LegalInheritanceEngine && s.belief && s.belief !== 'unassigned') {
+        s.religion = LegalInheritanceEngine.beliefToReligion(s.belief);
+      }
+    }
     if (typeof s.devotion !== 'number') s.devotion = 45;
     if (typeof s.lastSpiritualAge !== 'number') s.lastSpiritualAge = -99;
     if (!Array.isArray(s.spiritualHistory)) s.spiritualHistory = [];

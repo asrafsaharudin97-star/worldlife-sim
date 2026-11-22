@@ -5,10 +5,12 @@
 
 window.Relationships = {
   isMuslim(s) {
+    if (!s) return false;
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic) {
       return LegalInheritanceEngine.isIslamic(s);
     }
-    return Boolean(s && (s.religion === 'Islam' || s.belief === 'islam'));
+    if (s.religion) return s.religion === 'Islam';
+    return s.belief === 'islam';
   },
 
   ensureRelationshipFields(s) {
