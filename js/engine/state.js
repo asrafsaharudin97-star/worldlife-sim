@@ -337,12 +337,17 @@ window.GameState = {
         ? window.LIFE_EVENTS.pickFamilyBelief(s.birthCountryId || s.countryId, s.heritageId)
         : 'unassigned';
     }
-    if (s.religion && window.LegalInheritanceEngine) {
-      if (!s.belief || s.belief === 'unassigned') {
-        s.belief = LegalInheritanceEngine.religionToBelief(s.religion);
+    if (!Array.isArray(s.spiritualHistory)) s.spiritualHistory = [];
+    if (s.spiritualHistory.length > 0) {
+      const lastConv = s.spiritualHistory[s.spiritualHistory.length - 1];
+      const latestBelief = (lastConv && lastConv.toBelief) || s.belief;
+      if (latestBelief && latestBelief !== 'unassigned') {
+        this.setReligion(s, latestBelief);
       }
     } else if (s.belief && s.belief !== 'unassigned') {
       this.setReligion(s, s.belief);
+    } else if (s.religion && window.LegalInheritanceEngine) {
+      this.setReligion(s, s.religion);
     } else {
       s.belief = s.familyBelief;
       if (window.LegalInheritanceEngine && s.belief && s.belief !== 'unassigned') {
@@ -351,7 +356,6 @@ window.GameState = {
     }
     if (typeof s.devotion !== 'number') s.devotion = 45;
     if (typeof s.lastSpiritualAge !== 'number') s.lastSpiritualAge = -99;
-    if (!Array.isArray(s.spiritualHistory)) s.spiritualHistory = [];
     if (!s.hiddenFlags || typeof s.hiddenFlags !== 'object') s.hiddenFlags = {};
     if (!Array.isArray(s.recentCrises)) s.recentCrises = [];
 
