@@ -1134,5 +1134,311 @@ window.GAME_EVENTS = {
         }
       ]
     }
+  ],
+
+  // --------------------------------------------------------------------------
+  // KOLAM PERISTIWA RAWAK TAHUNAN (ANTI-ULANG, 3 PILIHAN RAWAK, TANPA SPOILER)
+  // Merangkumi Kanak-kanak (1–12), Remaja (13–17), Dewasa (18–59) & Warga Emas (60+)
+  // --------------------------------------------------------------------------
+  ageUpRandomPool: [
+    // === KANAK-KANAK (1–12) ===
+    {
+      id: 'rnd_child_lost_money',
+      minAge: 5, maxAge: 12,
+      icon: '💵',
+      title: 'Jumpa Wang Tercicir di Taman Permainan',
+      text: 'Ketika bermain buaian di taman, anda ternampak sekeping wang kertas terselit di bawah bangku dan tiada sesiapa kelihatan di sekitar.',
+      choices: [
+        { label: 'Serahkan kepada pengawal taman atau ibu bapa untuk dicari pemiliknya', tone: 'helpful', outcome: 'Pemilik sebenar akhirnya ditemui dan memuji kejujuran anda di hadapan orang ramai.' },
+        { label: 'Biarkan sahaja di tempat itu supaya pemiliknya mudah menjumpainya semula', tone: 'neutral', outcome: 'Anda meneruskan permainan tanpa menyentuh wang itu dan pulang dengan hati tenang.' },
+        { label: 'Simpan diam-diam dalam poket untuk beli aiskrim dan mainan', tone: 'risky', outcome: 'Anda berbelanja sakan di kedai berhampiran, namun rasa bersalah tetap menghantui fikiran.', moneyUsd: 10 },
+        { label: 'Tanya budak-budak lain di taman jika ada sesiapa kehilangan duit', tone: 'helpful', outcome: 'Seorang kanak-kanak yang hampir menangis bersyukur kerana duit belanjanya ditemui semula.' }
+      ]
+    },
+    {
+      id: 'rnd_child_bully_friend',
+      minAge: 6, maxAge: 12,
+      icon: '🎒',
+      title: 'Rakan Sekelas Dibuli di Kantin',
+      text: 'Anda ternampak sekumpulan murid lebih besar mengejek dan merampas bekas makanan rakan sekelas anda yang pendiam.',
+      choices: [
+        { label: 'Tampil mempertahankan rakan dan panggil guru bertugas segera', tone: 'helpful', outcome: 'Guru bertugas tiba tepat pada masanya dan keberanian anda dipuji satu kelas.' },
+        { label: 'Pura-pura tidak nampak dan cepat-cepat beredar ke kelas', tone: 'neutral', outcome: 'Anda mengelak daripada terlibat dalam kekecohan, tetapi rakan anda kelihatan kecewa.' },
+        { label: 'Tolak pembuli itu dengan kasar hingga tercetus pergaduhan kecil', tone: 'risky', outcome: 'Keadaan menjadi kecoh dan anda turut dipanggil ke bilik guru disiplin untuk memberi penjelasan.' },
+        { label: 'Ajak rakan-rakan lain datang beramai-ramai supaya pembuli itu beredar', tone: 'helpful', outcome: 'Pembuli tersebut berundur serta-merta apabila melihat ramai murid berdiri bersama rakan anda.' }
+      ]
+    },
+    {
+      id: 'rnd_child_stray_cat',
+      minAge: 3, maxAge: 12,
+      icon: '🐱',
+      title: 'Anak Kucing Sesat Dalam Hujan',
+      text: 'Hujan lebat turun pada waktu petang dan seekor anak kucing kecil menggigil kesejukan di tepi longkang hadapan rumah.',
+      choices: [
+        { label: 'Lap badannya dengan tuala dan berikan sedikit makanan di anjung', tone: 'helpful', outcome: 'Anak kucing itu mengiau manja dan jiran-jiran memuji sikap penyayang anda.' },
+        { label: 'Perhatikan dari dalam tingkap dan biarkan ia mencari tempat berteduh sendiri', tone: 'neutral', outcome: 'Hujan reda tidak lama kemudian dan anak kucing itu berjalan pergi ke lorong sebelah.' },
+        { label: 'Sorokkan anak kucing itu di dalam bilik tidur tanpa izin ibu bapa', tone: 'risky', outcome: 'Bilik anda bersepah apabila kucing itu melompat di atas meja dan ibu bapa anda terkejut besar.' }
+      ]
+    },
+    {
+      id: 'rnd_child_viral_talent',
+      minAge: 4, maxAge: 12,
+      icon: '📱',
+      title: 'Gelagat Lucu Anda Tular di Media Sosial',
+      text: 'Seorang saudara merakam aksi spontan anda menari dan menjawab soalan dengan petah di majlis keluarga lalu memuat naiknya ke internet.',
+      choices: [
+        { label: 'Ucap terima kasih dengan sopan apabila orang ramai menegur anda', tone: 'helpful', outcome: 'Ramai memuji adab anda yang comel dan sopan walaupun mula dikenali ramai.' },
+        { label: 'Minta ibu bapa padam video itu kerana anda segan menjadi tumpuan', tone: 'neutral', outcome: 'Video diturunkan secara baik dan kehidupan harian anda kembali seperti biasa.' },
+        { label: 'Buat aksi lebih nakal di hadapan kamera supaya lebih ramai ketawa', tone: 'risky', outcome: 'Klip baharu itu menarik perhatian ramai tetapi turut mengundang teguran orang dewasa.' }
+      ]
+    },
+    {
+      id: 'rnd_child_toy_dispute',
+      minAge: 2, maxAge: 11,
+      icon: '🧸',
+      title: 'Pertengkaran Rebut Permainan di Rumah Jiran',
+      text: 'Ketika berkunjung ke rumah jiran, anak jiran merampas permainan kegemaran yang anda bawa sehingga hampir rosak.',
+      choices: [
+        { label: 'Ajak bermain bergilir-gilir dengan penuh sabar', tone: 'helpful', outcome: 'Suasana kembali ceria dan ibu bapa jiran memuji kematangan anda berkongsi.' },
+        { label: 'Simpan permainan itu dalam beg dan duduk diam di sebelah ibu bapa', tone: 'neutral', outcome: 'Tiada pertengkaran berlaku walaupun anda agak bosan sepanjang kunjungan.' },
+        { label: 'Rampas semula dengan kuat hingga budak itu menangis teresak-esak', tone: 'risky', outcome: 'Suasana ruang tamu menjadi tegang seketika dan anda ditegur kerana terlalu kasar.' }
+      ]
+    },
+    {
+      id: 'rnd_child_broken_vase',
+      minAge: 5, maxAge: 12,
+      icon: '🏺',
+      title: 'Pasu Hiasan Jiran Pecah Terkena Bola',
+      text: 'Tendangan bola anda tersasar masuk ke halaman rumah jiran dan memecahkan sebuah pasu bunga kesayangan mereka.',
+      choices: [
+        { label: 'Ketuk pintu rumah jiran dan mengaku salah dengan jujur', tone: 'helpful', outcome: 'Jiran anda terharu dengan keberanian anda bercakap benar dan memaafkan anda.' },
+        { label: 'Lari cepat-cepat balik ke rumah dan buat-buat tidak tahu', tone: 'risky', outcome: 'Kamera loceng pintu merakam kelibat anda dan berita itu sampai juga ke telinga ibu bapa.' },
+        { label: 'Kutip serpihan pasu dengan berhati-hati sebelum memanggil orang dewasa', tone: 'neutral', outcome: 'Anda cuba mengemas seadanya sebelum meminta bantuan orang dewasa menyelesaikan perkara itu.' }
+      ]
+    },
+
+    // === REMAJA (13–17) ===
+    {
+      id: 'rnd_teen_viral_video',
+      minAge: 13, maxAge: 17,
+      icon: '🎬',
+      title: 'Video Spontan Anda Meletup Tular!',
+      text: 'Klip pendek anda mengulas isu harian remaja tiba-tiba mencecah ratusan ribu tontonan semalaman dengan pelbagai komen positif dan kecaman.',
+      choices: [
+        { label: 'Balas komen dengan tenang dan kongsi mesej positif kepada penonton', tone: 'helpful', outcome: 'Kematangan anda membalas kritikan membuatkan ramai pengguna media sosial menghormati anda.' },
+        { label: 'Tutup ruangan komen dan biarkan trend itu reda sendiri', tone: 'neutral', outcome: 'Anda menjaga ketenangan minda dengan menjauhkan diri daripada drama alam maya.' },
+        { label: 'Buat video sindiran pedas membalas kecaman netizen demi tontonan', tone: 'risky', outcome: 'Perang komen semakin hangat — nama anda melonjak naik tetapi tekanan emosi turut meningkat.' },
+        { label: 'Gunakan perhatian itu untuk mempromosikan kutipan derma sekolah', tone: 'helpful', outcome: 'Ramai penonton terinspirasi dan menyumbang kepada tabung kebajikan sekolah anda.' }
+      ]
+    },
+    {
+      id: 'rnd_teen_skip_school',
+      minAge: 13, maxAge: 17,
+      icon: '🛵',
+      title: 'Rakan Ajak Ponteng & Lepak Lewat Malam',
+      text: 'Sekumpulan rakan mengajak anda memanjat pagar sekolah untuk melepak di pusat permainan dan meronda di bandar hingga lewat malam.',
+      choices: [
+        { label: 'Tolak dengan tegas dan nasihatkan mereka agar tidak ambil risiko', tone: 'helpful', outcome: 'Beberapa rakan mula berfikir semula dan anda kekal fokus di dalam kelas.' },
+        { label: 'Beri alasan ada urusan keluarga dan terus pulang ke rumah', tone: 'neutral', outcome: 'Anda berjaya mengelak daripada terjebak tanpa mencetuskan pertelingkahan.' },
+        { label: 'Ikut serta demi menjaga hati kawan dan rasa keseronokan sementara', tone: 'risky', outcome: 'Rondaan pihak berkuasa dan pengawas menegur kumpulan anda di pusat bandar!' }
+      ]
+    },
+    {
+      id: 'rnd_teen_mall_wallet',
+      minAge: 13, maxAge: 17,
+      icon: '👛',
+      title: 'Jumpa Dompet Tercicir di Pusat Beli-Belah',
+      text: 'Anda menjumpai sebuah dompet kulit berisi wang tunai dan kad pengenalan di kerusi medan selera yang sesak.',
+      choices: [
+        { label: 'Serahkan terus ke kaunter khidmat pelanggan pusat beli-belah', tone: 'helpful', outcome: 'Pemilik dompet menghubungi kaunter tidak lama kemudian dan memuji kejujuran anda.' },
+        { label: 'Tinggalkan di atas meja dan maklumkan pekerja pembersihan berdekatan', tone: 'neutral', outcome: 'Pekerja medan selera mengambil alih urusan tersebut sementara anda meneruskan perjalanan.' },
+        { label: 'Ambil wang tunai di dalamnya dan tinggalkan dompet kosong di kerusi', tone: 'risky', outcome: 'Tindakan anda dirakam CCTV medan selera sehingga mengundang perhatian pengawal keselamatan!', moneyUsd: 45 }
+      ]
+    },
+    {
+      id: 'rnd_teen_group_gossip',
+      minAge: 13, maxAge: 17,
+      icon: '💬',
+      title: 'Gosip Panas Dalam Kumpulan Sembang Sekolah',
+      text: 'Seseorang menyebarkan tangkap layar perbualan peribadi seorang pelajar lain dalam kumpulan sembang besar sekolah.',
+      choices: [
+        { label: 'Tegur kumpulan itu supaya berhenti menyebarkan aib orang lain', tone: 'helpful', outcome: 'Tindakan berani anda menghentikan buli siber tersebut dan dihargai ramai rakan.' },
+        { label: 'Senyapkan notifikasi dan jangan beri sebarang komen', tone: 'neutral', outcome: 'Anda kekal berkecuali dan tidak mengheret diri ke dalam pertelagahan pelajar.' },
+        { label: 'Tambahkan komen sarkastik yang membuatkan isu semakin kecoh', tone: 'risky', outcome: 'Mesej anda tular ke kumpulan lain dan mencetuskan pertengkaran besar keesokan harinya.' }
+      ]
+    },
+    {
+      id: 'rnd_teen_counterfeit_hustle',
+      minAge: 14, maxAge: 17,
+      icon: '👟',
+      title: 'Tawaran Jual Barang Tiruan Untung Cepat',
+      text: 'Seorang kenalan menawarkan komisen lumayan jika anda membantu menjual kasut dan jam tangan tiruan kepada rakan sekolah sebagai barang asli.',
+      choices: [
+        { label: 'Tolak mentah-mentah kerana tidak mahu menipu pembeli', tone: 'helpful', outcome: 'Prinsip jujur anda menyelamatkan anda apabila kenalan itu akhirnya ditahan penguat kuasa.' },
+        { label: 'Abaikan mesejnya dan tukar topik perbualan', tone: 'neutral', outcome: 'Anda memilih jalan selamat dan menumpukan masa pada pelajaran serta hobi.' },
+        { label: 'Setuju menjual secara rahsia demi mendapatkan duit poket cepat', tone: 'risky', outcome: 'Beberapa pembeli menyedari barang itu palsu dan mengadu kepada pihak sekolah serta polis!', moneyUsd: 90 }
+      ]
+    },
+    {
+      id: 'rnd_teen_road_incident',
+      minAge: 14, maxAge: 17,
+      icon: '🚲',
+      title: 'Insiden Basikal & Pejalan Kaki di Taman',
+      text: 'Seorang warga emas terjatuh ketika cuba mengelak sekumpulan remaja yang menunggang basikal secara melulu di laluan taman.',
+      choices: [
+        { label: 'Berhenti segera untuk membantu warga emas itu bangun dan hubungi keluarganya', tone: 'helpful', outcome: 'Orang awam yang menyaksikan kejadian merakam dan memuji tindakan pantas anda.' },
+        { label: 'Pastikan ada orang lain membantu sebelum anda meneruskan perjalanan', tone: 'neutral', outcome: 'Beberapa pengunjung taman segera menghampiri mangsa sementara anda berlalu pergi.' },
+        { label: 'Pecut meninggalkan kawasan kerana bimbang dituduh terlibat sekali', tone: 'risky', outcome: 'Saksi tempatan menyangka anda sebahagian daripada kumpulan itu dan memarahi anda.' }
+      ]
+    },
+
+    // === DEWASA (18–59) ===
+    {
+      id: 'rnd_adult_lost_wallet',
+      minAge: 18, maxAge: 59,
+      icon: '👛',
+      title: 'Dompet Penuh Tunai Tercicir di Stesen Tren',
+      text: 'Ketika bergegas pulang dari kerja, anda terjumpa sebuah dompet tebal berisi wang tunai, kad bank dan kad perniagaan di bangku stesen.',
+      choices: [
+        { label: 'Hubungi nombor pada kad perniagaan dan pulangkan sendiri kepada pemiliknya', tone: 'helpful', outcome: 'Pemilik dompet sangat terharu dan berkongsi kisah kejujuran anda di media sosial!' },
+        { label: 'Serahkan kepada pegawai stesen bertugas dan beredar', tone: 'neutral', outcome: 'Pegawai stesen merekodkan penyerahan tersebut sementara anda sempat menaiki tren seterusnya.' },
+        { label: 'Ambil wang tunai di dalamnya dan buang dompet ke dalam tong sampah', tone: 'risky', outcome: 'Kamera keselamatan stesen merakam tindakan anda dan laporan polis dibuat oleh pemiliknya!', moneyUsd: 180 },
+        { label: 'Muat naik gambar hadapan dompet (tanpa info peribadi) di media sosial untuk cari pemilik', tone: 'helpful', outcome: 'Hantaran anda dikongsi ribuan orang sehingga pemilik sebenar berjaya menuntutnya.' }
+      ]
+    },
+    {
+      id: 'rnd_adult_parking_fight',
+      minAge: 18, maxAge: 59,
+      icon: '🚗',
+      title: 'Pertengkaran Awam Rebut Petak Parkir',
+      text: 'Seorang pemandu memotong barisan dan merampas petak letak kereta yang sudah lama anda tunggu sambil menjerit dengan biadab.',
+      choices: [
+        { label: 'Tarik nafas dalam, senyum tenang dan cari petak parkir lain', tone: 'helpful', outcome: 'Ketenangan anda meredakan suasana dan penumpang lain memuji kesabaran anda.' },
+        { label: 'Beritahu pengawal keselamatan kawasan dan biarkan mereka uruskan', tone: 'neutral', outcome: 'Pengawal keselamatan menegur pemandu tersebut sementara anda teruskan urusan anda.' },
+        { label: 'Bersemuka, meninggikan suara dan halang keretanya hingga orang merakam', tone: 'risky', outcome: 'Video pertengkaran anda tular di internet dan polis peronda datang meleraikan keadaan!' }
+      ]
+    },
+    {
+      id: 'rnd_adult_traffic_incident',
+      minAge: 18, maxAge: 59,
+      icon: '🚦',
+      title: 'Insiden Trafik & Pelanggaran Kecil di Jalan Raya',
+      text: 'Dalam kesesakan waktu puncak, sebuah kereta menghimpit laluan anda secara berbahaya sehingga cermin sisi bergesel.',
+      choices: [
+        { label: 'Berhenti di bahu jalan dengan tenang dan selesaikan laporan secara profesional', tone: 'helpful', outcome: 'Urusan tuntutan berjalan lancar tanpa pergaduhan dan saksi memuji sikap matang anda.' },
+        { label: 'Catat nombor plat sahaja dan buat laporan dalam talian kemudian', tone: 'neutral', outcome: 'Anda mengelak kesesakan bertambah teruk dan meneruskan perjalanan ke destinasi.' },
+        { label: 'Kejar kereta tersebut secara agresif sambil membunyikan hon tanpa henti', tone: 'risky', outcome: 'Pemanduan berbahaya anda menarik perhatian polis trafik yang sedang meronda!' }
+      ]
+    },
+    {
+      id: 'rnd_adult_shady_shortcut',
+      minAge: 18, maxAge: 59,
+      icon: '💼',
+      title: 'Tawaran Jalan Pintas Mencurigakan',
+      text: 'Seorang kenalan lama membisikkan "peluang dalaman" untuk meluluskan dokumen dan projek cepat dengan komisen tunai di bawah meja.',
+      choices: [
+        { label: 'Tolak tegas dan ingatkan beliau tentang akibat undang-undang', tone: 'helpful', outcome: 'Ketegasan integriti anda dihormati rakan industri apabila skim itu akhirnya dibongkar.' },
+        { label: 'Beri alasan sibuk dan jarakkan diri daripadanya', tone: 'neutral', outcome: 'Anda berjaya mengelak masalah tanpa menimbulkan permusuhan terbuka.' },
+        { label: 'Terima tawaran itu secara senyap demi keuntungan segera', tone: 'risky', outcome: 'Wang masuk dengan cepat, tetapi transaksi mencurigakan itu mula menarik perhatian penguat kuasa!', moneyUsd: 650 }
+      ]
+    },
+    {
+      id: 'rnd_adult_office_gossip',
+      minAge: 18, maxAge: 59,
+      icon: '🗣️',
+      title: 'Gosip Panas & Fitnah di Tempat Kerja / Kejiranan',
+      text: 'Khabar angin tidak berasas mengenai seorang rakan sekerja atau jiran tersebar luas dan orang ramai mula bertanya pendapat anda.',
+      choices: [
+        { label: 'Perbetulkan fakta secara berhemah dan pertahankan mangsa fitnah', tone: 'helpful', outcome: 'Pendirian adil anda mematikan gosip itu dan menaikkan rasa hormat orang sekeliling.' },
+        { label: 'Katakan anda tidak tahu menahu dan tukar topik perbualan', tone: 'neutral', outcome: 'Anda kekal profesional dan tidak terheret dalam politik murahan.' },
+        { label: 'Tokok tambah cerita supaya perbualan semakin hangat', tone: 'risky', outcome: 'Cerita itu berpatah balik kepada anda dan mencetuskan konfrontasi memalukan!' }
+      ]
+    },
+    {
+      id: 'rnd_adult_help_stranger',
+      minAge: 18, maxAge: 59,
+      icon: '🌧️',
+      title: 'Bantu Pemandu Kereta Rosak Dalam Hujan',
+      text: 'Sebuah keluarga terkandas di tepi jalan dengan tayar pancit ketika hujan mulai turun lebat dan hari semakin gelap.',
+      choices: [
+        { label: 'Berhenti bantu tukarkan tayar dan lindungi mereka dengan payung', tone: 'helpful', outcome: 'Keluarga itu amat bersyukur dan ucapan terima kasih mereka menceriakan hati anda sepanjang minggu.' },
+        { label: 'Hubungi talian bantuan lebuh raya bagi pihak mereka sebelum beredar', tone: 'neutral', outcome: 'Bantuan tunda dihantar ke lokasi dan anda sempat pulang sebelum hujan makin lebat.' },
+        { label: 'Rakam situasi mereka untuk dijadikan konten media sosial tanpa membantu', tone: 'risky', outcome: 'Netizen mengecam tindakan anda yang tidak berempati sehingga anda dikritik hebat!' }
+      ]
+    },
+    {
+      id: 'rnd_adult_viral_comment',
+      minAge: 18, maxAge: 59,
+      icon: '🔥',
+      title: 'Hantaran Media Sosial Anda Tular Mengejut',
+      text: 'Komen spontan anda mengenai isu kos sara hidup dan kualiti perkhidmatan awam tiba-tiba dikongsi puluhan ribu pengguna dan dipetik portal berita!',
+      choices: [
+        { label: 'Susuli dengan cadangan membina yang sopan dan berfakta', tone: 'helpful', outcome: 'Ramai memuji pandangan bernas anda dan pengikut anda bertambah mendadak.' },
+        { label: 'Matikan notifikasi telefon dan fokus pada kehidupan sebenar', tone: 'neutral', outcome: 'Anda membiarkan perdebatan netizen berlalu tanpa menambah tekanan diri.' },
+        { label: 'Berbalas hujah kasar dengan pengkritik sehingga lewat malam', tone: 'risky', outcome: 'Perdebatan bertukar toksik, emosi anda terganggu dan nama anda tular kerana kontroversi!' }
+      ]
+    },
+    {
+      id: 'rnd_adult_neighbor_row',
+      minAge: 18, maxAge: 59,
+      icon: '🏘️',
+      title: 'Kekecohan Jiran Tengah Malam',
+      text: 'Pada pukul 1 pagi, bunyi muzik terlalu kuat dan pertengkaran dari rumah jiran mengganggu tidur seluruh kawasan perumahan.',
+      choices: [
+        { label: 'Pergi menegur dengan sopan agar mereka memperlahankan bunyi', tone: 'helpful', outcome: 'Jiran anda memohon maaf dan memperlahankan muzik; penduduk lain berterima kasih kepada anda.' },
+        { label: 'Pasang penyumbat telinga dan cuba sambung tidur', tone: 'neutral', outcome: 'Anda mengelak pertelingkahan walaupun tidur anda agak terganggu malam itu.' },
+        { label: 'Balas dengan memasang bunyi bising lebih kuat hingga polis dipanggil', tone: 'risky', outcome: 'Kereta peronda polis tiba di jalan perumahan dan kedua-dua pihak diberi amaran keras!' }
+      ]
+    },
+
+    // === WARGA EMAS (60+) ===
+    {
+      id: 'rnd_senior_scam_call',
+      minAge: 60, maxAge: 115,
+      icon: '📞',
+      title: 'Panggilan Mencurigakan Menyamar Pegawai',
+      text: 'Anda menerima panggilan telefon daripada individu yang mendakwa pegawai mahkamah dan mengugut akaun bank anda akan dibekukan jika tidak membuat pindahan segera.',
+      choices: [
+        { label: 'Tamatkan panggilan segera dan buat laporan polis serta beri amaran kepada jiran', tone: 'helpful', outcome: 'Tindakan pantas anda menyelamatkan beberapa warga emas lain daripada terpedaya sindiket!' },
+        { label: 'Letak telefon dan sekat nombor tersebut tanpa panik', tone: 'neutral', outcome: 'Anda kekal tenang dan menyambung minum petang tanpa sebarang kerugian.' },
+        { label: 'Layan panggilan dan hampir mendedahkan maklumat peribadi kerana cemas', tone: 'risky', outcome: 'Anda tersedar di saat akhir tetapi pengalaman cemas itu amat meletihkan fikiran anda.' }
+      ]
+    },
+    {
+      id: 'rnd_senior_lost_youth',
+      minAge: 60, maxAge: 115,
+      icon: '🧭',
+      title: 'Bantu Pengunjung Sesat di Kawasan Kejiranan',
+      text: 'Seorang pelancong muda kelihatan kebingungan di simpang jalan dengan bateri telefonnya yang sudah habis.',
+      choices: [
+        { label: 'Tunjukkan arah dengan mesra dan tumpangkan mengecas telefon sekejap', tone: 'helpful', outcome: 'Pelancong itu memuji kemurahan hati anda dan berkongsi kisah manis tentang kejiranan anda.' },
+        { label: 'Beritahu arah ke balai polis atau stesen berdekatan secara ringkas', tone: 'neutral', outcome: 'Beliau mengucapkan terima kasih dan terus berjalan menuju ke stesen utama.' },
+        { label: 'Halau dengan rasa curiga kerana bimbang beliau berniat buruk', tone: 'risky', outcome: 'Suasana menjadi janggal dan beberapa jiran memandang anda dengan hairan.' }
+      ]
+    },
+    {
+      id: 'rnd_senior_local_news',
+      minAge: 60, maxAge: 115,
+      icon: '📰',
+      title: 'Wartawan Tempatan Merakam Kisah Hidup Anda',
+      text: 'Seorang wartawan komuniti tertarik dengan pengalaman hidup anda yang penuh warna dan meminta temu bual singkat di kedai kopi.',
+      choices: [
+        { label: 'Kongsi nasihat hidup yang merendah diri dan penuh hikmah', tone: 'helpful', outcome: 'Video temu bual anda tular dan menginspirasikan ribuan anak muda seluruh negara!' },
+        { label: 'Tolak secara sopan kerana lebih selesa hidup secara peribadi', tone: 'neutral', outcome: 'Wartawan itu menghormati privasi anda dan anda menikmati kopi petang dengan tenang.' },
+        { label: 'Kritik keras generasi muda dan pihak berkuasa di hadapan kamera', tone: 'risky', outcome: 'Kenyataan pedas anda mencetuskan perdebatan hangat di ruangan komen berita!' }
+      ]
+    },
+    {
+      id: 'rnd_senior_fence_dispute',
+      minAge: 60, maxAge: 115,
+      icon: '🏡',
+      title: 'Pertikaian Sempadan Pagar Dengan Jiran Baharu',
+      text: 'Jiran baharu yang sedang mengubah suai rumah meletakkan bahan binaan hingga menghalang sebahagian laluan masuk rumah anda.',
+      choices: [
+        { label: 'Berbincang secara baik sambil menghulurkan kuih sebagai tanda mesra', tone: 'helpful', outcome: 'Jiran anda memohon maaf dan segera mengalihkan bahan binaan — hubungan kejiranan jadi akrab.' },
+        { label: 'Laporkan secara rasmi melalui pihak pengurusan taman tanpa bersemuka', tone: 'neutral', outcome: 'Pihak pengurusan menyelesaikan isu itu dalam beberapa hari tanpa pertengkaran.' },
+        { label: 'Baling semula bahan binaan itu ke halaman mereka dalam keadaan marah', tone: 'risky', outcome: 'Pertengkaran besar tercetus di depan rumah sehingga pihak berkuasa tempatan terpaksa campur tangan!' }
+      ]
+    }
   ]
 };

@@ -404,14 +404,14 @@ window.Sim = {
       return { event: null, died: true };
     }
 
-    // 7. Pilih peristiwa pilihan tahunan (utamakan Berita Duka / Keguguran / Krisis Remaja) & pastikan sekurang-kurangnya 5 pilihan berbeza!
+    // 7. Pilih peristiwa pilihan tahunan (utamakan Berita Duka / Keguguran / Krisis Remaja) & hadkan tepat 3 pilihan rawak tanpa spoiler!
     let event = priorityNpcDeathEvent
       || priorityMiscarriageEvent
       || priorityTeenEvent
       || this._pickYearlyEvent(s, c);
 
     if (event) {
-      event = this._ensureAtLeastFiveChoices(event, s, c);
+      event = this._enforceExactlyThreeChoices(event, s, c);
     }
 
     const curBlock = s.journal[s.journal.length - 1];
@@ -1008,40 +1008,69 @@ window.Sim = {
       }
     }
 
-    // 6. Peristiwa Budaya Negara & Universal (sedia ada)
-    const countryPool = (GAME_EVENTS.country[s.countryId] || []).filter(
-      e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
+    // 6. Kolam Peristiwa Rawak Tahunan (Anti-Ulang 15 peristiwa terakhir — sentiasa segar setiap Age-Up!)
+    if (!Array.isArray(s.recentRandomEventIds)) s.recentRandomEventIds = [];
+    const recentSet = new Set(s.recentRandomEventIds);
+    const recordRecent = (ev) => {
+      if (!ev || !ev.id) return ev;
+      s.recentRandomEventIds = [ev.id, ...s.recentRandomEventIds.filter(id => id !== ev.id)].slice(0, 15);
+      return { ...ev, isAgeUpRandom: true };
+    };
+
+    const customRandomPool = (GAME_EVENTS.ageUpRandomPool || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id)
     );
-    if (countryPool.length > 0 && Utils.chance(0.58)) {
+    if (customRandomPool.length > 0 && Utils.chance(0.75)) {
+      return recordRecent(Utils.pick(customRandomPool));
+    }
+
+    const countryPool = (GAME_EVENTS.country[s.countryId] || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id) && !s.seenEventIds.includes(e.id)
+    );
+    if (countryPool.length > 0 && Utils.chance(0.55)) {
       const picked = Utils.pick(countryPool);
       s.seenEventIds.push(picked.id);
-      return picked;
+      return recordRecent(picked);
     }
 
-    const uniPool = GAME_EVENTS.universal.filter(
-      e => s.age >= e.minAge && s.age <= e.maxAge && !s.seenEventIds.includes(e.id)
+    const uniPool = (GAME_EVENTS.universal || []).filter(
+      e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id) && !s.seenEventIds.includes(e.id)
     );
-    if (uniPool.length > 0 && Utils.chance(0.62)) {
+    if (uniPool.length > 0 && Utils.chance(0.55)) {
       const picked = Utils.pick(uniPool);
       s.seenEventIds.push(picked.id);
-      return picked;
+      return recordRecent(picked);
     }
 
-    const anyCountry = (GAME_EVENTS.country[s.countryId] || []).filter(
-      e => s.age >= e.minAge && s.age <= e.maxAge
-    );
-    if (anyCountry.length > 0 && Utils.chance(0.45)) {
-      return Utils.pick(anyCountry);
+    // Jika masih ada dalam ageUpRandomPool yang belum baru muncul, pilih segera
+    if (customRandomPool.length > 0) {
+      return recordRecent(Utils.pick(customRandomPool));
     }
 
-    const anyUni = (GAME_EVENTS.universal || []).filter(
-      e => s.age >= e.minAge && s.age <= e.maxAge
-    );
-    if (anyUni.length > 0 && Utils.chance(0.55)) {
-      return Utils.pick(anyUni);
+    // Gabungkan semua peristiwa sesuai umur yang tidak muncul dalam 15 pusingan terakhir
+    const combinedFresh = [
+      ...(GAME_EVENTS.ageUpRandomPool || []),
+      ...(GAME_EVENTS.country[s.countryId] || []),
+      ...(GAME_EVENTS.universal || [])
+    ].filter(e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id));
+
+    if (combinedFresh.length > 0) {
+      return recordRecent(Utils.pick(combinedFresh));
     }
 
-    return this._buildProceduralFiveChoiceEvent(s, c);
+    // Fallback mutlak jika kolam umur hampir habis: elakkan ulangan tahun sebelumnya sahaja
+    const lastId = s.recentRandomEventIds[0] || null;
+    const anyAgeAppropriate = [
+      ...(GAME_EVENTS.ageUpRandomPool || []),
+      ...(GAME_EVENTS.country[s.countryId] || []),
+      ...(GAME_EVENTS.universal || [])
+    ].filter(e => s.age >= e.minAge && s.age <= e.maxAge && e.id !== lastId);
+
+    if (anyAgeAppropriate.length > 0) {
+      return recordRecent(Utils.pick(anyAgeAppropriate));
+    }
+
+    return recordRecent(this._buildProceduralFiveChoiceEvent(s, c));
   },
 
   _buildProceduralFiveChoiceEvent(s, c) {
@@ -1431,6 +1460,154 @@ window.Sim = {
     };
   },
 
+  _enforceExactlyThreeChoices(ev, s, c) {
+    if (!ev || !Array.isArray(ev.choices)) return ev;
+
+    const shuffle = (arr) => {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
+
+    // Salin pilihan & buang sebarang hint spoiler
+    let pool = ev.choices.map(ch => {
+      const cleaned = { ...ch };
+      delete cleaned.hint;
+      return cleaned;
+    });
+
+    // Jika kurang daripada 3 pilihan, tambah pilihan kontekstual Bahasa Melayu
+    if (pool.length < 3) {
+      const existingLabels = new Set(pool.map(ch => (ch.label || '').trim().toLowerCase()));
+      const isChild = s.age < 13;
+      const fallbacks = [
+        {
+          label: isChild ? 'Bertenang dan minta nasihat orang dewasa' : 'Tarik nafas tenang dan ambil pendekatan berkecuali',
+          tone: 'neutral',
+          outcome: isChild
+            ? 'Anda memilih untuk bertenang dan mendapatkan pandangan orang dewasa sebelum bertindak.'
+            : 'Anda memilih untuk kekal tenang dan memerhati keadaan tanpa terburu-buru.'
+        },
+        {
+          label: isChild ? 'Cuba selesaikan sendiri dengan cara paling baik' : 'Bantu selesaikan keadaan secara berhemah',
+          tone: 'helpful',
+          outcome: 'Pendekatan berhemah anda memberi kesan positif terhadap keadaan sekeliling.'
+        },
+        {
+          label: isChild ? 'Buat keputusan spontan tanpa berfikir panjang' : 'Bertindak berani di luar kebiasaan walaupun berisiko',
+          tone: 'risky',
+          outcome: 'Langkah spontan anda mencetuskan reaksi yang tidak dijangka daripada orang di sekeliling!'
+        }
+      ];
+      for (const fb of fallbacks) {
+        if (pool.length >= 3) break;
+        if (!existingLabels.has(fb.label.toLowerCase())) {
+          pool.push(fb);
+          existingLabels.add(fb.label.toLowerCase());
+        }
+      }
+    }
+
+    // Jika lebih daripada 3 pilihan, sampel 3 secara rawak; sentiasa kocok susunan paparan
+    const selected = shuffle(pool).slice(0, 3);
+    return {
+      ...ev,
+      isAgeUpRandom: true,
+      choices: selected
+    };
+  },
+
+  _inferChoiceTone(choice) {
+    if (choice && choice.tone) return choice.tone;
+    if (choice && choice.journalType === 'warning') return 'risky';
+    const lbl = ((choice && choice.label) || '').toLowerCase();
+    if (/tolong|bantu|serah|pulang|jujur|sopan|maaf|nasihat|tenang|derma|pertahan|tegur/.test(lbl)) return 'helpful';
+    if (/curi|ambil wang|tipu|gaduh|kasar|marah|kejar|baling|ponteng|sorok|bawah meja|sindiran|bising|nakal|lari/.test(lbl)) return 'risky';
+    return 'neutral';
+  },
+
+  _applyRandomizedAgeUpOutcome(s, choice) {
+    if (!s) return '';
+    if (!s.alignment || typeof s.alignment !== 'object') {
+      s.alignment = { karma: 0, fame: 0, peakFame: 0, notoriety: 0, stress: 10 };
+    }
+    const a = s.alignment;
+    if (typeof a.karma !== 'number') a.karma = 0;
+    if (typeof a.fame !== 'number') a.fame = 0;
+    if (typeof a.notoriety !== 'number') a.notoriety = 0;
+    if (typeof a.stress !== 'number') a.stress = 10;
+
+    const tone = this._inferChoiceTone(choice);
+    const statKeys = ['karma', 'fame', 'notoriety', 'stress'];
+    // Kocok susunan dan pilih 2–4 statistik untuk dikemas kini secara rawak
+    for (let i = statKeys.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [statKeys[i], statKeys[j]] = [statKeys[j], statKeys[i]];
+    }
+    const pickedKeys = statKeys.slice(0, Utils.randInt(2, 4));
+
+    const labelMap = {
+      karma: 'Karma',
+      fame: 'Populariti',
+      notoriety: 'Haba Polis',
+      stress: 'Stres'
+    };
+
+    const parts = [];
+    for (const key of pickedKeys) {
+      const mag = Utils.randInt(5, 15);
+      const twist = Utils.chance(0.22);
+      let sign = 1;
+
+      if (tone === 'helpful') {
+        if (key === 'karma') sign = twist ? -1 : 1;
+        else if (key === 'fame') sign = twist ? -1 : 1;
+        else if (key === 'notoriety') sign = twist ? 1 : -1;
+        else if (key === 'stress') sign = twist ? 1 : -1;
+      } else if (tone === 'risky') {
+        if (key === 'karma') sign = twist ? 1 : -1;
+        else if (key === 'fame') sign = Utils.chance(0.55) ? 1 : -1;
+        else if (key === 'notoriety') sign = twist ? -1 : 1;
+        else if (key === 'stress') sign = twist ? -1 : 1;
+      } else {
+        // neutral: campuran rawak ringan
+        if (key === 'karma') sign = Utils.chance(0.55) ? 1 : -1;
+        else if (key === 'fame') sign = Utils.chance(0.50) ? 1 : -1;
+        else if (key === 'notoriety') sign = Utils.chance(0.35) ? 1 : -1;
+        else if (key === 'stress') sign = Utils.chance(0.45) ? 1 : -1;
+      }
+
+      const prevVal = a[key];
+      let delta = sign * mag;
+
+      // Kendali statistik 0–100 yang bermula pada 0 (atau 100) supaya kesan sentiasa nyata
+      if (key !== 'karma') {
+        if (prevVal <= 0 && delta < 0) delta = Math.abs(delta);
+        else if (prevVal >= 100 && delta > 0) delta = -Math.abs(delta);
+      } else {
+        if (prevVal <= -100 && delta < 0) delta = Math.abs(delta);
+        else if (prevVal >= 100 && delta > 0) delta = -Math.abs(delta);
+      }
+
+      const nextVal = key === 'karma'
+        ? Math.max(-100, Math.min(100, prevVal + delta))
+        : Math.max(0, Math.min(100, prevVal + delta));
+      const actualDelta = nextVal - prevVal;
+      a[key] = nextVal;
+      if (key === 'fame') {
+        a.peakFame = Math.max(a.peakFame || 0, nextVal);
+      }
+      if (actualDelta !== 0) {
+        parts.push(`${labelMap[key]} ${actualDelta > 0 ? `+${actualDelta}` : actualDelta}`);
+      }
+    }
+
+    return parts.join(' • ');
+  },
+
   resolveEventChoice(event, choice) {
     const s = GameState.current;
     if (!s) return { outcome: '', nextEvent: null, toastType: 'culture' };
@@ -1464,6 +1641,14 @@ window.Sim = {
       if (res.nextEvent) nextEvent = res.nextEvent;
       if (res.openDivorceModal) openDivorceModal = res.openDivorceModal;
       if (res.toastType) toastType = res.toastType;
+    }
+
+    // Untuk peristiwa rawak Age-Up, laksanakan kemas kini dinamik Karma, Populariti, Haba Polis & Stres
+    if (event && event.isAgeUpRandom && !nextEvent) {
+      const statSummary = this._applyRandomizedAgeUpOutcome(s, choice);
+      if (statSummary) {
+        outcome = outcome ? `${outcome} (${statSummary})` : statSummary;
+      }
     }
 
     if (!nextEvent && outcome) {
