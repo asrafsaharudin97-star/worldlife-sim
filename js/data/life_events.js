@@ -81,6 +81,28 @@ window.BELIEFS = {
     charityLabel: 'Derma Kemanusiaan',
     desc: 'Menilai kehidupan melalui akal, sains dan tanggungjawab sesama manusia.'
   },
+  sikhism: {
+    id: 'sikhism',
+    name: 'Sikh',
+    icon: '🪯',
+    isReligious: true,
+    resilienceBonus: 0.20,
+    practiceTitle: 'Doa & Khidmat Seva di Gurdwara',
+    practiceDesc: 'Menyumbang tenaga dan makanan percuma kepada komuniti setempat',
+    charityLabel: 'Seva & Kebajikan',
+    desc: 'Menghayati kejujuran, kesamarataan dan khidmat bakti sesama insan.'
+  },
+  none: {
+    id: 'none',
+    name: 'Tidak Beragama',
+    icon: '⚛️',
+    isReligious: false,
+    resilienceBonus: 0.12,
+    practiceTitle: 'Refleksi Diri & Khidmat Sivik',
+    practiceDesc: 'Luangkan masa merenung matlamat hidup dan menyumbang kepada komuniti',
+    charityLabel: 'Derma Komuniti',
+    desc: 'Mengutamakan nilai kemanusiaan, akal budi dan etika sejagat.'
+  },
   unassigned: {
     id: 'unassigned',
     name: 'Belum Ditentukan',

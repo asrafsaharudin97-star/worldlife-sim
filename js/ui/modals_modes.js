@@ -27,7 +27,7 @@ window.ModeModals = {
       <div class="tab-pills">
         <button class="tab-pill soc-tab ${activeTab === 'social' ? 'active' : ''}" data-stab="social">📱 Laman Sosial</button>
         <button class="tab-pill soc-tab ${activeTab === 'viral' ? 'active' : ''}" data-stab="viral">⚡ Kerjaya Viral</button>
-        <button class="tab-pill soc-tab ${activeTab === 'dating' ? 'active' : ''}" data-stab="dating">${muslim ? '🤲 Ta\'aruf Halal' : '💘 SwipeMatch'}</button>
+        <button class="tab-pill soc-tab ${activeTab === 'dating' ? 'active' : ''}" data-stab="dating">💘 Sesi Date</button>
       </div>
     `;
 
@@ -116,15 +116,14 @@ window.ModeModals = {
       } else {
         const pool = (s._datingPool && s._datingPool.length > 0) ? s._datingPool : SocialMedia.generateDatingCandidates();
         body += `
-          <div class="info-banner ${muslim ? 'culture-box' : 'highlight'}">
-            <strong>${muslim ? '🤲 BaitulMuslim — Platform Ta\'aruf & Jodoh Halal' : '💘 SwipeMatch — Aplikasi Janji Temu'}</strong><br/>
-            ${muslim
-              ? 'Calon disaring untuk niat perkahwinan sah mengikut batas syariah. Namun hati manusia tetap punya ujian — kenali dengan bijak!'
-              : 'Leret & pilih calon pasangan! Awas: sesetengah profil mungkin menyembunyikan <em>Red Flag</em> (kaki kikis, catfish, rahsia berkahwin) atau Jodoh Sejati!'}
+          <div class="info-banner highlight">
+            <strong>💘 Sesi Date — Kenali Calon Pasangan</strong><br/>
+            Pilih calon yang menarik minat anda untuk memulakan Sesi Date! Awas: sesetengah profil mungkin menyembunyikan <em>Red Flag</em> atau Jodoh Sejati.
           </div>
           <div class="action-list">
             ${pool.map(cand => {
               const bObj = GameState.getBeliefObj(cand.belief);
+              const relLabel = cand.religion || bObj.name;
               return `
                 <div class="dating-card">
                   <div class="dc-top">
@@ -133,10 +132,10 @@ window.ModeModals = {
                   </div>
                   <div class="dc-meta">
                     💼 ${Utils.escapeHtml(cand.job)} • 💰 ${cand.wealth}<br/>
-                    ${bObj.icon} ${bObj.name} • 🤝 Keserasian ${cand.compatibility}%
+                    ${bObj.icon} Agama: <strong>${Utils.escapeHtml(relLabel)}</strong> • 🤝 Keserasian ${cand.compatibility}%
                   </div>
                   <button class="btn-sm primary match-cand-btn" data-uid="${cand.uid}" style="width:100%;margin-top:8px;">
-                    ${muslim ? '🤲 Mula Ta\'aruf Terhormat' : '💘 Swipe Kanan (Match!)'}
+                    💘 Mula Sesi Date
                   </button>
                 </div>
               `;
@@ -148,8 +147,8 @@ window.ModeModals = {
     }
 
     Modals.open({
-      icon: activeTab === 'dating' ? (muslim ? '🤲' : '💘') : '📱',
-      title: activeTab === 'dating' ? (muslim ? 'Platform Ta\'aruf Halal' : 'SwipeMatch') : 'Laman Sosial & Viral',
+      icon: activeTab === 'dating' ? '💘' : '📱',
+      title: activeTab === 'dating' ? 'Sesi Date' : 'Laman Sosial & Viral',
       subtitle: `Pengikut: ${SocialMedia.formatFollowers(s.socialMedia.followers)} • Populariti: ${s.alignment.fame}%`,
       bodyHtml: tabsHtml + body
     });

@@ -216,6 +216,21 @@ window.SocialMedia = {
 
     const wealthTiers = ['Sederhana', 'Stabil', 'Berada', 'Mewah'];
     const list = [];
+    const religionPool = ['islam', 'christianity', 'buddhism', 'hinduism', 'sikhism', 'none'];
+    const shuffledReligions = [...religionPool].sort(() => Math.random() - 0.5);
+    // Pastikan kepelbagaian agama yang nyata dalam setiap senarai 3 calon (tidak terkunci pada Islam sahaja)
+    const isMuslimMajority = window.LegalInheritanceEngine && LegalInheritanceEngine.isMuslimCountry(s.countryId);
+    const pickedBeliefs = [];
+    for (let i = 0; i < 3; i++) {
+      if (i === 0 && isMuslimMajority && Utils.chance(0.45)) {
+        pickedBeliefs.push('islam');
+      } else {
+        const nextUnused = shuffledReligions.find(r => !pickedBeliefs.includes(r));
+        pickedBeliefs.push(nextUnused || Utils.pick(religionPool));
+      }
+    }
+    // Kocok susunan calon supaya agama tidak sentiasa pada kedudukan tetap
+    pickedBeliefs.sort(() => Math.random() - 0.5);
 
     for (let i = 0; i < 3; i++) {
       const heritage = Utils.pick(c.heritages).id;
@@ -225,13 +240,9 @@ window.SocialMedia = {
       const looks = Utils.randInt(45, 96);
       const wealth = Utils.pick(wealthTiers);
 
-      // Untuk platform Ta'aruf Halal: majoriti calon Muslim, disaring keluarga (risiko red flag lebih rendah tetapi masih wujud!)
-      let belief;
-      if (muslim) {
-        belief = Utils.chance(0.85) ? 'islam' : Utils.pick(['christianity', 'buddhism', 'agnostic']);
-      } else {
-        belief = window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(s.countryId, heritage) : 'unassigned';
-      }
+      const belief = pickedBeliefs[i];
+      const bObj = GameState.getBeliefObj(belief);
+      const religionLabel = bObj ? bObj.name : 'Tidak Beragama';
 
       const traitPool = muslim
         ? (Utils.chance(0.62) ? [this.HIDDEN_TRAITS[0]] : [this.HIDDEN_TRAITS[1], this.HIDDEN_TRAITS[2], this.HIDDEN_TRAITS[4]])
@@ -247,6 +258,7 @@ window.SocialMedia = {
         looks,
         wealth,
         belief,
+        religion: religionLabel,
         compatibility: Relationships.computeCompatibility(s, belief),
         hiddenTraitId: hiddenTrait.id
       });
@@ -292,7 +304,7 @@ window.SocialMedia = {
       return { ok: false, msg: `${cand.name} rupanya sudah berkahwin secara rahsia! Dibatalkan.` };
     }
 
-    // Semak penerimaan atau penolakan semasa Mula Kenal / Ta'aruf
+    // Semak penerimaan atau penolakan semasa Sesi Date
     if (window.Relationships && Relationships.evaluateCourtingAcceptance) {
       const courtRes = Relationships.evaluateCourtingAcceptance(s, {
         name: cand.name,
@@ -316,16 +328,17 @@ window.SocialMedia = {
     }
 
     const roleLabel = muslim
-      ? (cand.gender === 'female' ? 'Calon Ta\'aruf (Wanita)' : 'Calon Ta\'aruf (Lelaki)')
+      ? (cand.gender === 'female' ? 'Sesi Date (Wanita)' : 'Sesi Date (Lelaki)')
       : (cand.gender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
 
+    const bObj = GameState.getBeliefObj(cand.belief);
     const partner = {
       id: 'rel_partner_' + Date.now(),
       name: cand.name,
       role: roleLabel,
       category: 'partner',
       stage: muslim ? 'taaruf' : 'dating',
-      origin: muslim ? 'Platform Ta\'aruf Halal' : 'Aplikasi SwipeMatch',
+      origin: 'Sesi Date',
       gender: cand.gender,
       age: cand.age,
       countryId: s.countryId,
@@ -333,6 +346,7 @@ window.SocialMedia = {
       trust: cand.hiddenTraitId === 'soulmate' ? Utils.randInt(78, 92) : Utils.randInt(42, 68),
       compatibility: cand.compatibility,
       belief: cand.belief,
+      religion: cand.religion || bObj.name,
       yearsTogether: 0,
       unresolvedConflict: false,
       hiddenTraitId: cand.hiddenTraitId,
@@ -344,12 +358,11 @@ window.SocialMedia = {
     s.relationships.push(partner);
     s.partnerId = partner.id;
     s._datingPool = [];
-    const bObj = GameState.getBeliefObj(cand.belief);
 
     // Jika watak Islam dan calon bukan Islam -> cetus dilema batas agama!
     if (muslim && cand.belief !== 'islam') {
       GameState.addJournalEntry(
-        `🤲 Anda berkenalan dengan ${cand.name} (${cand.age} thn, ${bObj.icon} ${bObj.name}). Perbezaan pegangan perlu dibincangkan mengikut batas syariah.`,
+        `💘 Anda berkenalan dalam Sesi Date bersama ${cand.name} (${cand.age} thn, ${bObj.icon} ${bObj.name}). Perbezaan pegangan perlu dibincangkan mengikut batas syariah.`,
         'spiritual'
       );
       GameState.save();
@@ -362,13 +375,11 @@ window.SocialMedia = {
 
     GameState.adjustStats({ happiness: 13 });
     GameState.addJournalEntry(
-      muslim
-        ? `🤲 Melalui Platform Ta'aruf Halal, anda mula mengenali ${cand.name} (${cand.age} thn, ${cand.job}) dengan niat murni menuju akad nikah.`
-        : `💘 Match! Anda dan ${cand.name} (${cand.age} thn, ${cand.job}) serasi di SwipeMatch dan mula keluar bersama!`,
+      `💘 Melalui Sesi Date, anda mula mengenali ${cand.name} (${cand.age} thn, ${cand.job}, ${bObj.icon} ${bObj.name}) dan keluar bersama!`,
       'romance'
     );
     GameState.save();
-    return { ok: true, msg: muslim ? `Mula sesi Ta'aruf bersama ${cand.name}!` : `Anda kini bercinta dengan ${cand.name}!` };
+    return { ok: true, msg: `Mula Sesi Date bersama ${cand.name}!` };
   },
 
   // Peristiwa tahunan red-flag tersembunyi pasangan dari aplikasi jodoh

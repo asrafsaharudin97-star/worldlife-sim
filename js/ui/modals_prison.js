@@ -80,31 +80,28 @@ window.PrisonModals = {
             <span class="ai-icon">🏋️</span>
             <span class="ai-content">
               <span class="ai-title">Gim Penjara</span>
-              <span class="ai-desc">Tingkatkan Kesihatan (+8%) &amp; Hormat Banduan (+)</span>
+              <span class="ai-desc">Bersenam di kawasan gim bersama banduan lain</span>
             </span>
-            <span class="ai-right">Hormat +</span>
           </button>
           <button class="action-item pris-act" data-act="library" ${s.yearlyActions.prison_library ? 'disabled' : ''}>
             <span class="ai-icon">📚</span>
             <span class="ai-content">
               <span class="ai-title">Perpustakaan Penjara</span>
-              <span class="ai-desc">Tingkatkan Kepintaran (+7%) &amp; Rekod Kelakuan (+)</span>
+              <span class="ai-desc">Membaca buku dan bahan ilmiah di perpustakaan penjara</span>
             </span>
-            <span class="ai-right">Kelakuan +</span>
           </button>
           <button class="action-item pris-act" data-act="work" ${s.yearlyActions.prison_work ? 'disabled' : ''}>
             <span class="ai-icon">🧹</span>
             <span class="ai-content">
               <span class="ai-title">Kerja Penjara (Dapur / Bengkel)</span>
-              <span class="ai-desc">Jana pendapatan kecil &amp; baiki Rekod Kelakuan</span>
+              <span class="ai-desc">Membantu tugasan harian di dapur atau bengkel penjara</span>
             </span>
-            <span class="ai-right">Upah +</span>
           </button>
           <button class="action-item pris-act" data-act="gang" ${s.yearlyActions.prison_gang ? 'disabled' : ''}>
             <span class="ai-icon">👊</span>
             <span class="ai-content">
               <span class="ai-title">${p.gangName ? `Misi Geng (${Utils.escapeHtml(p.gangName)})` : 'Sertai Geng Penjara'}</span>
-              <span class="ai-desc">Hormat ++ &amp; bonus rusuhan, tetapi Rekod Kelakuan --</span>
+              <span class="ai-desc">Terlibat dalam aktiviti kumpulan di dalam penjara</span>
             </span>
             <span class="ai-right cost">${p.gangName ? 'Misi' : 'Sertai'}</span>
           </button>

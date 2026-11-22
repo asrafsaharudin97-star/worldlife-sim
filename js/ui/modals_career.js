@@ -147,23 +147,23 @@ window.CareerModals = {
             <span class="ai-icon">⚡</span>
             <span class="ai-content">
               <span class="ai-title">Kerja Keras &amp; Lebih Masa</span>
-              <span class="ai-desc">Tingkatkan prestasi kerja &amp; peluang naik pangkat (+Stres sedikit)</span>
+              <span class="ai-desc">Berikan komitmen tambahan untuk tugasan dan projek syarikat</span>
             </span>
-            <span class="ai-right">Prestasi ++</span>
+            <span class="ai-right">Laksana</span>
           </button>
           <button type="button" class="action-item" id="act-work-network" ${s.yearlyActions.workNetwork ? 'disabled' : ''}>
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
               <span class="ai-title">Bina Rangkaian (Networking)</span>
-              <span class="ai-desc">Rapat dengan pengarah &amp; tokoh industri (+Reputasi &amp; Prestasi)</span>
+              <span class="ai-desc">Berkenalan dan bergaul dengan pengarah serta tokoh industri</span>
             </span>
-            <span class="ai-right">Reputasi +</span>
+            <span class="ai-right">Laksana</span>
           </button>
           <button type="button" class="action-item" id="act-raise" ${s.yearlyActions.askedRaise ? 'disabled' : ''}>
             <span class="ai-icon">💰</span>
             <span class="ai-content">
               <span class="ai-title">Minta Kenaikan Gaji</span>
-              <span class="ai-desc">Berunding dengan majikan untuk naik gaji (+6–14%)</span>
+              <span class="ai-desc">Berunding dengan majikan mengenai semakan gaji tahunan anda</span>
             </span>
             <span class="ai-right">Rundingan</span>
           </button>
@@ -317,9 +317,9 @@ window.CareerModals = {
             <span class="ai-icon">📖</span>
             <span class="ai-content">
               <span class="ai-title">Belajar Bersungguh-sungguh</span>
-              <span class="ai-desc">Tingkatkan Kepintaran &amp; peluang biasiswa masa depan</span>
+              <span class="ai-desc">Ulang kaji pelajaran dan siapkan latihan sekolah dengan tekun</span>
             </span>
-            <span class="ai-right">Pintar ++</span>
+            <span class="ai-right">Belajar</span>
           </button>
           ${canDropSec ? `
             <button type="button" class="action-item" id="act-dropout-study" style="border-color:#fca5a5;">
@@ -388,9 +388,9 @@ window.CareerModals = {
             <span class="ai-icon">📖</span>
             <span class="ai-content">
               <span class="ai-title">Belajar / Ulang Kaji</span>
-              <span class="ai-desc">${didStudy ? 'Sudah mengulang kaji tahun ini (Kepintaran & PNGK meningkat)' : 'Naikkan Kepintaran & PNGK hingga 4.00 (Anugerah Dekan) • Sedikit stres'}</span>
+              <span class="ai-desc">${didStudy ? 'Sudah mengulang kaji tahun ini' : 'Ulang kaji kuliah, tugasan dan nota peperiksaan tahun ini'}</span>
             </span>
-            <span class="ai-right">${didStudy ? '✓ Selesai' : 'PNGK +'}</span>
+            <span class="ai-right">${didStudy ? '✓ Selesai' : 'Ulang Kaji'}</span>
           </button>
           <button type="button" class="action-item" id="act-dropout-study" style="border-color:#fca5a5;">
             <span class="ai-icon">🚪</span>

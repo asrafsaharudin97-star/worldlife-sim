@@ -351,7 +351,7 @@ window.ActivitiesDeck = {
       const partner = {
         id: 'rel_partner_' + Date.now() + '_' + Utils.randInt(10, 99),
         name,
-        role: muslim ? 'Calon Ta\'aruf' : 'Pasangan Kekasih',
+        role: muslim ? 'Sesi Date' : 'Pasangan Kekasih',
         category: 'partner',
         stage: muslim ? 'taaruf' : 'dating',
         origin: originLabel,

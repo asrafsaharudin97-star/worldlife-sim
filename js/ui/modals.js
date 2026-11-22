@@ -102,9 +102,8 @@ window.Modals = {
             <span class="ai-icon">📖</span>
             <span class="ai-content">
               <span class="ai-title">Belajar Bersungguh-sungguh</span>
-              <span class="ai-desc">Pergi tuisyen &amp; ulang kaji nota untuk tingkatkan Kepintaran</span>
+              <span class="ai-desc">Pergi tuisyen &amp; ulang kaji nota pelajaran</span>
             </span>
-            <span class="ai-right">Pintar +</span>
           </button>
         </div>
       `;
@@ -119,9 +118,8 @@ window.Modals = {
             <span class="ai-icon">📚</span>
             <span class="ai-content">
               <span class="ai-title">Ulang Kaji Lewat Malam</span>
-              <span class="ai-desc">Tingkatkan Kepintaran untuk kerjaya bergaji tinggi</span>
+              <span class="ai-desc">Buat persediaan rapi untuk peperiksaan universiti</span>
             </span>
-            <span class="ai-right">Pintar ++</span>
           </button>
         </div>
       `;
@@ -160,17 +158,15 @@ window.Modals = {
             <span class="ai-icon">⚡</span>
             <span class="ai-content">
               <span class="ai-title">Kerja Lebih Rajin</span>
-              <span class="ai-desc">Tingkatkan prestasi kerja &amp; peluang kenaikan gaji</span>
+              <span class="ai-desc">Berikan komitmen penuh terhadap tugasan di tempat kerja</span>
             </span>
-            <span class="ai-right">Prestasi ++</span>
           </button>
           <button class="action-item" id="act-raise" ${s.yearlyActions.askedRaise ? 'disabled' : ''}>
             <span class="ai-icon">💰</span>
             <span class="ai-content">
               <span class="ai-title">Minta Kenaikan Gaji</span>
-              <span class="ai-desc">Berunding dengan majikan untuk naik gaji</span>
+              <span class="ai-desc">Berunding dengan majikan untuk semakan gaji</span>
             </span>
-            <span class="ai-right">+6–14%</span>
           </button>
           <button class="action-item" id="act-quit-job">
             <span class="ai-icon">🚪</span>
@@ -482,7 +478,7 @@ window.Modals = {
             <span class="ai-title">Kenali Rakan Baru (${friendSrc})</span>
             <span class="ai-desc">Bina lingkaran sosial untuk sokongan emosi, rujukan kerja &amp; peluang</span>
           </span>
-          <span class="ai-right">Rakan +</span>
+          <span class="ai-right">Kenali</span>
         </button>
       `;
     }
@@ -491,12 +487,12 @@ window.Modals = {
     if (!s.partnerId && s.age >= minLoveAge) {
       html += `
         <button class="action-item" id="btn-find-love">
-          <span class="ai-icon">${muslim ? '🤲' : '💘'}</span>
+          <span class="ai-icon">💘</span>
           <span class="ai-content">
-            <span class="ai-title">${muslim ? `Sesi Ta'aruf & Cadangan Keluarga (${c.flag})` : `Cari Pasangan di ${s.city}, ${c.name} ${c.flag}`}</span>
-            <span class="ai-desc">${muslim ? 'Kenali calon pasangan secara terhormat menuju bertunang & akad nikah' : 'Kenali pasangan tempatan melalui aktiviti sosial & janji temu'}</span>
+            <span class="ai-title">Sesi Date (${s.city}, ${c.name} ${c.flag})</span>
+            <span class="ai-desc">Kenali calon pasangan baharu melalui Sesi Date</span>
           </span>
-          <span class="ai-right">${muslim ? 'Ta\'aruf' : 'Bercinta!'}</span>
+          <span class="ai-right">Sesi Date</span>
         </button>
       `;
     }
@@ -560,7 +556,7 @@ window.Modals = {
     }).join('');
 
     if (partnerList.length > 0) {
-      html += `<div class="section-heading">${s.married ? '💍 Pasangan Hidup (Suami / Isteri)' : (muslim ? '🤲 Calon Ta\'aruf / Tunang' : '💘 Pasangan')}</div><div class="action-list">${renderList(partnerList)}</div>`;
+      html += `<div class="section-heading">${s.married ? '💍 Pasangan Hidup (Suami / Isteri)' : '💘 Sesi Date / Pasangan'}</div><div class="action-list">${renderList(partnerList)}</div>`;
     }
 
     html += `<div class="section-heading">🤝 Rakan-Rakan (${friendsList.length})</div>`;
@@ -780,8 +776,8 @@ window.Modals = {
         <button class="action-item rel-act-btn" data-act="spend_time">
           <span class="ai-icon">${longDist ? '📱' : '☕'}</span>
           <span class="ai-content">
-            <span class="ai-title">${longDist ? 'Panggilan Video & Tanya Khabar' : (muslim && isPartner && !s.married ? 'Sesi Perkenalan Terhormat' : 'Luangkan Masa Bersama')}</span>
-            <span class="ai-desc">Eratkan kemesraan &amp; bina kepercayaan bersama</span>
+            <span class="ai-title">${longDist ? 'Panggilan Video & Tanya Khabar' : (isPartner && !s.married ? 'Sesi Date' : 'Luangkan Masa Bersama')}</span>
+            <span class="ai-desc">Luangkan masa berkualiti bersama</span>
           </span>
           <span class="ai-right">Percuma</span>
         </button>
@@ -789,7 +785,7 @@ window.Modals = {
           <span class="ai-icon">🎁</span>
           <span class="ai-content">
             <span class="ai-title">Beri Hadiah Istimewa</span>
-            <span class="ai-desc">Kemesraan &amp; kepercayaan meningkat ketara</span>
+            <span class="ai-desc">Berikan hadiah sebagai tanda ingatan</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(45, s.countryId), s.countryId)}</span>
         </button>
@@ -801,7 +797,7 @@ window.Modals = {
               <span class="ai-title">Minta Rujukan Kerja / Peluang Projek</span>
               <span class="ai-desc">Perlukan Kemesraan 70%+ &amp; Kepercayaan 70%+</span>
             </span>
-            <span class="ai-right">Peluang +</span>
+            <span class="ai-right">Minta</span>
           </button>
         ` : ''}
 
@@ -865,7 +861,7 @@ window.Modals = {
             <span class="ai-icon">✈️</span>
             <span class="ai-content">
               <span class="ai-title">Percutian Harmoni Rumah Tangga</span>
-              <span class="ai-desc">Segarkan semula kasih sayang &amp; kepercayaan suami isteri</span>
+              <span class="ai-desc">Luangkan masa bercuti bersama pasangan</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(450, s.countryId), s.countryId)}</span>
           </button>
@@ -878,7 +874,7 @@ window.Modals = {
               <span class="ai-title">Timang Cahaya Mata</span>
               <span class="ai-desc">Anak akan lahir di ${Utils.getCountry(s.countryId).name} ${Utils.getCountry(s.countryId).flag}</span>
             </span>
-            <span class="ai-right">Keluarga +</span>
+            <span class="ai-right">Rancang</span>
           </button>
         ` : ''}
 
@@ -1079,7 +1075,7 @@ window.Modals = {
             <span class="ai-icon">💰</span>
             <span class="ai-content">
               <span class="ai-title">Taja Sepenuhnya</span>
-              <span class="ai-desc">Bayar yuran tahunan di ${Utils.escapeHtml(pref.tier.short)} (${Utils.escapeHtml(pref.major.label)}) • +20% Hubungan &amp; +Gembira</span>
+              <span class="ai-desc">Bayar yuran tahunan di ${Utils.escapeHtml(pref.tier.short)} (${Utils.escapeHtml(pref.major.label)})</span>
             </span>
             <span class="ai-right cost">${fmt(pref.yearlyFeeLocal)}/thn</span>
           </button>
@@ -1088,7 +1084,7 @@ window.Modals = {
             <span class="ai-icon">📜</span>
             <span class="ai-content">
               <span class="ai-title">Galak Mohon Biasiswa / Pinjaman</span>
-              <span class="ai-desc">${smarts >= 80 ? 'Kepintaran >= 80%: Peluang tinggi dapat Biasiswa Penuh!' : 'Jika gagal biasiswa, anak ambil pinjaman pelajaran sendiri'} • Tiada kos kepada ibu bapa</span>
+              <span class="ai-desc">Anak memohon biasiswa atau pinjaman pelajaran sendiri tanpa kos kepada ibu bapa</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
@@ -1097,7 +1093,7 @@ window.Modals = {
             <span class="ai-icon">🔄</span>
             <span class="ai-content">
               <span class="ai-title">Cadang Universiti / Bidang Lebih Murah</span>
-              <span class="ai-desc">Cadangkan ${Utils.escapeHtml(pref.cheaperMajor.label)} di ${Utils.escapeHtml(pref.cheaperTier.short)} • Kos rendah, risiko anak kecewa (-10 hingga -20% Hubungan)</span>
+              <span class="ai-desc">Cadangkan ${Utils.escapeHtml(pref.cheaperMajor.label)} di ${Utils.escapeHtml(pref.cheaperTier.short)}</span>
             </span>
             <span class="ai-right cost">${fmt(pref.cheaperFeeLocal)}/thn</span>
           </button>
@@ -1106,7 +1102,7 @@ window.Modals = {
             <span class="ai-icon">💼</span>
             <span class="ai-content">
               <span class="ai-title">Suruh Terus Bekerja</span>
-              <span class="ai-desc">Anak tidak ke universiti &amp; terus masuk alam pekerjaan (${pref.wantsWorkDirectly ? '-5%' : '-25%'} Hubungan)</span>
+              <span class="ai-desc">Anak tidak ke universiti &amp; terus masuk alam pekerjaan</span>
             </span>
             <span class="ai-right">Terus Kerja</span>
           </button>
@@ -1168,7 +1164,7 @@ window.Modals = {
             <span class="ai-icon">💬</span>
             <span class="ai-content">
               <span class="ai-title">Pujuk &amp; Nasihat Baik-Baik</span>
-              <span class="ai-desc">Berbincang dari hati ke hati (peluang berjaya bergantung pada Hubungan &amp; Kepintaran anda; jika gagal, anak tetap berhenti)</span>
+              <span class="ai-desc">Berbincang dari hati ke hati untuk memujuk anak meneruskan pengajian</span>
             </span>
             <span class="ai-right">Pujuk</span>
           </button>
@@ -1177,7 +1173,7 @@ window.Modals = {
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
               <span class="ai-title">Hormati Keputusan Anak</span>
-              <span class="ai-desc">Benarkan anak berhenti secara baik (+10% Hubungan), hentikan yuran tahunan &amp; biarkan dia mula bekerja (Tak Mahir / Separa Mahir)</span>
+              <span class="ai-desc">Benarkan anak berhenti secara baik, hentikan yuran tahunan &amp; biarkan dia mula bekerja</span>
             </span>
             <span class="ai-right">Hormati</span>
           </button>
@@ -1186,7 +1182,7 @@ window.Modals = {
             <span class="ai-icon">😠</span>
             <span class="ai-content">
               <span class="ai-title">Bertegas &amp; Paksa Teruskan</span>
-              <span class="ai-desc">Paksa anak kekal belajar (-15% hingga -20% Hubungan &amp; +Pemberontakan; jika sangat memberontak, anak tetap berhenti &amp; -30% Hubungan!)</span>
+              <span class="ai-desc">Bertegas meminta anak meneruskan pengajian walaupun dia membantah</span>
             </span>
             <span class="ai-right cost">Bertegas</span>
           </button>
@@ -2205,7 +2201,7 @@ window.Modals = {
             <span class="ai-icon">🏥</span>
             <span class="ai-content">
               <span class="ai-title">Klinik Awam (${c.healthcare.type.split(' ')[0]})</span>
-              <span class="ai-desc">Pemeriksaan kesihatan asas (+9–16% Kesihatan)</span>
+              <span class="ai-desc">Pemeriksaan kesihatan asas di klinik kerajaan</span>
             </span>
             <span class="ai-right cost">${c.healthcare.doctorCost === 0 ? 'PERCUMA' : Utils.formatMoney(c.healthcare.doctorCost, s.countryId)}</span>
           </button>
@@ -2213,7 +2209,7 @@ window.Modals = {
             <span class="ai-icon">🩺</span>
             <span class="ai-content">
               <span class="ai-title">Hospital Pakar Swasta</span>
-              <span class="ai-desc">Rawatan pakar pantas (+14–24% Kesihatan)</span>
+              <span class="ai-desc">Pemeriksaan &amp; rawatan pakar yang lebih pantas</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(c.healthcare.privateCost, s.countryId)}</span>
           </button>
@@ -2225,7 +2221,7 @@ window.Modals = {
             <span class="ai-icon">🏃‍♂️</span>
             <span class="ai-content">
               <span class="ai-title">Bersenam / Joging</span>
-              <span class="ai-desc">Kurangkan Stres (-8 hingga -12%) &amp; tingkatkan Kesihatan</span>
+              <span class="ai-desc">Lakukan aktiviti kecergasan fizikal secara aktif</span>
             </span>
             <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(gymCost, s.countryId)}</span>
           </button>
@@ -2233,7 +2229,7 @@ window.Modals = {
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
               <span class="ai-title">Bercuti / Rehat</span>
-              <span class="ai-desc">Rehatkan minda daripada tekanan (-20 hingga -35% Stres, +Gembira)</span>
+              <span class="ai-desc">Luangkan masa bercuti &amp; rehatkan minda</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(vacationCost, s.countryId)}</span>
           </button>
@@ -2241,7 +2237,7 @@ window.Modals = {
             <span class="ai-icon">🛋️</span>
             <span class="ai-content">
               <span class="ai-title">Sesi Kaunseling / Terapi</span>
-              <span class="ai-desc">Rawatan psikologi (-25 hingga -40% Stres, bantu pulihkan Kemurungan / Insomnia)</span>
+              <span class="ai-desc">Dapatkan bantuan pakar psikologi untuk kesejahteraan mental</span>
             </span>
             <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(therapyCost, s.countryId)}</span>
           </button>
@@ -2249,7 +2245,7 @@ window.Modals = {
             <span class="ai-icon">🎨</span>
             <span class="ai-content">
               <span class="ai-title">Luangkan Masa Bersama Keluarga / Hobi</span>
-              <span class="ai-desc">Aktiviti santai (-10 hingga -15% Stres, +Gembira &amp; mengeratkan hubungan)</span>
+              <span class="ai-desc">Aktiviti santai bersama orang tersayang &amp; hobi kegemaran</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
@@ -2269,7 +2265,7 @@ window.Modals = {
             <span class="ai-icon">📚</span>
             <span class="ai-content">
               <span class="ai-title">Ke Perpustakaan Awam</span>
-              <span class="ai-desc">Baca buku untuk tingkatkan Kepintaran</span>
+              <span class="ai-desc">Luangkan masa membaca bahan ilmiah di perpustakaan</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
@@ -2277,7 +2273,7 @@ window.Modals = {
             <span class="ai-icon">🧘</span>
             <span class="ai-content">
               <span class="ai-title">Tenangkan Fikiran di Taman</span>
-              <span class="ai-desc">Tingkatkan Gembira &amp; Kesihatan (-6% Stres)</span>
+              <span class="ai-desc">Ambil angin segar &amp; tenangkan fikiran di taman</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>

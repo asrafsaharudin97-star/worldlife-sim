@@ -946,19 +946,13 @@ window.Relationships = {
     const job = Utils.pick(c.jobs).title;
     const age = Utils.clamp(s.age + Utils.randInt(-4, 7), minAge, 75);
 
-    let partnerBelief;
-    if (muslim) {
-      // Majoriti sesi ta'aruf memperkenalkan calon sesama Islam, namun sekali-sekala (20%) mungkin berkenalan dengan calon berlainan agama -> mencetuskan dilema batas agama!
-      partnerBelief = Utils.chance(0.80)
-        ? 'islam'
-        : Utils.pick(['christianity', 'buddhism', 'hinduism', 'agnostic']);
-    } else {
-      partnerBelief = window.LIFE_EVENTS
-        ? window.LIFE_EVENTS.pickFamilyBelief(s.countryId, heritage)
-        : 'unassigned';
-    }
+    const religionPool = ['islam', 'christianity', 'buddhism', 'hinduism', 'sikhism', 'none'];
+    const isMuslimMajority = window.LegalInheritanceEngine && LegalInheritanceEngine.isMuslimCountry(s.countryId);
+    const partnerBelief = (isMuslimMajority && Utils.chance(0.32))
+      ? 'islam'
+      : Utils.pick(religionPool);
 
-    // Semak penerimaan atau penolakan semasa Mula Kenal / Ta'aruf
+    // Semak penerimaan atau penolakan semasa Sesi Date
     const courtRes = this.evaluateCourtingAcceptance(s, { name, age, belief: partnerBelief, job });
     if (!courtRes.accepted) {
       const hapHit = -Utils.randInt(5, 11);
@@ -975,8 +969,9 @@ window.Relationships = {
     }
 
     const compat = this.computeCompatibility(s, partnerBelief);
+    const bObj = GameState.getBeliefObj(partnerBelief);
     const roleLabel = muslim
-      ? (targetGender === 'female' ? 'Calon Ta\'aruf (Wanita)' : 'Calon Ta\'aruf (Lelaki)')
+      ? (targetGender === 'female' ? 'Sesi Date (Wanita)' : 'Sesi Date (Lelaki)')
       : (targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
 
     const partner = {
@@ -985,7 +980,7 @@ window.Relationships = {
       role: roleLabel,
       category: 'partner',
       stage: muslim ? 'taaruf' : 'dating',
-      origin: muslim ? 'Ta\'aruf / Keluarga' : 'Janji Temu',
+      origin: 'Sesi Date',
       gender: targetGender,
       age,
       countryId: s.countryId,
@@ -993,6 +988,7 @@ window.Relationships = {
       trust: Utils.randInt(58, 82),
       compatibility: compat,
       belief: partnerBelief,
+      religion: bObj.name,
       yearsTogether: 0,
       unresolvedConflict: false,
       wantsChildren: Utils.chance(0.85),
@@ -1007,11 +1003,10 @@ window.Relationships = {
     s.relationships.push(partner);
     s.partnerId = partner.id;
     GameState.adjustStats({ happiness: 12, adaptation: 8 });
-    const bObj = GameState.getBeliefObj(partnerBelief);
 
     if (muslim && partnerBelief !== 'islam') {
       GameState.addJournalEntry(
-        `🤲 Anda berkenalan dengan ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}. Perbezaan agama memerlukan perbincangan jujur mengenai batas syariah.`,
+        `💘 Anda berkenalan dalam Sesi Date bersama ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}. Perbezaan agama memerlukan perbincangan jujur mengenai batas syariah.`,
         'spiritual'
       );
       GameState.save();
@@ -1023,15 +1018,13 @@ window.Relationships = {
     }
 
     GameState.addJournalEntry(
-      muslim
-        ? `🤲 Melalui ta'aruf dan cadangan keluarga di ${s.city}, anda mula mengenali ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) secara terhormat menuju ke alam perkahwinan.`
-        : `💘 Anda berkenalan dengan ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}, ${c.name} ${c.flag} dan mula bercinta!`,
+      `💘 Anda memulakan Sesi Date bersama ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}!`,
       'romance'
     );
     GameState.save();
     return {
       ok: true,
-      msg: muslim ? `Anda mula proses ta'aruf bersama ${name}!` : `Anda kini bercinta dengan ${name}!`
+      msg: `Mula Sesi Date bersama ${name}!`
     };
   },
 
