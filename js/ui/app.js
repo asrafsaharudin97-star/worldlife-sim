@@ -340,6 +340,8 @@ window.App = {
             Modals.showChildSchoolSelectionModal(item.childId, () => runNextMilestone(), true);
           } else if (item.type === 'university' && Modals.showChildUniversityModal) {
             Modals.showChildUniversityModal(item.childId, () => runNextMilestone());
+          } else if (item.type === 'dropout' && Modals.showChildDropoutModal) {
+            Modals.showChildDropoutModal(item.childId, item.reason, () => runNextMilestone());
           } else {
             runNextMilestone();
           }

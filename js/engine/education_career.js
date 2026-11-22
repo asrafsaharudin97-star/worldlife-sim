@@ -61,6 +61,7 @@ window.EduCareerEngine = {
       }
     }
     if (!Array.isArray(ed.certificates)) ed.certificates = [];
+    if (!Array.isArray(ed.educationHistory)) ed.educationHistory = [];
     if (typeof ed.educationLoan !== 'number') ed.educationLoan = 0;
     if (typeof ed.hasDoctorateTitle !== 'boolean') ed.hasDoctorateTitle = ed.educationLevel === 'phd';
     if (typeof ed.hasDeansAward !== 'boolean') {
@@ -80,8 +81,12 @@ window.EduCareerEngine = {
       }
       if (typeof ed.activeStudy.academicWarningCount !== 'number') ed.activeStudy.academicWarningCount = 0;
       ed.currentCgpa = ed.activeStudy.currentCgpa;
-    } else if (typeof ed.currentCgpa !== 'number') {
-      ed.currentCgpa = null;
+      ed.isStudying = true;
+    } else {
+      if (typeof ed.currentCgpa !== 'number') ed.currentCgpa = null;
+      if (typeof ed.isStudying !== 'boolean') {
+        ed.isStudying = ['preschool', 'primary', 'secondary', 'university', 'adult_school'].includes(ed.stage);
+      }
     }
     if (typeof ed.graduatedCgpa !== 'number') {
       const lastDeg = ed.completedDegrees.length > 0 ? ed.completedDegrees[ed.completedDegrees.length - 1] : null;
@@ -290,6 +295,8 @@ window.EduCareerEngine = {
     };
     s.education.currentCgpa = baseGpa;
     s.education.studiedThisYear = false;
+    s.education.isStudying = true;
+    s.education.droppedOut = false;
     s.education.stage = level === 'high_school' ? 'adult_school' : 'university';
     s.education.universityName = instName;
     s.education.uniYearsLeft = finalTotalYears;
@@ -304,6 +311,101 @@ window.EduCareerEngine = {
     GameState.adjustStats({ happiness: 8, smarts: 3 });
     GameState.save();
     return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${finalTotalYears} tahun, ${fundingLabel})!` };
+  },
+
+  canDropOut(s = GameState.current) {
+    if (!s || !s.education) return false;
+    const ed = s.education;
+    if (ed.activeStudy) return true;
+    if (ed.stage === 'university') return true;
+    if (ed.stage === 'secondary' && s.age >= 16) return true;
+    return false;
+  },
+
+  getActiveStudyLabel(s = GameState.current) {
+    if (!s || !s.education) return 'Pengajian Semasa';
+    const ed = s.education;
+    if (ed.activeStudy) {
+      const st = ed.activeStudy;
+      const prog = window.EducationData && EducationData.PROGRAMS.find(p => p.id === st.level);
+      const progTitle = prog ? prog.title : st.level;
+      return st.fieldName ? `${progTitle} (${st.fieldName}) — ${st.institution}` : `${progTitle} — ${st.institution}`;
+    }
+    if (ed.stage === 'university') {
+      return ed.universityName || 'Universiti';
+    }
+    if (ed.stage === 'secondary') {
+      return ed.schoolName || 'Sekolah Menengah';
+    }
+    return 'Pengajian Semasa';
+  },
+
+  dropOutOfStudy() {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada permainan aktif.' };
+    this.ensureFields(s);
+    if (!this.canDropOut(s)) {
+      return { ok: false, msg: 'Anda tidak berada dalam pengajian yang boleh diberhentikan buat masa ini.' };
+    }
+
+    const ed = s.education;
+    const wasSecondary = ed.stage === 'secondary' && !ed.activeStudy;
+    const courseLabel = this.getActiveStudyLabel(s);
+
+    // Kosongkan status pengajian aktif & hentikan yuran tahunan
+    ed.isStudying = false;
+    ed.activeStudy = null;
+    ed.currentCgpa = null;
+    ed.studiedThisYear = false;
+    ed.uniYearsLeft = 0;
+    ed.universityName = null;
+    ed.droppedOut = true;
+
+    if (wasSecondary) {
+      ed.stage = 'dropped_out';
+      ed.schoolName = null;
+    } else {
+      ed.stage = ed.hasDegree ? 'graduated' : (ed.hasHighSchool ? 'highschool_done' : 'dropped_out');
+    }
+
+    // Kurangkan stres (-15 hingga -25)
+    const stressDrop = Utils.randInt(15, 25);
+    if (s.alignment) {
+      s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - stressDrop, 0, 100);
+    }
+
+    // Jika masih muda / di bawah tanggungan ibu bapa (umur < 23), hubungan ibu bapa terjejas sedikit (-10 hingga -20)
+    let parentHitNote = '';
+    if (s.age < 23 && Array.isArray(s.relationships)) {
+      const parents = s.relationships.filter(r => r.alive && ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role));
+      if (parents.length > 0) {
+        const relHit = Utils.randInt(10, 20);
+        parents.forEach(p => {
+          p.closeness = Utils.clamp((p.closeness ?? 75) - relHit, 0, 100);
+        });
+        parentHitNote = ` • Hubungan ibu bapa -${relHit}%`;
+      }
+    }
+
+    // Rekod dalam Sejarah Pendidikan & Log Kehidupan
+    ed.educationHistory.push({
+      type: 'dropout',
+      label: `Berhenti belajar daripada ${courseLabel}`,
+      courseLabel,
+      age: s.age,
+      year: s.year
+    });
+
+    const logMsg = `🚪 Berhenti belajar daripada ${courseLabel} pada umur ${s.age} tahun tanpa sijil/ijazah (Stres -${stressDrop}%${parentHitNote}). Yuran tahunan dihentikan dan anda bebas memohon pekerjaan sepenuh masa!`;
+    GameState.addJournalEntry(logMsg, 'warning');
+    GameState.save();
+
+    return {
+      ok: true,
+      stressDrop,
+      courseLabel,
+      msg: `🚪 Anda berhenti belajar daripada ${courseLabel} (Stres -${stressDrop}%${parentHitNote}).`
+    };
   },
 
   studyHarder() {
@@ -531,6 +633,7 @@ window.EduCareerEngine = {
 
       GameState.adjustStats({ happiness: graduatedWithDeans ? 24 : 18, smarts: 6 });
       ed.activeStudy = null;
+      ed.isStudying = false;
       ed.stage = newRank >= 3 ? 'graduated' : 'highschool_done';
     }
     return true;

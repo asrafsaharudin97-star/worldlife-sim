@@ -631,34 +631,44 @@ window.GameState = {
 
   _buildChildHandoverEducation(child, city, country, parent) {
     const childAge = child.age || 0;
-    const edStage = child.uniEnrolled && child.uniYearsLeft > 0
-      ? 'university'
-      : child.education === 'bachelor' || child.education === 'diploma'
-        ? 'graduated'
-        : childAge < 4 ? 'infant'
-        : childAge <= 6 ? 'preschool'
-        : childAge <= 12 ? 'primary'
-        : childAge <= 17 ? 'secondary'
-        : 'highschool_done';
+    const isDroppedOut = Boolean(child.droppedOut);
+    const edStage = isDroppedOut
+      ? (child.education === 'high_school' ? 'highschool_done' : 'dropped_out')
+      : child.uniEnrolled && child.uniYearsLeft > 0
+        ? 'university'
+        : child.education === 'bachelor' || child.education === 'diploma'
+          ? 'graduated'
+          : childAge < 4 ? 'infant'
+          : childAge <= 6 ? 'preschool'
+          : childAge <= 12 ? 'primary'
+          : childAge <= 17 ? 'secondary'
+          : 'highschool_done';
 
-    const schoolName = (childAge >= 4 && childAge <= 17 && child.schoolLabel)
-      ? `${child.schoolLabel} (${city})`
-      : edStage === 'preschool' ? `${country.education.preschool.name} ${city}`
-      : edStage === 'primary' ? `${city} ${country.education.primary.name}`
-      : edStage === 'secondary' ? `${city} ${country.education.secondary.name}`
-      : null;
+    const schoolName = isDroppedOut
+      ? null
+      : (childAge >= 4 && childAge <= 17 && child.schoolLabel)
+        ? `${child.schoolLabel} (${city})`
+        : edStage === 'preschool' ? `${country.education.preschool.name} ${city}`
+        : edStage === 'primary' ? `${city} ${country.education.primary.name}`
+        : edStage === 'secondary' ? `${city} ${country.education.secondary.name}`
+        : null;
 
-    const cgpa = typeof child.currentCgpa === 'number'
-      ? Number(child.currentCgpa.toFixed(2))
-      : (child.uniEnrolled ? 3.25 : null);
+    const cgpa = isDroppedOut
+      ? null
+      : typeof child.currentCgpa === 'number'
+        ? Number(child.currentCgpa.toFixed(2))
+        : (child.uniEnrolled ? 3.25 : null);
 
-    const hasDeg = child.education === 'bachelor' || (childAge >= 23 && !child.uniEnrolled && child.education === 'bachelor');
-    const eduLevel = child.education === 'bachelor' ? 'bachelor'
+    const hasDeg = !isDroppedOut && (child.education === 'bachelor' || (childAge >= 23 && !child.uniEnrolled && child.education === 'bachelor'));
+    const hasHs = isDroppedOut ? (child.education === 'high_school') : (childAge >= 18);
+    const eduLevel = isDroppedOut
+      ? (child.education === 'high_school' ? 'high_school' : 'none')
+      : child.education === 'bachelor' ? 'bachelor'
       : child.education === 'diploma' ? 'diploma'
       : childAge >= 18 ? 'high_school'
       : 'none';
 
-    const activeStudy = (child.uniEnrolled && child.uniYearsLeft > 0)
+    const activeStudy = (!isDroppedOut && child.uniEnrolled && child.uniYearsLeft > 0)
       ? {
           level: child.majorId === 'trades_vocational' ? 'diploma' : 'bachelor',
           field: child.majorId || 'business_finance',
@@ -678,7 +688,7 @@ window.GameState = {
       : null;
 
     const completedDegrees = [];
-    if (child.education === 'bachelor' || child.education === 'diploma') {
+    if (!isDroppedOut && (child.education === 'bachelor' || child.education === 'diploma')) {
       completedDegrees.push({
         level: child.education,
         field: child.majorId || 'business_finance',
@@ -690,22 +700,25 @@ window.GameState = {
 
     return {
       stage: edStage,
+      isStudying: Boolean(activeStudy || ['preschool', 'primary', 'secondary'].includes(edStage)),
+      droppedOut: isDroppedOut,
       educationLevel: eduLevel,
       educationField: child.majorId || (hasDeg ? 'business_finance' : null),
       schoolStage: child.schoolStage || edStage,
-      schoolType: child.schoolType || null,
-      yearlySchoolFee: child.yearlySchoolFee || 0,
+      schoolType: isDroppedOut ? 'none' : (child.schoolType || null),
+      yearlySchoolFee: isDroppedOut ? 0 : (child.yearlySchoolFee || 0),
       schoolName,
-      universityName: child.university || null,
-      major: child.major || null,
-      uniYearsLeft: child.uniYearsLeft || 0,
-      hasHighSchool: childAge >= 18,
+      universityName: isDroppedOut ? null : (child.university || null),
+      major: isDroppedOut ? null : (child.major || null),
+      uniYearsLeft: isDroppedOut ? 0 : (child.uniYearsLeft || 0),
+      hasHighSchool: hasHs,
       hasDegree: Boolean(hasDeg),
-      examGrade: childAge >= 18 ? 'Lulus' : null,
+      examGrade: hasHs ? 'Lulus' : null,
       activeStudy,
       currentCgpa: cgpa,
       graduatedCgpa: (completedDegrees.length > 0 && cgpa) ? cgpa : null,
       completedDegrees,
+      educationHistory: Array.isArray(child.educationHistory) ? [...child.educationHistory] : [],
       educationLoan: child.childStudentLoan || 0
     };
   },

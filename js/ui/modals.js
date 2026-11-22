@@ -34,8 +34,7 @@ window.Modals = {
 
     const choicesHtml = (event.choices || []).map((ch, idx) => `
       <button class="choice-btn" data-choice-idx="${idx}" style="white-space:normal;word-break:break-word;text-align:left;">
-        <span class="choice-title" style="display:block;white-space:normal;word-break:break-word;">${Utils.escapeHtml(ch.label)}</span>
-        ${ch.hint ? `<span class="choice-hint" style="display:block;white-space:normal;word-break:break-word;">${Utils.escapeHtml(ch.hint)}</span>` : ''}
+        <span class="choice-title" style="display:block;width:100%;max-width:100%;white-space:normal;word-break:break-word;">${Utils.escapeHtml(ch.label)}</span>
       </button>
     `).join('');
 
@@ -1121,6 +1120,86 @@ window.Modals = {
         this.close(true);
         App.renderAll();
         App.toast(res.msg, res.ok ? 'success' : 'error');
+        if (typeof onDone === 'function') onDone(res);
+      });
+    });
+  },
+
+  // --------------------------------------------------------------------------
+  // 4A0B. MODAL DILEMA ANAK MAHU BERHENTI BELAJAR (UMUR 15–22)
+  // --------------------------------------------------------------------------
+  showChildDropoutModal(childId, reason = '', onDone = null) {
+    const s = GameState.current;
+    if (!s || !s.alive) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child || !window.Relationships) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+    const rebel = child.rebelliousness ?? 15;
+    const closeness = child.closeness ?? 70;
+    const wasUni = Boolean(child.uniEnrolled) || child.schoolStage === 'university';
+    const stageText = wasUni
+      ? `${child.university || 'Universiti'}${child.major ? ` — ${child.major}` : ''}`
+      : (child.schoolLabel || 'Sekolah Menengah');
+    const feeVal = Number(child.yearlySchoolFee) || 0;
+    const reasonText = reason || Relationships.pickChildDropoutReason(child);
+
+    this.open({
+      icon: '⚠️',
+      title: `⚠️ ${child.name} Mahu Berhenti Belajar!`,
+      subtitle: `${child.name} (${child.age} Tahun) • ${stageText}`,
+      locked: true,
+      bodyHtml: `
+        <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#78350f;line-height:1.6;">
+          <strong>🗣️ Luahan ${Utils.escapeHtml(child.name)}:</strong><br/>
+          ${Utils.escapeHtml(child.name)} datang berjumpa anda dan menyuarakan hasrat untuk berhenti belajar daripada <strong>${Utils.escapeHtml(stageText)}</strong> kerana <em>${Utils.escapeHtml(reasonText)}</em>.<br/><br/>
+          🧠 Kepintaran: <strong>${smarts}%</strong> • ❤️ Hubungan: <strong>${closeness}%</strong> • 🔥 Pemberontakan: <strong>${rebel}%</strong>${typeof child.currentCgpa === 'number' ? ` • 📊 PNGK: <strong>${child.currentCgpa.toFixed(2)}</strong>` : ''}${feeVal > 0 ? `<br/>💰 Yuran Tahunan Semasa: <strong>${Utils.formatMoney(feeVal, s.countryId)}/thn</strong>` : ''}
+        </div>
+
+        <div class="section-heading">Pilih Tindakan Anda Sebagai Ibu Bapa</div>
+        <div class="action-list">
+          <button type="button" class="action-item child-dropout-choice-btn" data-decision="persuade">
+            <span class="ai-icon">💬</span>
+            <span class="ai-content">
+              <span class="ai-title">Pujuk &amp; Nasihat Baik-Baik</span>
+              <span class="ai-desc">Berbincang dari hati ke hati (peluang berjaya bergantung pada Hubungan &amp; Kepintaran anda; jika gagal, anak tetap berhenti)</span>
+            </span>
+            <span class="ai-right">Pujuk</span>
+          </button>
+
+          <button type="button" class="action-item child-dropout-choice-btn" data-decision="respect">
+            <span class="ai-icon">🤝</span>
+            <span class="ai-content">
+              <span class="ai-title">Hormati Keputusan Anak</span>
+              <span class="ai-desc">Benarkan anak berhenti secara baik (+10% Hubungan), hentikan yuran tahunan &amp; biarkan dia mula bekerja (Tak Mahir / Separa Mahir)</span>
+            </span>
+            <span class="ai-right">Hormati</span>
+          </button>
+
+          <button type="button" class="action-item child-dropout-choice-btn" data-decision="force">
+            <span class="ai-icon">😠</span>
+            <span class="ai-content">
+              <span class="ai-title">Bertegas &amp; Paksa Teruskan</span>
+              <span class="ai-desc">Paksa anak kekal belajar (-15% hingga -20% Hubungan &amp; +Pemberontakan; jika sangat memberontak, anak tetap berhenti &amp; -30% Hubungan!)</span>
+            </span>
+            <span class="ai-right cost">Bertegas</span>
+          </button>
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.child-dropout-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = Relationships.resolveChildDropoutChoice(childId, btn.dataset.decision, reasonText);
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, res.stayed ? 'success' : 'culture');
         if (typeof onDone === 'function') onDone(res);
       });
     });

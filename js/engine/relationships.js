@@ -236,7 +236,15 @@ window.Relationships = {
     const age = Number(child.age) || 0;
     const expectedStage = this.getSchoolStageForAge(age);
 
-    if (age < 4) {
+    if (child.droppedOut) {
+      child.uniEnrolled = false;
+      child.uniYearsLeft = 0;
+      child.yearlySchoolFee = 0;
+      child.schoolStage = 'dropped_out';
+      child.schoolType = 'none';
+      if (!child.schoolLabel) child.schoolLabel = 'Berhenti Belajar';
+      child.currentCgpa = null;
+    } else if (age < 4) {
       child.schoolStage = 'infant';
       child.schoolType = 'none';
       child.schoolLabel = 'Belum Bersekolah (Bayi / Kanak-kanak)';
@@ -281,9 +289,10 @@ window.Relationships = {
     if (!('university' in child)) child.university = null;
     if (!('major' in child)) child.major = null;
     if (!('majorId' in child)) child.majorId = null;
-    if (!('education' in child)) child.education = age >= 18 ? 'high_school' : 'none';
+    if (!('education' in child)) child.education = (age >= 18 && !child.droppedOut) ? 'high_school' : 'none';
+    if (!Array.isArray(child.educationHistory)) child.educationHistory = [];
     if (typeof child.currentCgpa !== 'number') {
-      child.currentCgpa = child.uniEnrolled
+      child.currentCgpa = (child.uniEnrolled && !child.droppedOut)
         ? Number((3.0 + (((child.stats && child.stats.smarts) || 65) / 100) * 0.7).toFixed(2))
         : null;
     }
@@ -515,6 +524,185 @@ window.Relationships = {
     GameState.addJournalEntry(msg, wantedUni ? 'warning' : 'normal');
     GameState.save();
     return { ok: true, msg };
+  },
+
+  computeChildDropoutChance(child) {
+    if (!child || !child.alive || child.droppedOut) return 0;
+    const age = Number(child.age) || 0;
+    const inSec = age >= 15 && age <= 17 && child.schoolStage === 'secondary' && child.schoolType && child.schoolType !== 'none' && child.schoolType !== 'not_enrolled';
+    const inUni = age >= 18 && age <= 22 && Boolean(child.uniEnrolled) && (child.uniYearsLeft || 0) > 0;
+    if (!inSec && !inUni) return 0;
+
+    const smarts = (child.stats && typeof child.stats.smarts === 'number') ? child.stats.smarts : 65;
+    const rebel = typeof child.rebelliousness === 'number' ? child.rebelliousness : 10;
+    const closeness = typeof child.closeness === 'number' ? child.closeness : 75;
+    const cgpa = typeof child.currentCgpa === 'number' ? child.currentCgpa : null;
+    const isDelinq = Boolean(child.isDelinquent);
+
+    let riskFactors = 0;
+    if (isDelinq || rebel >= 55) riskFactors += 1;
+    if (smarts < 48) riskFactors += 1;
+    if (cgpa !== null && cgpa < 2.0) riskFactors += 1;
+    if (closeness < 45) riskFactors += 1;
+
+    if (riskFactors === 0) {
+      // Anak berkelakuan baik, pintar & rapat dengan ibu bapa: peluang rendah ~2%–4%
+      return (smarts >= 75 && closeness >= 70 && rebel <= 20) ? 0.02 : 0.035;
+    }
+
+    // Risiko tinggi (~15%–30%) bergantung kepada tahap pemberontakan, PNGK, kepintaran & hubungan
+    let prob = 0.15 + ((riskFactors - 1) * 0.05);
+    if (isDelinq || rebel >= 75) prob += 0.05;
+    if (cgpa !== null && cgpa < 2.0) prob += 0.04;
+    return Math.max(0.15, Math.min(0.30, prob));
+  },
+
+  pickChildDropoutReason(child) {
+    const rebel = child.rebelliousness ?? 10;
+    const smarts = (child.stats && child.stats.smarts) ?? 65;
+    const cgpa = typeof child.currentCgpa === 'number' ? child.currentCgpa : null;
+
+    const pool = [];
+    if (child.isDelinquent || rebel >= 60) {
+      pool.push('terpengaruh dengan rakan sebaya yang sudah berhenti belajar dan mahu hidup bebas');
+    }
+    if (cgpa !== null && cgpa < 2.0) {
+      pool.push(`tertekan dengan keputusan pengajian yang merosot (PNGK ${cgpa.toFixed(2)}) dan rasa tidak mampu meneruskan kursus`);
+    }
+    if (smarts < 50) {
+      pool.push('hilang minat belajar dan merasakan pelajaran akademik terlalu sukar diikuti');
+    }
+    pool.push(
+      'hilang minat belajar dan merasakan pengajian formal tidak sesuai dengan jiwanya',
+      'tertekan dengan beban tugasan serta peperiksaan yang terlalu berat',
+      'mahu terus bekerja atau memulakan perniagaan kecil bagi mencari pendapatan sendiri'
+    );
+    return Utils.pick(pool);
+  },
+
+  _pickChildEntryWorkTitle(child) {
+    if (window.CareersData && Array.isArray(CareersData.CAREERS)) {
+      const smarts = (child && child.stats && child.stats.smarts) ?? 55;
+      const preferredInd = smarts >= 55 ? ['semi_skilled', 'unskilled'] : ['unskilled'];
+      const list = CareersData.CAREERS.filter(c => preferredInd.includes(c.industry));
+      if (list.length > 0) return Utils.pick(list).title;
+    }
+    return Utils.pick([
+      'Penghantar Makanan (Rider)',
+      'Kru Restoran Makanan Segera',
+      'Pembantu Kedai Runcit',
+      'Operator Pengeluaran Kilang',
+      'Barista & Pembantu Dapur',
+      'Juruwang (Cashier) Pasar Raya'
+    ]);
+  },
+
+  _applyChildDropout(s, child, reason) {
+    const wasUni = Boolean(child.uniEnrolled) || child.schoolStage === 'university';
+    const prevInstitution = wasUni
+      ? `${child.university || 'Universiti'}${child.major ? ` (${child.major})` : ''}`
+      : (child.schoolLabel || 'Sekolah Menengah');
+
+    child.droppedOut = true;
+    child.droppedOutFrom = prevInstitution;
+    child.uniEnrolled = false;
+    child.uniYearsLeft = 0;
+    child.yearlySchoolFee = 0;
+    child.currentCgpa = null;
+    child.schoolStage = 'dropped_out';
+    child.schoolType = 'none';
+    child.schoolLabel = wasUni ? 'Berhenti Universiti' : 'Berhenti Sekolah Menengah';
+    child.education = wasUni ? 'high_school' : 'none';
+
+    const starterJob = this._pickChildEntryWorkTitle(child);
+    child.job = starterJob;
+
+    if (!Array.isArray(child.educationHistory)) child.educationHistory = [];
+    child.educationHistory.push({
+      type: 'dropout',
+      label: `Berhenti belajar daripada ${prevInstitution}`,
+      courseLabel: prevInstitution,
+      reason,
+      age: child.age,
+      year: s.year
+    });
+
+    return { wasUni, prevInstitution, starterJob };
+  },
+
+  resolveChildDropoutChoice(childId, decision, reason = '', opts = {}) {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada permainan aktif.' };
+    const child = (s.relationships || []).find(r => r.id === childId && r.alive);
+    if (!child) return { ok: false, msg: 'Anak tidak ditemui.' };
+
+    const rebel = typeof child.rebelliousness === 'number' ? child.rebelliousness : 15;
+    const closeness = typeof child.closeness === 'number' ? child.closeness : 70;
+    const playerSmarts = (s.stats && s.stats.smarts) ?? 60;
+    const wasUni = Boolean(child.uniEnrolled) || child.schoolStage === 'university';
+    const placeLabel = wasUni
+      ? `${child.university || 'universiti'}${child.major ? ` (${child.major})` : ''}`
+      : (child.schoolLabel || 'sekolah menengah');
+
+    if (decision === 'persuade') {
+      const persuadeChance = Math.max(
+        0.15,
+        Math.min(
+          0.88,
+          0.32 + ((closeness - 50) * 0.007) + ((playerSmarts - 50) * 0.005) - ((rebel - 40) * 0.004) - (child.isDelinquent ? 0.12 : 0)
+        )
+      );
+      const succeeded = typeof opts.forceSuccess === 'boolean' ? opts.forceSuccess : Utils.chance(persuadeChance);
+
+      if (succeeded) {
+        child.closeness = Utils.clamp(closeness + 5, 0, 100);
+        child.rebelliousness = Utils.clamp(rebel - Utils.randInt(6, 12), 0, 100);
+        if (child.rebelliousness <= 55 && (child.morals ?? 60) >= 45) child.isDelinquent = false;
+        GameState.adjustStats({ happiness: 6 });
+        const msg = `💬✅ Nasihat lembut anda menyentuh hati ${child.name}! Dia bersetuju membatalkan niat berhenti belajar dan meneruskan pengajian di ${placeLabel} (Hubungan +5%).`;
+        GameState.addJournalEntry(msg, 'milestone');
+        GameState.save();
+        return { ok: true, stayed: true, droppedOut: false, msg };
+      }
+
+      const info = this._applyChildDropout(s, child, reason);
+      GameState.adjustStats({ happiness: -6 });
+      const msg = `💬😔 Anda sudah cuba memujuk dengan baik, namun ${child.name} tetap berkeras berhenti belajar daripada ${info.prevInstitution}. Yuran tahunan dihentikan dan dia mula bekerja sebagai ${info.starterJob}.`;
+      GameState.addJournalEntry(msg, 'warning');
+      GameState.save();
+      return { ok: true, stayed: false, droppedOut: true, msg };
+    }
+
+    if (decision === 'respect') {
+      child.closeness = Utils.clamp(closeness + 10, 0, 100);
+      const info = this._applyChildDropout(s, child, reason);
+      const msg = `🤝 Anda menghormati keputusan ${child.name} untuk berhenti belajar daripada ${info.prevInstitution} (Hubungan +10%). Yuran tahunan dihentikan dan ${child.name} kini memasuki alam pekerjaan sebagai ${info.starterJob}.`;
+      GameState.addJournalEntry(msg, 'culture');
+      GameState.save();
+      return { ok: true, stayed: false, droppedOut: true, msg };
+    }
+
+    // decision === 'force'
+    const isHighlyRebellious = Boolean(child.isDelinquent || rebel >= 65);
+    if (!isHighlyRebellious) {
+      const relHit = Utils.randInt(15, 20);
+      const rebelGain = Utils.randInt(10, 16);
+      child.closeness = Utils.clamp(closeness - relHit, 0, 100);
+      child.rebelliousness = Utils.clamp(rebel + rebelGain, 0, 100);
+      const msg = `😠 Anda bertegas memaksa ${child.name} meneruskan pengajian di ${placeLabel}. Dia akur dengan berat hati tetapi mula memendam rasa (Hubungan -${relHit}%, Pemberontakan +${rebelGain}%).`;
+      GameState.addJournalEntry(msg, 'warning');
+      GameState.save();
+      return { ok: true, stayed: true, droppedOut: false, msg };
+    }
+
+    child.closeness = Utils.clamp(closeness - 30, 0, 100);
+    child.rebelliousness = Utils.clamp(rebel + 12, 0, 100);
+    const info = this._applyChildDropout(s, child, reason);
+    GameState.adjustStats({ happiness: -10 });
+    const msg = `😠💥 ${child.name} membantah keras paksaan anda dan tetap berhenti belajar daripada ${info.prevInstitution} (Hubungan -30%)! Yuran tahunan dihentikan dan dia memilih bekerja sendiri sebagai ${info.starterJob}.`;
+    GameState.addJournalEntry(msg, 'warning');
+    GameState.save();
+    return { ok: true, stayed: false, droppedOut: true, msg };
   },
 
   computeCompatibility(s, npcBelief) {

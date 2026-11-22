@@ -971,10 +971,11 @@ html, body {
 }
 .choice-btn > span:first-child,
 .choice-title {
-  flex: 0 0 38%;
-  max-width: 170px;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
-  line-height: 1.35;
+  line-height: 1.4;
   word-break: break-word;
   overflow-wrap: anywhere;
 }

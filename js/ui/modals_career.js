@@ -306,6 +306,7 @@ window.CareerModals = {
     }
 
     if (['preschool', 'primary', 'secondary'].includes(ed.stage) && !ed.activeStudy) {
+      const canDropSec = ed.stage === 'secondary' && s.age >= 16;
       html += `
         <div class="info-banner highlight">
           <strong>🏫 ${Utils.escapeHtml(ed.schoolName)}</strong><br/>
@@ -320,6 +321,16 @@ window.CareerModals = {
             </span>
             <span class="ai-right">Pintar ++</span>
           </button>
+          ${canDropSec ? `
+            <button type="button" class="action-item" id="act-dropout-study" style="border-color:#fca5a5;">
+              <span class="ai-icon">🚪</span>
+              <span class="ai-content">
+                <span class="ai-title" style="color:#b91c1c;">Berhenti Belajar</span>
+                <span class="ai-desc">Tamatkan persekolahan menengah tanpa SPM/sijil (boleh sambung semula melalui Kelas Dewasa nanti)</span>
+              </span>
+              <span class="ai-right cost">Berhenti</span>
+            </button>
+          ` : ''}
         </div>
       `;
       return html;
@@ -380,6 +391,14 @@ window.CareerModals = {
               <span class="ai-desc">${didStudy ? 'Sudah mengulang kaji tahun ini (Kepintaran & PNGK meningkat)' : 'Naikkan Kepintaran & PNGK hingga 4.00 (Anugerah Dekan) • Sedikit stres'}</span>
             </span>
             <span class="ai-right">${didStudy ? '✓ Selesai' : 'PNGK +'}</span>
+          </button>
+          <button type="button" class="action-item" id="act-dropout-study" style="border-color:#fca5a5;">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title" style="color:#b91c1c;">Berhenti Belajar</span>
+              <span class="ai-desc">Batalkan pengajian semasa tanpa sijil/ijazah, hentikan yuran tahunan &amp; buka peluang kerja sepenuh masa</span>
+            </span>
+            <span class="ai-right cost">Berhenti</span>
           </button>
         </div>
       `;
@@ -690,6 +709,9 @@ window.CareerModals = {
         this.showHub('education');
       });
 
+      const dropoutBtn = document.getElementById('act-dropout-study');
+      if (dropoutBtn) dropoutBtn.addEventListener('click', () => this.showDropoutConfirmation());
+
       const fieldSel = document.getElementById('edu-field-select');
       if (fieldSel) fieldSel.addEventListener('change', (e) => {
         this._selectedField = e.target.value;
@@ -735,5 +757,59 @@ window.CareerModals = {
         });
       });
     }
+  },
+
+  // --------------------------------------------------------------------------
+  // MODAL PENGESAHAN BERHENTI BELAJAR ("🚪 Berhenti Belajar")
+  // --------------------------------------------------------------------------
+  showDropoutConfirmation() {
+    const s = GameState.current;
+    if (!s || !EduCareerEngine.canDropOut(s)) return;
+    const courseLabel = EduCareerEngine.getActiveStudyLabel(s);
+    const lvlInfo = EducationData.LEVEL_INFO[s.education.educationLevel] || EducationData.LEVEL_INFO.none;
+
+    Modals.open({
+      icon: '🚪',
+      title: 'Pengesahan Berhenti Belajar',
+      subtitle: courseLabel,
+      bodyHtml: `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;line-height:1.58;">
+          <strong>⚠️ AMARAN SEBELUM BERHENTI BELAJAR</strong><br/>
+          • Pengajian semasa anda (<strong>${Utils.escapeHtml(courseLabel)}</strong>) akan dibatalkan <strong>tanpa sebarang sijil atau ijazah</strong> — kelayakan tertinggi anda kekal pada tahap terakhir yang tamat (<strong>${lvlInfo.icon} ${Utils.escapeHtml(lvlInfo.label)}</strong>).<br/>
+          • <strong>Yuran atau pinjaman pengajian yang telah dibayar tidak akan dipulangkan.</strong><br/>
+          • Yuran tahunan akan dihentikan serta-merta, stres berkurang (-15% hingga -25%), dan anda boleh terus memohon pekerjaan sepenuh masa (atau mendaftar semula pengajian pada masa hadapan).
+          ${s.age < 23 ? '<br/>• Ibu bapa mungkin kecewa dengan keputusan ini (-10% hingga -20% Hubungan).' : ''}
+        </div>
+        <div class="action-list">
+          <button type="button" class="action-item" id="btn-confirm-dropout" style="border-color:#ef4444;">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title" style="color:#b91c1c;">Sah Berhenti Belajar</span>
+              <span class="ai-desc">Batalkan pengajian sekarang &amp; hentikan yuran tahunan</span>
+            </span>
+            <span class="ai-right cost">Sah Berhenti</span>
+          </button>
+          <button type="button" class="action-item" id="btn-cancel-dropout">
+            <span class="ai-icon">↩️</span>
+            <span class="ai-content">
+              <span class="ai-title">Batal &amp; Teruskan Pengajian</span>
+              <span class="ai-desc">Kembali ke panel Pendidikan</span>
+            </span>
+            <span class="ai-right">Kembali</span>
+          </button>
+        </div>
+      `
+    });
+
+    const cancelBtn = document.getElementById('btn-cancel-dropout');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.showHub('education'));
+
+    const confirmBtn = document.getElementById('btn-confirm-dropout');
+    if (confirmBtn) confirmBtn.addEventListener('click', () => {
+      const res = EduCareerEngine.dropOutOfStudy();
+      App.renderAll();
+      App.toast(res.msg, res.ok ? 'culture' : 'error');
+      this.showHub(s.age >= 18 ? 'jobs' : 'education');
+    });
   }
 };

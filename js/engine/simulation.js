@@ -165,7 +165,7 @@ window.Sim = {
           rel.schoolLabel = 'SMK / Sekolah Menengah (Awam)';
           rel.yearlySchoolFee = 0;
           childMilestoneQueue.push({ type: 'school', childId: rel.id, stage: 'secondary' });
-        } else if (rel.age === 18) {
+        } else if (rel.age === 18 && !rel.droppedOut) {
           // Anak menamatkan Sekolah Menengah -> cetuskan modal Pilihan Universiti Anak!
           rel.schoolStage = 'completed';
           rel.yearlySchoolFee = 0;
@@ -177,7 +177,7 @@ window.Sim = {
         Relationships.ensureChildEducationFields(s, rel);
 
         // Pertumbuhan tahunan sekolah (umur 4–17) & penolakan yuran sekolah tahunan
-        if (rel.age >= 4 && rel.age <= 17 && rel.schoolType && rel.schoolType !== 'not_enrolled' && rel.schoolType !== 'none') {
+        if (!rel.droppedOut && rel.age >= 4 && rel.age <= 17 && rel.schoolType && rel.schoolType !== 'not_enrolled' && rel.schoolType !== 'none') {
           const stOpts = Relationships.SCHOOL_OPTIONS[rel.schoolStage] || [];
           const activeOpt = stOpts.find(o => o.id === rel.schoolType) || stOpts[0];
           if (activeOpt) {
@@ -204,7 +204,7 @@ window.Sim = {
         }
 
         // Kemajuan pengajian universiti anak (umur 19–23 jika sedang belajar di universiti)
-        if (rel.age > 18 && rel.uniEnrolled) {
+        if (!rel.droppedOut && rel.age > 18 && rel.uniEnrolled) {
           const uniFee = Number(rel.yearlySchoolFee) || 0;
           if (uniFee > 0 && (rel.uniSponsorMode === 'parent' || rel.uniSponsorMode === 'parent_cheaper')) {
             s.money = (s.money || 0) - uniFee;
@@ -214,7 +214,7 @@ window.Sim = {
           }
           rel.stats.smarts = Utils.clamp((rel.stats.smarts ?? 70) + Utils.randInt(2, 5), 0, 100);
           const cgpaDelta = ((rel.stats.smarts ?? 70) >= 75 ? Utils.randInt(2, 10) : Utils.randInt(-5, 6)) / 100;
-          rel.currentCgpa = Number(Math.max(2.0, Math.min(4.0, (rel.currentCgpa || 3.2) + cgpaDelta)).toFixed(2));
+          rel.currentCgpa = Number(Math.max(1.5, Math.min(4.0, (rel.currentCgpa || 3.2) + cgpaDelta)).toFixed(2));
           rel.uniYearsLeft = Math.max(0, (rel.uniYearsLeft || 1) - 1);
 
           if (rel.uniYearsLeft <= 0) {
@@ -231,6 +231,15 @@ window.Sim = {
               `🎓🎉 KONVOKESYEN ANAK! ${rel.name} (${rel.age} thn) telah berjaya bergraduasi dari ${rel.university} dalam bidang ${rel.major} (PNGK ${rel.currentCgpa.toFixed(2)}) dan memulakan kerjaya sebagai ${gradJob}!`,
               'milestone'
             );
+          }
+        }
+
+        // Semakan kebarangkalian anak mahu berhenti belajar (Sekolah Menengah umur 15–17 atau Universiti umur 18–22)
+        if (!rel.droppedOut && rel.age >= 15 && rel.age <= 22 && Relationships.computeChildDropoutChance) {
+          const dropProb = Relationships.computeChildDropoutChance(rel);
+          if (dropProb > 0 && Utils.chance(dropProb)) {
+            const reason = Relationships.pickChildDropoutReason(rel);
+            childMilestoneQueue.push({ type: 'dropout', childId: rel.id, reason });
           }
         }
       }
