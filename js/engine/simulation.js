@@ -850,7 +850,13 @@ window.Sim = {
       if (legEv) return legEv;
     }
 
-    // 0. Tawaran "Peluang Sekali Seumur Hidup" Mod Khas (Umur 14+, tiada menu statik!)
+    // 0. Jemputan Sindiket Mafia (jika pemain aktif dalam jenayah: >= 3 jenayah berjaya / reputasi gelap tinggi)
+    if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerMafiaRecruitmentEvent) {
+      const mafiaEv = SpecialModesEngine.maybeTriggerMafiaRecruitmentEvent(s);
+      if (mafiaEv) return mafiaEv;
+    }
+
+    // 0B. Tawaran "Peluang Sekali Seumur Hidup" Mod Khas (Umur 14+, tiada menu statik!)
     if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerLifetimeOffer) {
       const offerEv = SpecialModesEngine.maybeTriggerLifetimeOffer(s);
       if (offerEv) return offerEv;
@@ -2290,34 +2296,158 @@ window.Sim = {
     return { ok: true, msg: `Kesihatan meningkat +${heal}%!` };
   },
 
-  commitCrime(type) {
+  CRIME_POOL: [
+    // Ringan / Awal (Umur 14+)
+    { id: 'pickpocket', icon: '🤏', title: 'Seluk Saku (Pickpocket)', desc: 'Menyelit di kawasan sesak untuk menyasarkan dompet pejalan kaki yang leka.', minAge: 14, tier: 'minor', baseCatch: 0.24, lootUsd: [120, 420], fineUsd: [250, 600], karma: -6, heat: 5, rep: 8, stress: 4 },
+    { id: 'shoplift', icon: '🛍️', title: 'Curi Barang Kedai', desc: 'Menyorokkan barangan bernilai daripada rak kedai tanpa pengetahuan juruwang.', minAge: 14, tier: 'minor', baseCatch: 0.26, lootUsd: [150, 500], fineUsd: [300, 750], karma: -7, heat: 6, rep: 9, stress: 5 },
+    { id: 'vandalism', icon: '🎨', title: 'Vandalisme & Sabotaj', desc: 'Menconteng dan merosakkan harta benda awam atau premis sasaran pada waktu malam.', minAge: 14, tier: 'minor', baseCatch: 0.22, lootUsd: [100, 350], fineUsd: [350, 900], karma: -8, heat: 7, rep: 10, stress: 4 },
+    { id: 'counterfeit', icon: '📦', title: 'Jual Barangan Tiruan / Seludup Kecil', desc: 'Mengedarkan barangan tiruan dan stok gelap secara senyap di pasaran jalanan.', minAge: 14, tier: 'minor', baseCatch: 0.28, lootUsd: [300, 950], fineUsd: [500, 1200], karma: -8, heat: 8, rep: 12, stress: 5 },
+    // Sederhana / Berat (Umur 18+)
+    { id: 'car_theft', icon: '🚗', title: 'Curi Kenderaan', desc: 'Memecah masuk dan melarikan kenderaan mewah yang diparkir di kawasan sunyi.', minAge: 18, tier: 'major', baseCatch: 0.36, lootUsd: [2200, 6500], fineUsd: [2500, 6000], karma: -14, heat: 14, rep: 18, stress: 9, jailYears: [1, 3] },
+    { id: 'burglary', icon: '🏠', title: 'Pecah Masuk Rumah', desc: 'Menyelinap masuk ke kediaman yang ditinggalkan kosong untuk mencari barang berharga.', minAge: 18, tier: 'major', baseCatch: 0.38, lootUsd: [1800, 5200], fineUsd: [2000, 5000], karma: -15, heat: 15, rep: 17, stress: 10, jailYears: [1, 4] },
+    { id: 'cyber_scam', icon: '💻', title: 'Penipuan Siber / Skim Palsu', desc: 'Mengendalikan pancingan data dan skim pelaburan palsu secara dalam talian.', minAge: 18, tier: 'major', baseCatch: 0.32, lootUsd: [2800, 8500], fineUsd: [3500, 9000], karma: -16, heat: 13, rep: 19, stress: 8, jailYears: [2, 4] },
+    { id: 'extortion', icon: '💼', title: 'Peras Ugut Perniagaan', desc: 'Mengutip wang perlindungan daripada pemilik premis tempatan secara paksaan.', minAge: 18, tier: 'major', baseCatch: 0.37, lootUsd: [2400, 7000], fineUsd: [2800, 6500], karma: -18, heat: 16, rep: 22, stress: 9, jailYears: [2, 5] },
+    { id: 'smuggling', icon: '🚢', title: 'Seludup Kontraband', desc: 'Menguruskan penghantaran barangan larangan merentasi pintu masuk pelabuhan.', minAge: 18, tier: 'major', baseCatch: 0.42, lootUsd: [4500, 12500], fineUsd: [5000, 12000], karma: -18, heat: 18, rep: 25, stress: 11, jailYears: [3, 6] },
+    { id: 'money_laundering', icon: '🏦', title: 'Pengubahan Wang Haram', desc: 'Menyalurkan wang gelap melalui syarikat cengkerang untuk membersihkan sumbernya.', minAge: 18, tier: 'major', baseCatch: 0.35, lootUsd: [5500, 15000], fineUsd: [6000, 15000], karma: -16, heat: 15, rep: 24, stress: 10, jailYears: [2, 6] }
+  ],
+
+  getYearlyCrimeOptions(s) {
+    if (!s || s.age < 14) return [];
+    const eligible = this.CRIME_POOL.filter(cr => s.age >= cr.minAge);
+    if (s.crimeBoardYear === s.year && Array.isArray(s.crimeBoardIds) && s.crimeBoardIds.length === 3) {
+      const resolved = s.crimeBoardIds.map(id => eligible.find(cr => cr.id === id)).filter(Boolean);
+      if (resolved.length === 3) return resolved;
+    }
+
+    const prev = Array.isArray(s.crimeBoardIds) ? s.crimeBoardIds : [];
+    const fresh = eligible.filter(cr => !prev.includes(cr.id));
+    const pool = fresh.length >= 3 ? [...fresh] : [...eligible];
+    pool.sort(() => Math.random() - 0.5);
+    const picked = pool.slice(0, 3);
+
+    s.prevCrimeBoardIds = prev;
+    s.crimeBoardIds = picked.map(cr => cr.id);
+    s.crimeBoardYear = s.year;
+    return picked;
+  },
+
+  commitCrime(crimeId) {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
-    if (s.yearlyActions.crime) return { ok: false, msg: 'Tunggu tahun depan dahulu!' };
-    s.yearlyActions.crime = true;
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Anda sedang berada di dalam penjara!' };
 
-    const strictCountries = ['SG', 'JP', 'KR'];
-    const catchChance = strictCountries.includes(c.id) ? 0.62 : 0.42;
+    const maxAttempts = 3;
+    const usedCount = s.yearlyActions.crimeCount || 0;
+    if (usedCount >= maxAttempts) {
+      return { ok: false, msg: 'Had percubaan aktiviti gelap tahun ini telah tamat. Tunggu tahun hadapan.' };
+    }
+    if (!Array.isArray(s.yearlyActions.crimesDoneIds)) s.yearlyActions.crimesDoneIds = [];
+    if (s.yearlyActions.crimesDoneIds.includes(crimeId)) {
+      return { ok: false, msg: 'Aktiviti ini sudah dicuba tahun ini.' };
+    }
+
+    const def = this.CRIME_POOL.find(cr => cr.id === crimeId) || this.CRIME_POOL[0];
+    if (s.age < def.minAge) return { ok: false, msg: `Umur minimum untuk aktiviti ini ialah ${def.minAge} tahun.` };
+
+    s.yearlyActions.crimeCount = usedCount + 1;
+    s.yearlyActions.crimesDoneIds.push(def.id);
+
+    const strictCountries = ['SG', 'JP', 'KR', 'AE', 'SA'];
+    const currentHeat = (s.alignment && s.alignment.notoriety) || 0;
+    const smartsBonus = Math.max(0, ((s.stats && s.stats.smarts) || 50) - 50) * 0.002;
+    const catchChance = Math.min(
+      0.85,
+      Math.max(0.12, def.baseCatch + (strictCountries.includes(c.id) ? 0.14 : 0) + (currentHeat * 0.003) - smartsBonus)
+    );
 
     if (Utils.chance(catchChance)) {
-      const fine = Utils.usdToLocal(type === 'rompakan' ? 2400 : 450, s.countryId);
+      const fineUsd = Utils.randInt(def.fineUsd[0], def.fineUsd[1]);
+      const fine = Utils.usdToLocal(fineUsd, s.countryId);
       s.money -= fine;
-      s.criminalRecord += 1;
+      s.criminalRecord = (s.criminalRecord || 0) + 1;
       GameState.adjustStats({ happiness: -16, health: -4 });
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: Math.round(def.heat * 1.4), stress: def.stress + 8 });
+      }
+
+      // Risiko hukuman penjara bagi jenayah berat atau Haba Polis tinggi
+      const shouldJail = s.age >= 18 && def.jailYears && (currentHeat >= 45 || Utils.chance(0.45));
+      if (shouldJail && window.PrisonEngine && PrisonEngine.sendToPrison) {
+        const yrs = Utils.randInt(def.jailYears[0], def.jailYears[1]);
+        PrisonEngine.sendToPrison(s, def.title, yrs);
+        GameState.addJournalEntry(
+          `🚓 DICEKUP POLIS! Anda gagal dalam "${def.title}" di ${c.name}, didenda ${Utils.formatMoney(fine, s.countryId)} dan dijatuhi hukuman penjara ${yrs} tahun!`,
+          'warning'
+        );
+        GameState.save();
+        return { ok: false, msg: `Kantoi! Dipenjara ${yrs} tahun & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
+      }
+
       GameState.addJournalEntry(
-        `🚓 Ditangkap polis ${c.name} kerana ${type}! Anda didenda ${Utils.formatMoney(fine, s.countryId)} dan kini mempunyai rekod jenayah (menyukarkan permohonan visa!).`,
+        `🚓 Ditangkap polis ${c.name} semasa cubaan "${def.title}"! Anda didenda ${Utils.formatMoney(fine, s.countryId)} dan rekod jenayah bertambah.`,
         'warning'
       );
       GameState.save();
       return { ok: false, msg: `Kantoi! Didenda ${Utils.formatMoney(fine, s.countryId)}.` };
     } else {
-      const loot = Utils.usdToLocal(type === 'rompakan' ? 3500 : 320, s.countryId);
+      const lootUsd = Utils.randInt(def.lootUsd[0], def.lootUsd[1]);
+      const loot = Utils.usdToLocal(lootUsd, s.countryId);
       s.money += loot;
-      GameState.adjustStats({ happiness: 8 });
-      GameState.addJournalEntry(`🕶️ Anda berjaya melakukan ${type} dan mengaut ${Utils.formatMoney(loot, s.countryId)} tanpa dikesan.`);
+      s.crimesCommitted = (s.crimesCommitted || 0) + 1;
+      s.criminalRep = Math.min(100, (s.criminalRep || 0) + def.rep);
+      GameState.adjustStats({ happiness: 6 });
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: def.heat, stress: def.stress });
+      }
+      GameState.addJournalEntry(
+        `🕶️ Berjaya melakukan "${def.title}" dan mengaut wang gelap ${Utils.formatMoney(loot, s.countryId)} tanpa dikesan pihak berkuasa.`,
+        'warning'
+      );
       GameState.save();
       return { ok: true, msg: `Berjaya lolos dengan ${Utils.formatMoney(loot, s.countryId)}!` };
     }
+  },
+
+  canJoinMafiaDirectly(s) {
+    if (!s || s.age < 18) return false;
+    if (s.prison && s.prison.inPrison) return false;
+    if (s.activeSpecialMode) return false;
+    const crimes = s.crimesCommitted || 0;
+    const rep = s.criminalRep || 0;
+    const karma = (s.alignment && s.alignment.karma) || 0;
+    return crimes >= 3 || rep >= 40 || (karma <= -30 && crimes >= 1);
+  },
+
+  applyToJoinMafia(s) {
+    const st = s || GameState.current;
+    if (!this.canJoinMafiaDirectly(st)) {
+      return { ok: false, msg: 'Anda belum cukup reputasi dunia gelap untuk mendekati Sindiket Mafia.' };
+    }
+    if (st.yearlyActions.mafiaApply) {
+      return { ok: false, msg: 'Anda sudah mencuba menghubungi sindiket tahun ini. Tunggu tahun hadapan.' };
+    }
+    st.yearlyActions.mafiaApply = true;
+
+    const rep = st.criminalRep || 0;
+    const crimes = st.crimesCommitted || 0;
+    const passProb = Math.min(0.92, 0.55 + crimes * 0.08 + rep * 0.004);
+    if (Utils.chance(passProb) && window.SpecialModesEngine) {
+      SpecialModesEngine.enterMode(st, 'mafia');
+      GameState.addJournalEntry(
+        '🕶️ UJIAN KESETIAAN LULUS! Anda berjaya meyakinkan ketua sindiket dan rasmi diterima menyertai Mod Khas Sindiket & Mafia!',
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: 'Tahniah! Anda rasmi diterima menyertai Sindiket & Mafia!' };
+    }
+
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8, notoriety: 5 });
+    GameState.addJournalEntry(
+      '🕶️ Permohonan anda untuk menyertai Sindiket Mafia ditolak buat masa ini — mereka masih meragui kesetiaan anda.',
+      'warning'
+    );
+    GameState.save();
+    return { ok: false, msg: 'Ujian kesetiaan ditolak. Tingkatkan reputasi dunia gelap dan cuba lagi tahun hadapan.' };
   },
 
   investMoney(fraction = 0.5) {

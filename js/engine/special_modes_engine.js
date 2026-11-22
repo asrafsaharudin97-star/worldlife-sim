@@ -145,6 +145,57 @@ window.SpecialModesEngine = {
   },
 
   // --------------------------------------------------------------------------
+  // 1B. JEMPUTAN SINDIKET MAFIA (APABILA >= 3 JENAYAH BERJAYA / REPUTASI GELAP >= 40)
+  // --------------------------------------------------------------------------
+  maybeTriggerMafiaRecruitmentEvent(s) {
+    if (!s || !window.SpecialModesData) return null;
+    this.ensureFields(s);
+    if (s.activeSpecialMode) return null;
+    if (s.prison && s.prison.inPrison) return null;
+    if (s.age < 18) return null;
+    if (s.offeredModeIds.includes('mafia') || s.exitedModeIds.includes('mafia')) return null;
+
+    const crimes = s.crimesCommitted || 0;
+    const rep = s.criminalRep || 0;
+    if (crimes < 3 && rep < 40) return null;
+
+    const mafiaDef = SpecialModesData.MODES.mafia;
+    if (!mafiaDef) return null;
+    s.offeredModeIds.push('mafia');
+    GameState.save();
+
+    return {
+      id: `mafia_recruit_${s.age}_${Date.now()}`,
+      icon: '🕶️',
+      title: '🕶️ Jemputan Sindiket Mafia',
+      text: `Reputasi anda di dunia gelap semakin tersebar selepas beberapa operasi yang berjaya. Seorang wakil berpakaian sut hitam daripada Sindiket Mafia menghampiri anda di lokasi rahsia dan menawarkan tempat dalam organisasi mereka.\n\n"Kami perlukan orang yang berani dan cekap seperti kamu. Sertai kami sekarang dan buka laluan ke puncak kuasa dunia gelap."`,
+      choices: [
+        {
+          label: '🤝 Terima Jemputan — Sertai Sindiket Mafia',
+          journalType: 'milestone',
+          customAction: (st) => {
+            this.enterMode(st, 'mafia');
+            return {
+              outcome: `🕶️ Anda melafazkan ikrar kesetiaan dan rasmi menyertai Mod Khas ${mafiaDef.title} sebagai ${mafiaDef.ranks[0].title}!`,
+              toastType: 'success'
+            };
+          }
+        },
+        {
+          label: '🚪 Tolak Jemputan — Kekal Bergerak Sendirian',
+          journalType: 'dilemma',
+          customAction: (st) => {
+            return {
+              outcome: 'Anda menolak jemputan sindiket buat masa ini dan memilih untuk bergerak secara bersendirian.',
+              toastType: 'culture'
+            };
+          }
+        }
+      ]
+    };
+  },
+
+  // --------------------------------------------------------------------------
   // 2. ENJIN TAWARAN "PELUANG SEKALI SEUMUR HIDUP" (PADA AGE-UP, UMUR 14+)
   // --------------------------------------------------------------------------
   maybeTriggerLifetimeOffer(s, forceModeId = null) {

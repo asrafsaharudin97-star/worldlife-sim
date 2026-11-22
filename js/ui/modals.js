@@ -1960,27 +1960,39 @@ window.Modals = {
           ` : ''}
         </div>
 
-        ${s.age >= 16 ? `
-          <div class="section-heading">🕶️ Jenayah Berisiko (Awas — Susahkan Visa!)</div>
-          <div class="action-list">
-            <button class="action-item crime-btn" data-crime="mencuri di kedai" ${s.yearlyActions.crime ? 'disabled' : ''}>
-              <span class="ai-icon">🥷</span>
-              <span class="ai-content">
-                <span class="ai-title">Mencuri Kecil-kecilan</span>
-                <span class="ai-desc">Hasil kecil, undang-undang ketat di SG/JP/KR!</span>
-              </span>
-              <span class="ai-right cost">Berisiko</span>
-            </button>
-            <button class="action-item crime-btn" data-crime="rompakan" ${s.yearlyActions.crime ? 'disabled' : ''}>
-              <span class="ai-icon">💰</span>
-              <span class="ai-content">
-                <span class="ai-title">Rompakan / Skim Berisiko Tinggi</span>
-                <span class="ai-desc">Untung besar atau denda berat &amp; rekod jenayah</span>
-              </span>
-              <span class="ai-right cost">Risiko Tinggi</span>
-            </button>
-          </div>
-        ` : ''}
+        ${s.age >= 14 ? (() => {
+          const crimeOpts = Sim.getYearlyCrimeOptions(s);
+          const doneIds = Array.isArray(s.yearlyActions.crimesDoneIds) ? s.yearlyActions.crimesDoneIds : [];
+          const usedAttempts = s.yearlyActions.crimeCount || 0;
+          const maxAttempts = 3;
+          const canJoinMafia = Sim.canJoinMafiaDirectly(s);
+          return `
+            <div class="section-heading">🕶️ Jenayah &amp; Aktiviti Gelap (Percubaan: ${usedAttempts}/${maxAttempts})</div>
+            <div class="action-list">
+              ${crimeOpts.map(cr => {
+                const isDone = doneIds.includes(cr.id) || usedAttempts >= maxAttempts;
+                return `
+                  <button class="action-item crime-btn" data-crime="${cr.id}" ${isDone ? 'disabled' : ''}>
+                    <span class="ai-icon">${cr.icon}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(cr.title)}</span>
+                      <span class="ai-desc">${Utils.escapeHtml(cr.desc)}</span>
+                    </span>
+                  </button>
+                `;
+              }).join('')}
+              ${canJoinMafia ? `
+                <button class="action-item" id="act-join-mafia" ${s.yearlyActions.mafiaApply ? 'disabled' : ''}>
+                  <span class="ai-icon">🤝</span>
+                  <span class="ai-content">
+                    <span class="ai-title">Cari &amp; Sertai Sindiket Mafia</span>
+                    <span class="ai-desc">Gunakan reputasi dunia gelap anda untuk memohon menyertai organisasi Mafia</span>
+                  </span>
+                </button>
+              ` : ''}
+            </div>
+          `;
+        })() : ''}
       `;
     }
 
@@ -2204,6 +2216,18 @@ window.Modals = {
         App.renderAll();
         this.showActivities('lifestyle');
       });
+    });
+
+    const joinMafiaBtn = document.getElementById('act-join-mafia');
+    if (joinMafiaBtn) joinMafiaBtn.addEventListener('click', () => {
+      const res = Sim.applyToJoinMafia(s);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      if (res.ok && window.SpecialModeModals) {
+        SpecialModeModals.showHub();
+      } else {
+        this.showActivities('lifestyle');
+      }
     });
   },
 
