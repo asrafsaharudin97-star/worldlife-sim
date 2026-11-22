@@ -90,55 +90,23 @@ window.App = {
       quoteWrap.innerHTML = Quotes.renderQuoteCard(Quotes.getByCategory('new_life'), 'Inspirasi Permulaan');
     }
 
-    // Penapis Benua
-    const contWrap = document.getElementById('continent-filters');
-    const continents = window.WORLD_CONTINENTS || [{ id: 'ALL', label: 'Semua' }];
-    if (contWrap) {
-      contWrap.innerHTML = continents.map(ct => `
-        <button type="button" class="tab-pill cont-pill ${ct.id === 'ALL' ? 'active' : ''}" data-cont="${ct.id}">${ct.label}</button>
-      `).join('');
-      contWrap.querySelectorAll('.cont-pill').forEach(pill => {
-        pill.addEventListener('click', () => {
-          this.creator.continent = pill.dataset.cont;
-          contWrap.querySelectorAll('.cont-pill').forEach(p => p.classList.remove('active'));
-          pill.classList.add('active');
-          this._renderCreatorCountryGrid();
-        });
-      });
-    }
+    // Kemas kini jumlah negara dinamik
+    const countEl = document.getElementById('hero-country-count');
+    if (countEl) countEl.textContent = String(Object.keys(window.COUNTRIES).length);
 
-    // Carian pantas negara / benua
-    const searchEl = document.getElementById('country-search');
-    if (searchEl) {
-      searchEl.addEventListener('input', (e) => {
-        this.creator.search = e.target.value.trim().toLowerCase();
-        Utils.debounceKey('creator-country-search', () => this._renderCreatorCountryGrid(), 160);
-      });
-    }
-
-    // Butang Negara Rawak
+    // Butang Negara Rawak (had maksimum 3 kali rawak)
     const randCountryBtn = document.getElementById('btn-random-country');
     if (randCountryBtn) {
       randCountryBtn.addEventListener('click', () => {
-        const all = Object.values(window.COUNTRIES);
-        const picked = Utils.pick(all);
+        if ((this.creator.rerollsLeft ?? 0) <= 0) return;
+        const picked = this._rollRandomCountry(true);
         if (!picked) return;
-        this.creator.countryId = picked.id;
-        this.creator.continent = 'ALL';
-        this.creator.search = '';
-        if (searchEl) searchEl.value = '';
-        if (contWrap) {
-          contWrap.querySelectorAll('.cont-pill').forEach(p => p.classList.toggle('active', p.dataset.cont === 'ALL'));
-        }
-        this._renderCreatorCountryGrid();
+        this.creator.rerollsLeft = Math.max(0, (this.creator.rerollsLeft ?? 3) - 1);
         this._syncCreatorCountry();
-        const selEl = document.querySelector(`#country-grid .country-card-opt[data-cid="${picked.id}"]`);
-        if (selEl) selEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        this._updateRandomCountryBtn();
         this.toast(`🎲 Negara rawak terpilih: ${picked.flag} ${picked.name}!`, 'culture');
       });
     }
-
-    this._renderCreatorCountryGrid();
 
     document.querySelectorAll('#gender-toggle .pill-opt').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -153,7 +121,6 @@ window.App = {
       this.creator.heritageId = e.target.value;
       this._refreshRandomPlaceholder();
     });
-
 
     document.getElementById('btn-random-name').addEventListener('click', () => {
       const name = Utils.generateName(this.creator.countryId, this.creator.gender, this.creator.heritageId);
@@ -181,53 +148,42 @@ window.App = {
       }
     });
 
-    this._syncCreatorCountry();
+    this._initCreatorRandomCountry();
   },
 
-  _renderCreatorCountryGrid() {
-    const grid = document.getElementById('country-grid');
-    if (!grid) return;
-    const q = this.creator.search || '';
-    const cont = this.creator.continent || 'ALL';
+  _initCreatorRandomCountry() {
+    this.creator.rerollsLeft = 3;
+    this._rollRandomCountry(false);
+    this._syncCreatorCountry();
+    this._updateRandomCountryBtn();
+  },
 
-    const list = Object.values(window.COUNTRIES)
-      .filter(c => {
-        if (cont !== 'ALL' && c.continent !== cont) return false;
-        if (q) {
-          const hay = `${c.name} ${c.id} ${c.continent || ''} ${c.currencyCode || ''}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    if (list.length === 0) {
-      grid.innerHTML = `<div class="info-banner" style="grid-column:1/-1;">Tiada negara ditemui untuk carian "${Utils.escapeHtml(q)}".</div>`;
-      return;
+  _rollRandomCountry(excludeCurrent = true) {
+    const all = Object.values(window.COUNTRIES);
+    const pool = excludeCurrent && all.length > 1
+      ? all.filter(c => c.id !== this.creator.countryId)
+      : all;
+    const picked = Utils.pick(pool);
+    if (picked) {
+      this.creator.countryId = picked.id;
     }
+    return picked;
+  },
 
-    grid.innerHTML = list.map(c => `
-      <button type="button" class="country-card-opt ${c.id === this.creator.countryId ? 'selected' : ''}" data-cid="${c.id}">
-        <span class="cc-flag">${c.flag}</span>
-        <span>
-          <span class="cc-name">${Utils.escapeHtml(c.name)}</span>
-          <span class="cc-curr">${c.currency.code} • ${c.currency.symbol.trim()}</span>
-        </span>
-      </button>
-    `).join('');
-    this._countryGridRendered = true;
-
-    // Pendengar terwakil tunggal (dipasang sekali sahaja) — bukan 195 pendengar setiap kali dirender
-    if (!grid._delegated) {
-      grid._delegated = true;
-      grid.addEventListener('click', (e) => {
-        const btn = e.target.closest ? e.target.closest('.country-card-opt') : null;
-        if (!btn || !grid.contains(btn)) return;
-        this.creator.countryId = btn.dataset.cid;
-        grid.querySelectorAll('.country-card-opt.selected').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        this._syncCreatorCountry();
-      });
+  _updateRandomCountryBtn() {
+    const btn = document.getElementById('btn-random-country');
+    if (!btn) return;
+    const left = Math.max(0, this.creator.rerollsLeft ?? 0);
+    if (left > 0) {
+      btn.disabled = false;
+      btn.textContent = `🎲 Negara Rawak (${left}/3)`;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+    } else {
+      btn.disabled = true;
+      btn.textContent = '🎲 Had Rawak Tamat (0/3)';
+      btn.style.opacity = '0.55';
+      btn.style.cursor = 'not-allowed';
     }
   },
 
@@ -279,12 +235,13 @@ window.App = {
     document.getElementById('life-feed-container').classList.add('hidden');
     document.getElementById('game-footer').classList.add('hidden');
 
-    // Bina semula grid 195 negara hanya apabila skrin pencipta watak dibuka
-    if (!this._countryGridRendered) this._renderCreatorCountryGrid();
+    const countEl = document.getElementById('hero-country-count');
+    if (countEl) countEl.textContent = String(Object.keys(window.COUNTRIES).length);
+
+    this._initCreatorRandomCountry();
 
     const saved = GameState.load();
     document.getElementById('btn-continue-life').classList.toggle('hidden', !(saved && saved.alive));
-    this._syncCreatorCountry();
   },
 
   showGameScreen() {
@@ -293,10 +250,6 @@ window.App = {
     document.getElementById('life-feed-container').classList.remove('hidden');
     document.getElementById('game-footer').classList.remove('hidden');
 
-    // Bebaskan ~195 nod DOM grid negara semasa bermain (jimat memori di peranti mudah alih)
-    const grid = document.getElementById('country-grid');
-    if (grid) grid.innerHTML = '';
-    this._countryGridRendered = false;
     this._feedLimit = this.FEED_PAGE_SIZE;
     this._feedSig = '';
   },

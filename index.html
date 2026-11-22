@@ -136,7 +136,7 @@
     <!-- Skrin Permulaan / Cipta Watak -->
     <section id="start-screen" class="start-screen">
       <div class="start-hero">
-        <div class="hero-badge">🌏 Simulator Kehidupan • 195 Negara Dunia</div>
+        <div class="hero-badge">🌏 Simulator Kehidupan • <span id="hero-country-count"></span> Negara Dunia</div>
         <h1 class="hero-title">World<span>Life</span></h1>
         <p class="hero-desc">
           Jalani seperti mana yang kamu ingin kan
@@ -147,12 +147,9 @@
       <div class="creator-card">
         <div class="creator-section">
           <div class="country-picker-head">
-            <label class="creator-label" style="margin:0;">1. Pilih Negara Kelahiran (195 Negara)</label>
-            <button type="button" id="btn-random-country" class="random-country-btn" title="Pilih negara secara rawak">🎲 Negara Rawak</button>
+            <label class="creator-label" style="margin:0;">1. Negara Kelahiran</label>
+            <button type="button" id="btn-random-country" class="random-country-btn" title="Tukar negara secara rawak">🎲 Negara Rawak (3/3)</button>
           </div>
-          <input type="text" id="country-search" class="input-field country-search-input" placeholder="🔍 Cari nama negara atau benua (cth: Malaysia, Jepun, Brazil, Switzerland)..." />
-          <div id="continent-filters" class="tab-pills" style="margin-bottom:8px;"></div>
-          <div id="country-grid" class="country-grid country-grid-scroll"></div>
           <div id="country-preview" class="country-preview"></div>
         </div>
 

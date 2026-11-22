@@ -158,7 +158,6 @@
     ['ID','Indonesia','🇮🇩','Asia','IDR','Rp ',15800,0.34,0.34,0.15,'Subsidi (BPJS)',0.30,68,66,72,'indonesian','Jakarta'],
     ['IR','Iran','🇮🇷','Asia','IRR','﷼',42000,0.30,0.35,0.15,'Subsidi',0.35,74,58,77,'persian_turkic','Tehran'],
     ['IQ','Iraq','🇮🇶','Asia','IQD','IQD ',1310,0.32,0.38,0.12,'Subsidi',0.40,56,42,72,'arabic_me','Baghdad'],
-    ['IL','Israel','🇮🇱','Asia','ILS','₪',3.7,1.05,0.88,0.28,'Subsidi',0.40,88,65,83,'arabic_me','Jerusalem'],
     ['JP','Jepun','🇯🇵','Asia','JPY','¥',152,1.08,0.86,0.24,'Subsidi (NHI)',0.35,95,94,85,'japanese','Tokyo'],
     ['JO','Jordan','🇯🇴','Asia','JOD','JD ',0.71,0.38,0.48,0.14,'Subsidi',0.45,74,72,76,'arabic_me','Amman'],
     ['KZ','Kazakhstan','🇰🇿','Asia','KZT','₸',450,0.44,0.42,0.10,'Subsidi',0.40,78,68,74,'persian_turkic','Astana'],
@@ -497,7 +496,7 @@
   }
 
   window.WORLD_CONTINENTS = [
-    { id: 'ALL', label: 'Semua (195)' },
+    { id: 'ALL', label: `Semua (${Object.keys(window.COUNTRIES).length})` },
     { id: 'Asia', label: 'Asia' },
     { id: 'Europe', label: 'Eropah' },
     { id: 'Africa', label: 'Afrika' },
