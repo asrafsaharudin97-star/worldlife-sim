@@ -23,7 +23,7 @@ window.AssetModals = {
     const rLeft = s.assetMarket.refreshesLeft ?? 2;
 
     const headerHtml = `
-      <div class="summary-grid" style="margin-bottom:8px;">
+      <div class="summary-grid" style="margin-bottom:0;">
         <div class="summary-stat">
           <span class="lbl">Jumlah Nilai Aset</span>
           <span class="val">${Utils.formatMoney(sum.totalAssetValue, s.countryId, true)}</span>
@@ -42,7 +42,7 @@ window.AssetModals = {
         </div>
       </div>
 
-      <div class="info-banner" style="border-left:4px solid ${trend.color};padding:8px 10px;margin-bottom:8px;">
+      <div class="info-banner" style="border-left:4px solid ${trend.color};padding:8px 10px;margin-bottom:0;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
           <span><strong>${trend.icon} ${Utils.escapeHtml(trend.label)}</strong></span>
           <button type="button" class="reroll-idea-btn" id="btn-refresh-asset-market" style="padding:4px 9px;font-size:11px;" ${rLeft <= 0 ? 'disabled' : ''}>
@@ -52,7 +52,7 @@ window.AssetModals = {
         <div style="font-size:11.5px;margin-top:4px;opacity:0.9;">${Utils.escapeHtml(trend.headline)}</div>
       </div>
 
-      <div class="tab-pills" style="margin-bottom:10px;">
+      <div class="tab-pills" style="margin-bottom:0;">
         <button type="button" class="tab-pill asset-tab-pill ${tab === 'portfolio' ? 'active' : ''}" data-atab="portfolio">📊 Portfolio Saya</button>
         <button type="button" class="tab-pill asset-tab-pill ${tab === 'realestate' ? 'active' : ''}" data-atab="realestate">🏠 Hartanah</button>
         <button type="button" class="tab-pill asset-tab-pill ${tab === 'vehicles' ? 'active' : ''}" data-atab="vehicles">🚗 Kenderaan</button>
@@ -68,12 +68,26 @@ window.AssetModals = {
     else if (tab === 'investments') body = this._renderInvestmentsTab(s, c);
     else body = this._renderCollectiblesTab(s, c);
 
+    const layoutHtml = `
+      <div class="assets-modal-layout">
+        <div class="assets-modal-top">
+          ${headerHtml}
+        </div>
+        <div class="assets-tab-scroll" id="assets-tab-scroll">
+          ${body}
+        </div>
+      </div>
+    `;
+
     Modals.open({
       icon: '🏛️',
       title: 'Aset, Pelaburan & Kekayaan',
       subtitle: `Tunai: ${Utils.formatMoney(s.money, s.countryId, true)} • ${c.flag} ${c.name}`,
-      bodyHtml: headerHtml + body
+      bodyHtml: layoutHtml
     });
+
+    const scrollEl = document.getElementById('assets-tab-scroll');
+    if (scrollEl) scrollEl.scrollTop = 0;
 
     this._bindHandlers(s, c, tab);
   },
@@ -83,17 +97,23 @@ window.AssetModals = {
   // --------------------------------------------------------------------------
   _renderPortfolioTab(s, c) {
     let html = '';
+    const invEntries = Object.entries(s.assets.portfolio || {}).filter(([, pos]) => pos && pos.units > 0);
     const hasAny = s.assets.properties.length > 0
       || s.assets.vehicles.length > 0
-      || Object.keys(s.assets.portfolio || {}).length > 0
+      || invEntries.length > 0
       || s.assets.collectibles.length > 0;
 
     if (!hasAny) {
-      return `<div class="info-banner highlight">📊 Portfolio anda masih kosong! Mula bina kekayaan dengan membeli <strong>Hartanah</strong>, <strong>Kenderaan</strong>, <strong>Pelaburan</strong> atau <strong>Koleksi</strong> pada tab di atas.</div>`;
+      return `
+        <div class="assets-portfolio-section">
+          <div class="info-banner highlight">📊 Portfolio anda masih kosong! Mula bina kekayaan dengan membeli <strong>Hartanah</strong>, <strong>Kenderaan</strong>, <strong>Pelaburan</strong> atau <strong>Koleksi</strong> pada tab di atas.</div>
+        </div>
+      `;
     }
 
     // 1) Hartanah Dimiliki
     if (s.assets.properties.length > 0) {
+      html += `<div class="assets-portfolio-section">`;
       html += `<div class="section-heading">🏠 Hartanah Dimiliki (${s.assets.properties.length})</div>`;
       s.assets.properties.forEach(p => {
         const estRent = Math.round(p.value * ((p.yieldPct || 5.5) / 100));
@@ -125,11 +145,12 @@ window.AssetModals = {
           </div>
         `;
       });
+      html += `</div>`;
     }
 
     // 2) Pelaburan Dimiliki
-    const invEntries = Object.entries(s.assets.portfolio || {}).filter(([, pos]) => pos && pos.units > 0);
     if (invEntries.length > 0) {
+      html += `<div class="assets-portfolio-section">`;
       html += `<div class="section-heading">📈 Pegangan Pelaburan (${invEntries.length})</div>`;
       invEntries.forEach(([instId, pos]) => {
         const inst = AssetsData.INVESTMENTS.find(x => x.id === instId);
@@ -156,10 +177,12 @@ window.AssetModals = {
           </div>
         `;
       });
+      html += `</div>`;
     }
 
     // 3) Kenderaan Dimiliki
     if (s.assets.vehicles.length > 0) {
+      html += `<div class="assets-portfolio-section">`;
       html += `<div class="section-heading">🚗 Kenderaan Dimiliki (${s.assets.vehicles.length})</div>`;
       s.assets.vehicles.forEach(v => {
         const showLemon = Boolean(v.isLemon && v.lemonRevealed);
@@ -184,10 +207,12 @@ window.AssetModals = {
           </div>
         `;
       });
+      html += `</div>`;
     }
 
     // 4) Koleksi & Pusaka Keluarga
     if (s.assets.collectibles.length > 0) {
+      html += `<div class="assets-portfolio-section">`;
       html += `<div class="section-heading">💎 Koleksi &amp; Pusaka Keluarga (${s.assets.collectibles.length})</div>`;
       s.assets.collectibles.forEach(col => {
         html += `
@@ -204,6 +229,7 @@ window.AssetModals = {
           </div>
         `;
       });
+      html += `</div>`;
     }
 
     return html;

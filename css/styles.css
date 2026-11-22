@@ -810,6 +810,11 @@ html, body {
 .modal-body:has(.career-modal-layout) {
   overflow: hidden;
 }
+.modal-body:has(.assets-modal-layout) {
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
 .career-modal-layout {
   display: flex;
   flex-direction: column;
@@ -828,6 +833,59 @@ html, body {
   flex-direction: column;
   gap: 10px;
   padding-right: 2px;
+}
+.assets-modal-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.assets-modal-top {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  background: #fff;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.assets-modal-top .tab-pills {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+.assets-tab-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+  padding: 16px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.assets-tab-scroll > * {
+  flex-shrink: 0;
+  position: relative;
+}
+.assets-tab-scroll .section-heading {
+  flex-shrink: 0;
+  position: relative;
+  margin: 0;
+}
+.assets-portfolio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  position: relative;
+}
+.assets-portfolio-section > * {
+  flex-shrink: 0;
+  position: relative;
 }
 
 /* Modal Content Blocks */
