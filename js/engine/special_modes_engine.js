@@ -301,10 +301,18 @@ window.SpecialModesEngine = {
     }
 
     const recentSet = new Set(am.recentActionIds || []);
-    const normalPool = def.actions.filter(a => !a.isRare && !recentSet.has(a.id));
-    const fallbackNormal = normalPool.length >= 5
-      ? normalPool
-      : def.actions.filter(a => !a.isRare && !prevSet.has(a.id));
+    const lowPoolFresh = def.actions.filter(a => !a.isRare && a.risk === 'low' && !recentSet.has(a.id));
+    const lowPoolFallback = lowPoolFresh.length >= 2
+      ? lowPoolFresh
+      : def.actions.filter(a => !a.isRare && a.risk === 'low' && !prevSet.has(a.id));
+    const allLowPool = lowPoolFallback.length > 0
+      ? lowPoolFallback
+      : def.actions.filter(a => !a.isRare && a.risk === 'low');
+
+    const otherPoolFresh = def.actions.filter(a => !a.isRare && a.risk !== 'low' && !recentSet.has(a.id));
+    const otherPoolFallback = otherPoolFresh.length >= 4
+      ? otherPoolFresh
+      : def.actions.filter(a => !a.isRare && a.risk !== 'low' && !prevSet.has(a.id));
     const rarePool = def.actions.filter(a => a.isRare && !prevSet.has(a.id));
 
     const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
@@ -316,13 +324,32 @@ window.SpecialModesEngine = {
       picked.push(Utils.pick(rarePool).id);
     }
 
-    for (const a of shuffle(fallbackNormal)) {
+    // Pastikan sekurang-kurangnya 1–2 misi berisiko rendah (rutin/selamat) disertakan
+    const lowTarget = Math.min(allLowPool.length, Utils.randInt(1, 2));
+    for (const a of shuffle(allLowPool)) {
+      if (picked.filter(id => {
+        const obj = def.actions.find(x => x.id === id);
+        return obj && obj.risk === 'low';
+      }).length >= lowTarget) break;
+      if (!picked.includes(a.id)) picked.push(a.id);
+    }
+
+    // Penuhkan baki dengan misi sederhana & tinggi
+    for (const a of shuffle(otherPoolFallback)) {
       if (picked.length >= targetSize) break;
       if (!picked.includes(a.id)) picked.push(a.id);
     }
 
-    am.currentBoard = picked;
-    return picked;
+    // Fallback jika masih belum cukup 4–5 tindakan
+    if (picked.length < targetSize) {
+      for (const a of shuffle(def.actions.filter(x => !x.isRare))) {
+        if (picked.length >= targetSize) break;
+        if (!picked.includes(a.id)) picked.push(a.id);
+      }
+    }
+
+    am.currentBoard = shuffle(picked);
+    return am.currentBoard;
   },
 
   rerollBoard() {
@@ -355,21 +382,35 @@ window.SpecialModesEngine = {
     const rankBonus = (am.rankIndex || 0) * 4;
 
     // Tentukan tahap kesukaran misi
-    let diffScore = 0;
-    if (act.isRare) diffScore += 2;
-    if (act.foreignMission) diffScore += 1;
-    if ((act.notoriety || 0) >= 8 || (act.stress || 0) >= 10) diffScore += 1;
-    if (Math.abs(act.moneyUsd || 0) >= 20000 || (act.m1 || 0) >= 12) diffScore += 1;
-    if (isDanger) diffScore += 1;
-
     let tier = 'low';
-    let baseSuccess = 76;
-    if (diffScore >= 3) {
+    let baseSuccess = 88;
+    if (act.risk === 'low') {
+      tier = 'low';
+      baseSuccess = typeof act.baseSuccess === 'number' ? act.baseSuccess : 90;
+    } else if (act.risk === 'high') {
       tier = 'high';
-      baseSuccess = 44;
-    } else if (diffScore >= 1) {
+      baseSuccess = typeof act.baseSuccess === 'number' ? act.baseSuccess : 44;
+    } else if (act.risk === 'medium') {
       tier = 'medium';
-      baseSuccess = 60;
+      baseSuccess = typeof act.baseSuccess === 'number' ? act.baseSuccess : 62;
+    } else {
+      let diffScore = 0;
+      if (act.isRare) diffScore += 2;
+      if (act.foreignMission) diffScore += 1;
+      if ((act.notoriety || 0) >= 8 || (act.stress || 0) >= 10) diffScore += 1;
+      if (Math.abs(act.moneyUsd || 0) >= 20000 || (act.m1 || 0) >= 12) diffScore += 1;
+      if (isDanger) diffScore += 1;
+
+      if (diffScore >= 3) {
+        tier = 'high';
+        baseSuccess = 44;
+      } else if (diffScore >= 1) {
+        tier = 'medium';
+        baseSuccess = 60;
+      } else {
+        tier = 'low';
+        baseSuccess = 88;
+      }
     }
 
     // Skala mengikut statistik watak yang relevan + pangkat - penalti stres/keletihan
@@ -377,12 +418,14 @@ window.SpecialModesEngine = {
       ? (health * 0.55 + smarts * 0.45)
       : (['celebrity', 'royalty'].includes(modeId) ? (looks * 0.55 + smarts * 0.45) : (smarts * 0.65 + health * 0.35));
 
-    const statMod = Math.round(((primaryStat - 60) / 100) * 26);
-    const stressPenalty = stress >= 75 ? 18 : stress >= 50 ? 10 : stress >= 35 ? 4 : 0;
+    const statMod = Math.round(((primaryStat - 60) / 100) * (tier === 'low' ? 12 : 26));
+    const stressPenalty = stress >= 75 ? (tier === 'low' ? 6 : 18) : stress >= 50 ? (tier === 'low' ? 3 : 10) : stress >= 35 ? (tier === 'low' ? 1 : 4) : 0;
 
-    const successPct = Utils.clamp(baseSuccess + statMod + rankBonus - stressPenalty, 18, 86);
-    const partialPct = tier === 'high' ? 22 : (tier === 'medium' ? 20 : 15);
-    const failPct = Math.max(5, 100 - successPct - partialPct);
+    const maxSuccessCap = tier === 'low' ? 96 : 86;
+    const minSuccessFloor = tier === 'low' ? 78 : 18;
+    const successPct = Utils.clamp(baseSuccess + statMod + rankBonus - stressPenalty, minSuccessFloor, maxSuccessCap);
+    const partialPct = tier === 'high' ? 22 : (tier === 'medium' ? 20 : Math.min(8, 100 - successPct - 2));
+    const failPct = Math.max(2, 100 - successPct - partialPct);
 
     const badge = tier === 'high'
       ? { text: '🔴 Risiko Tinggi', bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5' }
@@ -428,8 +471,8 @@ window.SpecialModesEngine = {
       if (am.recentActionIds.length > 10) am.recentActionIds.length = 10;
     }
 
-    // 25% peluang mencetuskan Dilema Bercabang Khusus Mod (kecuali jika paksa uji outcome)
-    if (!opts.skipDilemma && def.dilemmas && def.dilemmas.length > 0 && Utils.chance(0.25)) {
+    // 25% peluang mencetuskan Dilema Bercabang Khusus Mod (kecuali jika paksa uji outcome atau misi rutin risiko rendah)
+    if (!opts.skipDilemma && act.risk !== 'low' && def.dilemmas && def.dilemmas.length > 0 && Utils.chance(0.25)) {
       const dil = this.buildDilemmaEvent(s, def, Utils.pick(def.dilemmas));
       GameState.save();
       return { ok: true, dilemmaEvent: dil, msg: `⚡ Dilema ${def.shortLabel}!` };
@@ -466,11 +509,11 @@ window.SpecialModesEngine = {
         rep: act.rep ? Math.max(1, Math.round(act.rep * 0.5)) : 0
       };
       const baseSummary = this._applyEffects(s, def, am, scaledEff);
-      const extraStress = Utils.randInt(8, 15);
-      const extraCost = Utils.usdToLocal(Utils.randInt(450, 1800), s.countryId);
+      const extraStress = risk.tier === 'low' ? Utils.randInt(3, 6) : Utils.randInt(8, 15);
+      const extraCost = Utils.usdToLocal(risk.tier === 'low' ? Utils.randInt(150, 500) : Utils.randInt(450, 1800), s.countryId);
       let setbackText = '';
 
-      if (risk.isDanger) {
+      if (risk.isDanger && risk.tier !== 'low') {
         const minorInjury = Utils.randInt(6, 12);
         GameState.adjustStats({ health: -minorInjury, happiness: -4 });
         if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + extraStress, 0, 100);
@@ -478,7 +521,7 @@ window.SpecialModesEngine = {
       } else {
         s.money = Math.max(0, (s.money || 0) - extraCost);
         if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + extraStress, 0, 100);
-        GameState.adjustStats({ happiness: -4 });
+        GameState.adjustStats({ happiness: -2 });
         setbackText = `Kos tambahan -${Utils.formatMoney(extraCost, s.countryId)} & Stres +${extraStress}%`;
       }
 
@@ -495,6 +538,26 @@ window.SpecialModesEngine = {
     }
 
     // 3) GAGAL / TERKANTOI (Failure / Backfire)
+    if (risk.tier === 'low') {
+      // Penalti sangat minimum untuk tugasan rutin / risiko rendah
+      const minHap = -Utils.randInt(3, 6);
+      const minStress = Utils.randInt(3, 7);
+      GameState.adjustStats({ happiness: minHap });
+      if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + minStress, 0, 100);
+      am.metric1 = Utils.clamp((am.metric1 || 50) - Utils.randInt(2, 4), 0, 100);
+      const lowFailNotes = [`${def.metric1.label} -3%`, `Gembira ${minHap}%`, `Stres +${minStress}%`];
+      const lowFailLog = `⚠️ [${def.shortLabel}] ${act.title}: Tugasan rutin kurang memuaskan (${lowFailNotes.join(' • ')}).`;
+      GameState.addJournalEntry(lowFailLog, 'warning');
+      GameState.save();
+      return {
+        ok: false,
+        outcomeTier: 'failure',
+        risk,
+        died: false,
+        msg: `⚠️ Tugasan Kurang Menjadi (${act.title}): ${lowFailNotes.join(' • ')}`
+      };
+    }
+
     am.consecutiveFailures = (am.consecutiveFailures || 0) + 1;
     am.cooldowns[act.id] = 1; // Cooldown 1 tahun selepas gagal
 

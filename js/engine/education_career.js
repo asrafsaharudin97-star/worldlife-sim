@@ -730,18 +730,25 @@ window.EduCareerEngine = {
 
     // 1) 3–4 jawatan sesuai kelayakan/bidang/sijil watak
     const matching = shuffle(pool.filter(j => !j.isRare && this.isCareerFieldMatched(s, j) && (j.minEducation !== 'none' || (j.preferredCerts || []).some(c => s.education.certificates.includes(c)))));
-    for (const j of matching.slice(0, 4)) addPick(j);
+    for (const j of matching.slice(0, 3)) addPick(j);
 
-    // 2) 4–5 jawatan umum, kemahiran, hospitaliti atau kreatif pelbagai industri
+    // 2) Pastikan sekurang-kurangnya 2 kerja Tak Mahir & 2 kerja Separa Mahir sentiasa tersedia di Pasaran Kerja
+    const unskilledPool = shuffle(all.filter(j => j.industry === 'unskilled' && !picked.includes(j.id)));
+    for (const j of unskilledPool.slice(0, 2)) addPick(j);
+
+    const semiSkilledPool = shuffle(all.filter(j => j.industry === 'semi_skilled' && !picked.includes(j.id)));
+    for (const j of semiSkilledPool.slice(0, 2)) addPick(j);
+
+    // 3) 2–3 jawatan umum, kemahiran, hospitaliti atau kreatif pelbagai industri
     const general = shuffle(pool.filter(j => !j.isRare && !picked.includes(j.id) && (j.minEducation === 'none' || j.minEducation === 'high_school' || j.industry === 'trades' || j.industry === 'creative' || j.industry === 'hospitality')));
-    for (const j of general.slice(0, 5)) addPick(j);
+    for (const j of general.slice(0, 3)) addPick(j);
 
-    // 3) 2–3 jawatan berprestij / nadir ("Peluang Terhad / Headhunter")
+    // 4) 2 jawatan berprestij / nadir ("Peluang Terhad / Headhunter")
     const rareOrHigh = shuffle(pool.filter(j => !picked.includes(j.id) && (j.isRare || j.baseSalary >= 70000)));
-    for (const j of rareOrHigh.slice(0, 3)) addPick(j);
+    for (const j of rareOrHigh.slice(0, 2)) addPick(j);
 
-    // 4) Cukupkan sehingga 11–12 jawatan aktif
-    const targetCount = Utils.randInt(10, 12);
+    // 5) Cukupkan sehingga 12–14 jawatan aktif
+    const targetCount = Utils.randInt(12, 14);
     for (const j of shuffle(pool)) {
       if (picked.length >= targetCount) break;
       addPick(j);

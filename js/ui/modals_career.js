@@ -22,7 +22,7 @@ window.CareerModals = {
 
     const tab = this._activeTab;
     const tabsHtml = `
-      <div class="tab-pills" style="margin-bottom:10px;">
+      <div class="tab-pills career-hub-tabs" style="flex-shrink:0;margin-bottom:10px;">
         <button type="button" class="tab-pill career-tab-pill ${tab === 'jobs' ? 'active' : ''}" data-ctab="jobs">💼 Pasaran Kerja</button>
         <button type="button" class="tab-pill career-tab-pill ${tab === 'education' ? 'active' : ''}" data-ctab="education">🎓 Pendidikan</button>
         <button type="button" class="tab-pill career-tab-pill ${tab === 'certs' ? 'active' : ''}" data-ctab="certs">📜 Sijil &amp; Kursus</button>
@@ -37,12 +37,25 @@ window.CareerModals = {
     else body = this._renderRecordTab(s, c);
 
     const lvlInfo = EducationData.LEVEL_INFO[s.education.educationLevel] || EducationData.LEVEL_INFO.none;
+    const drSuffix = (s.education.hasDoctorateTitle && !lvlInfo.short.includes('(Dr.)')) ? ' (Dr.)' : '';
     Modals.open({
       icon: '💼',
       title: 'Pendidikan & Kerjaya',
-      subtitle: `${c.flag} ${c.name} • ${lvlInfo.icon} ${lvlInfo.short}${s.education.hasDoctorateTitle ? ' (Dr.)' : ''}`,
-      bodyHtml: tabsHtml + body
+      subtitle: `${c.flag} ${c.name} • ${lvlInfo.icon} ${lvlInfo.short}${drSuffix}`,
+      bodyHtml: `
+        <div class="career-modal-layout">
+          ${tabsHtml}
+          <div id="career-tab-scroll" class="career-tab-scroll">
+            ${body}
+          </div>
+        </div>
+      `
     });
+
+    const modalBodyEl = document.getElementById('modal-body');
+    if (modalBodyEl) modalBodyEl.scrollTop = 0;
+    const scrollEl = document.getElementById('career-tab-scroll');
+    if (scrollEl) scrollEl.scrollTop = 0;
 
     this._bindHandlers(s, c, tab);
   },

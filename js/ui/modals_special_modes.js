@@ -43,7 +43,6 @@ window.SpecialModeModals = {
       const done = Boolean(s.yearlyActions[`sp_${def.id}_${act.id}`]);
       const cd = (am.cooldowns && am.cooldowns[act.id]) || 0;
       const disabled = done || cd > 0 || aLeft <= 0 || Boolean(s.prison && s.prison.inPrison);
-      const risk = SpecialModesEngine.getActionRiskProfile(s, def, am, act);
       return `
         <button type="button" class="action-item sp-mode-act-btn ${act.isRare ? 'rare-activity' : ''} ${done ? 'act-done-card' : ''}" data-act-id="${act.id}" ${disabled ? 'disabled' : ''}>
           <span class="ai-icon">${act.icon}</span>
@@ -53,9 +52,8 @@ window.SpecialModeModals = {
               ${act.isRare ? '<span class="rare-gold-tag">🌟 PELUANG EMAS</span>' : ''}
             </span>
             <span class="ai-desc">
-              <span class="cat-badge" style="background:${risk.badge.bg};color:${risk.badge.color};border:1px solid ${risk.badge.border};margin-right:4px;">${risk.badge.text} • ${risk.successPct}%</span>
-              ${cd > 0 ? `<span class="cat-badge" style="background:#f1f5f9;color:#475569;">⏳ Bertenang (${cd} thn)</span> ` : ''}
-              <br/>${Utils.escapeHtml(act.desc)}
+              ${cd > 0 ? `<span class="cat-badge" style="background:#f1f5f9;color:#475569;">⏳ Bertenang (${cd} thn)</span><br/>` : ''}
+              ${Utils.escapeHtml(act.desc)}
             </span>
           </span>
           <span class="ai-right">

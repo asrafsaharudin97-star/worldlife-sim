@@ -5,25 +5,143 @@
 
 window.CareersData = {
   INDUSTRIES: [
-    { id: 'ALL',         label: 'Semua',         icon: '✨' },
-    { id: 'tech',        label: 'Teknologi & Cip', icon: '💻' },
-    { id: 'engineering', label: 'Kejuruteraan',  icon: '⚙️' },
-    { id: 'medical',     label: 'Perubatan',     icon: '🩺' },
-    { id: 'finance',     label: 'Kewangan',      icon: '📊' },
-    { id: 'law_gov',     label: 'Undang & Kerajaan', icon: '⚖️' },
-    { id: 'creative',    label: 'Kreatif & Media', icon: '🎬' },
-    { id: 'aviation',    label: 'Penerbangan & Laut', icon: '✈️' },
-    { id: 'academia',    label: 'Sains & Akademia', icon: '🔬' },
-    { id: 'hospitality', label: 'Kulinari & Hotel', icon: '👨‍🍳' },
-    { id: 'trades',      label: 'Kemahiran',     icon: '🔧' },
-    { id: 'sports',      label: 'Sukan & Sihat', icon: '🏅' },
-    { id: 'rare',        label: 'Nadir & Unik',  icon: '🌟' }
+    { id: 'ALL',          label: 'Semua',         icon: '✨' },
+    { id: 'unskilled',    label: 'Tak Mahir',     icon: '🧹' },
+    { id: 'semi_skilled', label: 'Separa Mahir',  icon: '🔧' },
+    { id: 'tech',         label: 'Teknologi & Cip', icon: '💻' },
+    { id: 'engineering',  label: 'Kejuruteraan',  icon: '⚙️' },
+    { id: 'medical',      label: 'Perubatan',     icon: '🩺' },
+    { id: 'finance',      label: 'Kewangan',      icon: '📊' },
+    { id: 'law_gov',      label: 'Undang & Kerajaan', icon: '⚖️' },
+    { id: 'creative',     label: 'Kreatif & Media', icon: '🎬' },
+    { id: 'aviation',     label: 'Penerbangan & Laut', icon: '✈️' },
+    { id: 'academia',     label: 'Sains & Akademia', icon: '🔬' },
+    { id: 'hospitality',  label: 'Kulinari & Hotel', icon: '👨‍🍳' },
+    { id: 'trades',       label: 'Kemahiran',     icon: '🛠️' },
+    { id: 'sports',       label: 'Sukan & Sihat', icon: '🏅' },
+    { id: 'rare',         label: 'Nadir & Unik',  icon: '🌟' }
   ],
 
   // --------------------------------------------------------------------------
   // 80 KERJAYA DUNIA SEBENAR (TIADA PLACEHOLDER — LENGKAP DENGAN TANGGA PANGKAT)
   // --------------------------------------------------------------------------
   CAREERS: [
+    // === 0A. KERJA TAK MAHIR (8 Kerjaya — Tiada Kelayakan Khas / SPM Sahaja) ===
+    {
+      id: 'car_cleaner_general', title: 'Pekerja Am & Pembersihan', industry: 'unskilled', icon: '🧹',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: [],
+      baseSalary: 14500, stressLevel: 38, isRare: false,
+      promotionLadder: ['Pekerja Am', 'Pekerja Pembersihan Kanan', 'Ketua Pasukan Kebersihan', 'Penyelia Fasiliti', 'Pengurus Kontrak Pembersihan'],
+      desc: 'Menjaga kebersihan pejabat, pusat beli-belah dan kawasan awam dengan disiplin tinggi.'
+    },
+    {
+      id: 'car_food_rider', title: 'Penghantar Makanan (Rider)', industry: 'unskilled', icon: '🛵',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_commercial_driver'],
+      baseSalary: 16500, stressLevel: 48, isRare: false,
+      promotionLadder: ['Rider Separuh Masa', 'Rider Sepenuh Masa', 'Rider Ekspres VIP', 'Ketua Kapten Zon', 'Penyelia Operasi Penghantaran'],
+      desc: 'Menghantar pesanan makanan dan bungkusan pantas kepada pelanggan merentasi bandar.'
+    },
+    {
+      id: 'car_fastfood_crew', title: 'Kru Restoran Makanan Segera', industry: 'unskilled', icon: '🍔',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_barista_culinary'],
+      baseSalary: 15000, stressLevel: 46, isRare: false,
+      promotionLadder: ['Kru Dapur & Kaunter', 'Kru Kanan', 'Ketua Syif', 'Penolong Pengurus Cawangan', 'Pengurus Restoran'],
+      desc: 'Menyediakan hidangan pantas, melayan pelanggan mesra dan menjaga mutu kebersihan restoran.'
+    },
+    {
+      id: 'car_cashier_mart', title: 'Juruwang (Cashier) Pasar Raya', industry: 'unskilled', icon: '🧾',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: [],
+      baseSalary: 15500, stressLevel: 40, isRare: false,
+      promotionLadder: ['Juruwang Pelatih', 'Juruwang', 'Ketua Juruwang', 'Penyelia Kaunter Bayaran', 'Penolong Pengurus Pasar Raya'],
+      desc: 'Mengendalikan transaksi bayaran tunai dan digital dengan pantas serta tepat di pasar raya.'
+    },
+    {
+      id: 'car_warehouse_packer', title: 'Pekerja Gudang & Pembungkusan', industry: 'unskilled', icon: '📦',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_sho_safety'],
+      baseSalary: 16000, stressLevel: 44, isRare: false,
+      promotionLadder: ['Pekerja Pembungkusan', 'Pekerja Gudang', 'Operator Forklift', 'Penyelia Gudang', 'Pengurus Stor & Inventori'],
+      desc: 'Menyusun stok, membungkus pesanan e-dagang dan memastikan penghantaran gudang lancar.'
+    },
+    {
+      id: 'car_security_guard', title: 'Pengawal Keselamatan', industry: 'unskilled', icon: '🛡️',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_sho_safety'],
+      baseSalary: 16000, stressLevel: 42, isRare: false,
+      promotionLadder: ['Pengawal Keselamatan', 'Pengawal Kanan', 'Ketua Pos Kawalan', 'Penyelia Keselamatan', 'Pengurus Operasi Keselamatan'],
+      desc: 'Mengawal keselamatan bangunan, kondominium dan premis perniagaan siang serta malam.'
+    },
+    {
+      id: 'car_retail_helper', title: 'Pembantu Kedai Runcit', industry: 'unskilled', icon: '🏪',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: [],
+      baseSalary: 15000, stressLevel: 36, isRare: false,
+      promotionLadder: ['Pembantu Kedai', 'Pembantu Jualan Kanan', 'Penyelia Kedai', 'Pengurus Cawangan', 'Pengurus Wilayah Runcit'],
+      desc: 'Menyusun rak barangan, menyemak stok harian dan membantu pelanggan mencari keperluan.'
+    },
+    {
+      id: 'car_construction_labor', title: 'Buruh Binaan Am', industry: 'unskilled', icon: '🧱',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_sho_safety'],
+      baseSalary: 17500, stressLevel: 54, isRare: false,
+      promotionLadder: ['Buruh Binaan Am', 'Pekerja Tapak Kanan', 'Kepala Tapak (Mandor)', 'Penyelia Tapak Bina', 'Kontraktor Binaan Kecil'],
+      desc: 'Membantu kerja pembinaan asas, bancuhan konkrit dan penyelenggaraan tapak projek.'
+    },
+
+    // === 0B. KERJA SEPARA MAHIR (8 Kerjaya — SPM / Sijil Kemahiran / Pengalaman) ===
+    {
+      id: 'car_factory_operator', title: 'Operator Pengeluaran Kilang', industry: 'semi_skilled', icon: '🏭',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_machine_maintenance', 'cert_sho_safety'],
+      baseSalary: 20500, stressLevel: 48, isRare: false,
+      promotionLadder: ['Operator Pengeluaran', 'Operator Kanan', 'Ketua Barisan (Line Leader)', 'Penyelia Pengeluaran', 'Penolong Pengurus Kilang'],
+      desc: 'Mengendalikan mesin barisan pengeluaran elektronik, makanan atau automotif mengikut piawaian kualiti.'
+    },
+    {
+      id: 'car_ehailing_lorry', title: 'Pemandu E-Hailing / Lori', industry: 'semi_skilled', icon: '🚐',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_commercial_driver'],
+      baseSalary: 22500, stressLevel: 50, isRare: false,
+      promotionLadder: ['Pemandu E-Hailing', 'Pemandu Van & Lori 3 Tan', 'Pemandu Komersial Kanan', 'Penyelia Logistik', 'Pengusaha Armada Pengangkutan'],
+      desc: 'Membawa penumpang e-hailing atau menghantar muatan barang niaga merentasi negeri.'
+    },
+    {
+      id: 'car_car_moto_mechanic', title: 'Mekanik Kereta & Motosikal', industry: 'semi_skilled', icon: '🔧',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_machine_maintenance'],
+      baseSalary: 23000, stressLevel: 46, isRare: false,
+      promotionLadder: ['Pembantu Bengkel', 'Mekanik Motosikal & Kereta', 'Mekanik Kanan', 'Ketua Foreman Bengkel', 'Pemilik Bengkel Automotif'],
+      desc: 'Menservis enjin, menukar tayar, membaiki brek dan menyelesaikan kerosakan kenderaan harian.'
+    },
+    {
+      id: 'car_aircond_elec_tech', title: 'Juruteknik Penyaman Udara & Elektrik', industry: 'semi_skilled', icon: '❄️',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_wireman'],
+      baseSalary: 24500, stressLevel: 46, isRare: false,
+      promotionLadder: ['Pembantu Juruteknik', 'Juruteknik Aircond & Elektrik', 'Juruteknik Kanan', 'Penyelia Penyelenggaraan', 'Kontraktor Servis Aircond'],
+      desc: 'Memasang, mencuci dan membaiki unit penyaman udara serta pendawaian elektrik rumah dan pejabat.'
+    },
+    {
+      id: 'car_barista_kitchen', title: 'Barista & Pembantu Dapur', industry: 'semi_skilled', icon: '☕',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_barista_culinary'],
+      baseSalary: 20000, stressLevel: 44, isRare: false,
+      promotionLadder: ['Pembantu Dapur & Kafe', 'Barista', 'Ketua Barista / Tukang Masak', 'Penyelia Kafe', 'Pengurus Kafe & Restoran'],
+      desc: 'Membancuh kopi artisan dan membantu penyediaan bahan masakan segar di kafe moden.'
+    },
+    {
+      id: 'car_barber', title: 'Tukang Gunting Rambut', industry: 'semi_skilled', icon: '💈',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: [],
+      baseSalary: 21500, stressLevel: 34, isRare: false,
+      promotionLadder: ['Perantis Gunting', 'Tukang Gunting Rambut', 'Barber Kanan & Penggaya', 'Ketua Barber', 'Pemilik Barbershop'],
+      desc: 'Menggayakan potongan rambut moden dan klasik yang kemas untuk pelanggan tetap.'
+    },
+    {
+      id: 'car_office_clerk', title: 'Kerani Pejabat & Pentadbiran', industry: 'semi_skilled', icon: '🗂️',
+      minEducation: 'high_school', requiredFields: 'any', preferredCerts: [],
+      baseSalary: 22000, stressLevel: 38, isRare: false,
+      promotionLadder: ['Kerani Am', 'Kerani Pentadbiran & Akaun', 'Kerani Kanan', 'Eksekutif Pentadbiran', 'Pengurus Pejabat'],
+      desc: 'Mengurus rekod fail, invois, jadual mesyuarat dan urusan pentadbiran harian syarikat.'
+    },
+    {
+      id: 'car_sales_promoter', title: 'Jurujual & Promoter', industry: 'semi_skilled', icon: '🛍️',
+      minEducation: 'none', requiredFields: 'any', preferredCerts: ['cert_digital_marketing'],
+      baseSalary: 21000, stressLevel: 44, isRare: false,
+      promotionLadder: ['Promoter Produk', 'Jurujual Runcit', 'Jurujual Kanan (Komisen)', 'Penyelia Jualan', 'Pengurus Jualan Cawangan'],
+      desc: 'Memperkenalkan produk kepada pelanggan, mencapai sasaran jualan dan meraih bonus komisen.'
+    },
+
     // === 1. TEKNOLOGI & SEMIKONDUKTOR (9 Kerjaya) ===
     {
       id: 'car_swe', title: 'Jurutera Perisian (Software Engineer)', industry: 'tech', icon: '💻',
