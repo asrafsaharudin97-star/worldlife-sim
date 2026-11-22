@@ -324,7 +324,7 @@ window.ActivitiesDeck = {
       const added = this._spawnActivityNpc(s, eff.addFriend, false);
       if (added) extraLog = ` 🤝 Kenalan baru ditambah: ${added.name} (${added.origin})!`;
     } else if (eff.addRomanticOrFriend) {
-      const canRomance = !s.partnerId && s.age >= (s.belief === 'islam' ? 18 : 16) && Utils.chance(0.45);
+      const canRomance = !s.partnerId && s.age >= 16 && Utils.chance(0.45);
       const added = this._spawnActivityNpc(s, 'Kenalan Kembara', canRomance);
       if (added) {
         extraLog = canRomance
@@ -339,29 +339,26 @@ window.ActivitiesDeck = {
     if (!window.Relationships) return null;
     Relationships.ensureRelationshipFields(s);
     const c = Utils.getCountry(s.countryId);
-    const muslim = Relationships.isMuslim(s);
 
     if (asPartner && !s.partnerId) {
       const targetGender = s.gender === 'male' ? 'female' : 'male';
       const heritage = Utils.pick(c.heritages).id;
       const name = Utils.generateName(s.countryId, targetGender, heritage);
-      const belief = muslim ? 'islam' : (window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(s.countryId, heritage) : 'unassigned');
       const age = Utils.clamp(s.age + Utils.randInt(-3, 4), 18, 75);
       const job = Utils.pick(c.jobs).title;
       const partner = {
         id: 'rel_partner_' + Date.now() + '_' + Utils.randInt(10, 99),
         name,
-        role: muslim ? 'Sesi Date' : 'Pasangan Kekasih',
+        role: 'Sesi Date',
         category: 'partner',
-        stage: muslim ? 'taaruf' : 'dating',
+        stage: 'dating',
         origin: originLabel,
         gender: targetGender,
         age,
         countryId: s.countryId,
         closeness: Utils.randInt(64, 82),
         trust: Utils.randInt(64, 84),
-        compatibility: Relationships.computeCompatibility(s, belief),
-        belief,
+        compatibility: Utils.randInt(58, 95),
         alive: true,
         job
       };
@@ -376,7 +373,6 @@ window.ActivitiesDeck = {
     const gender = Utils.chance(0.5) ? 'male' : 'female';
     const heritage = Utils.pick(c.heritages).id;
     const name = Utils.generateName(s.countryId, gender, heritage);
-    const belief = window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(s.countryId, heritage) : 'unassigned';
     const age = Utils.clamp(s.age + Utils.randInt(-4, 5), 7, 82);
     const job = age < 18 ? 'Pelajar' : Utils.pick(c.jobs).title;
     const friend = {
@@ -390,8 +386,7 @@ window.ActivitiesDeck = {
       countryId: s.countryId,
       closeness: Utils.randInt(55, 78),
       trust: Utils.randInt(55, 78),
-      compatibility: Relationships.computeCompatibility(s, belief),
-      belief,
+      compatibility: Utils.randInt(55, 92),
       alive: true,
       job
     };

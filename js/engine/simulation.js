@@ -93,23 +93,15 @@ window.Sim = {
             'warning'
           );
           if (rel.isFormerPlayerParent && rel.savedEstateNetWorth > 0) {
-            const syariahParent = window.LegalInheritanceEngine
-              && LegalInheritanceEngine.isSyariahApplicable({ religion: rel.savedReligion, countryId: rel.savedCountryId || s.countryId });
             const kidsN = Math.max(1, rel.savedKidsCount || 1);
-            let frac = 1 / kidsN;
-            if (syariahParent) {
-              if (s.isAdopted) frac = 0.08; // Hibah Anak Angkat
-              else frac = (rel.savedHasSpouse ? 0.875 : 1.0) / kidsN;
-            } else {
-              const netUsd = Utils.localToUsd(rel.savedEstateNetWorth, rel.savedCountryId || s.countryId);
-              const taxR = window.LegalInheritanceEngine ? LegalInheritanceEngine.getCountryEstateTaxRate(rel.savedCountryId || s.countryId, netUsd) : 0;
-              frac = ((1 - taxR) * (rel.savedHasSpouse ? 0.5 : 1.0)) / kidsN;
-            }
+            const netUsd = Utils.localToUsd(rel.savedEstateNetWorth, rel.savedCountryId || s.countryId);
+            const taxR = window.LegalInheritanceEngine ? LegalInheritanceEngine.getCountryEstateTaxRate(rel.savedCountryId || s.countryId, netUsd) : 0;
+            const frac = ((1 - taxR) * (rel.savedHasSpouse ? 0.5 : 1.0)) / kidsN;
             const shareLocal = Utils.convertMoney(Math.round(rel.savedEstateNetWorth * frac), rel.savedCountryId || s.countryId, s.countryId);
             if (shareLocal > 0) {
               s.money = Math.round((s.money || 0) + shareLocal);
               GameState.addJournalEntry(
-                `📜 Pewarisan Harta Pusaka (${syariahParent ? (s.isAdopted ? 'Hibah Anak Angkat' : 'Faraid') : 'Undang-Undang Sivil'}): Anda menerima bahagian pusaka sebanyak ${Utils.formatMoney(shareLocal, s.countryId)} daripada arwah ${rel.name}.`,
+                `📜 Pewarisan Harta Pusaka (Undang-Undang Sivil & Wasiat): Anda menerima bahagian pusaka sebanyak ${Utils.formatMoney(shareLocal, s.countryId)} daripada mendiang ${rel.name}.`,
                 'milestone'
               );
             }
@@ -367,19 +359,6 @@ window.Sim = {
 
     if (s.stats.health <= 30) {
       GameState.recordCrisis('illness');
-    }
-
-    // Pemulihan emosi hasil pegangan hidup / ketenangan batin (dilangkau jika sedang berkabung kematian tahun ini)
-    if (totalNpcDeathHappyPenalty === 0 && s.age >= 15 && s.belief && s.belief !== 'unassigned' && s.devotion >= 55 && s.stats.happiness < 55) {
-      const b = GameState.getBeliefObj(s.belief);
-      const recovery = Utils.randInt(2, 5);
-      s.stats.happiness = Utils.clamp(s.stats.happiness + recovery);
-      if (Utils.chance(0.35)) {
-        GameState.addJournalEntry(
-          `${b.icon} Pegangan ${b.name} membantu menenangkan jiwa anda di tengah tekanan hidup (+${recovery}% Gembira).`,
-          'spiritual'
-        );
-      }
     }
 
     // 5B. Terapkan kesan emosi/kegembiraan & stres kematian NPC SELEPAS semua kemas kini tahunan supaya tidak ditimpa/dipulihkan!
@@ -889,7 +868,7 @@ window.Sim = {
       if (spCrisis) return spCrisis;
     }
 
-    // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Jodoh / Ta'aruf
+    // 0B. Red Flag / Jodoh Sejati Terbongkar daripada Aplikasi Sesi Date
     if (window.SocialMedia) {
       const rfEv = SocialMedia.checkPartnerHiddenTraitEvent(s);
       if (rfEv) return rfEv;
@@ -932,31 +911,6 @@ window.Sim = {
             text: def.textFn ? def.textFn(s, flagData) : def.text,
             choices: def.choices
           };
-        }
-      }
-    }
-
-    // 2. PERSIMPANGAN ROHANI & KEPERCAYAAN (KETAT: hanya umur >= 15, dengan tempoh bertenang)
-    if (s.age >= 15 && window.LIFE_EVENTS && window.LIFE_EVENTS.buildSpiritualCrossroadsEvent) {
-      const sinceLast = s.age - (s.lastSpiritualAge ?? -99);
-      const cooldownOk = sinceLast >= 7;
-      if (cooldownOk) {
-        const recentCrisis = (s.recentCrises || []).find(cr => (s.age - cr.age) <= 2);
-        const isOldAgeReflection = s.age >= 60 && sinceLast >= 10;
-        let spiritualProb = 0.09; // peluang asas rawak sepanjang hidup (umur 15+)
-        let crisisType = null;
-
-        if (recentCrisis) {
-          spiritualProb = 0.32;
-          crisisType = recentCrisis.type;
-        } else if (isOldAgeReflection) {
-          spiritualProb = 0.24;
-          crisisType = 'old_age';
-        }
-
-        if (Utils.chance(spiritualProb)) {
-          s.lastSpiritualAge = s.age;
-          return window.LIFE_EVENTS.buildSpiritualCrossroadsEvent(s, c, crisisType);
         }
       }
     }
@@ -1782,13 +1736,8 @@ window.Sim = {
       spouse.countryId = fromC.id;
       spouse.country = fromC.id;
       if (window.LegalInheritanceEngine && LegalInheritanceEngine.executeDivorce) {
-        const syariah = LegalInheritanceEngine.isSyariahApplicable(s);
-        const divPath = syariah
-          ? (s.gender === 'male' ? 'talak1' : 'fasakh')
-          : 'civil';
         LegalInheritanceEngine.executeDivorce(s, spouse.id, {
-          path: divPath,
-          settlementMode: syariah ? 'sulh' : 'mediasi'
+          settlementMode: 'mutual'
         });
       } else {
         s.partnerId = null;
@@ -2425,32 +2374,29 @@ window.Sim = {
     }
   },
 
-  doSpiritualPractice() {
+  doCommunityCharity() {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    if (s.yearlyActions.spiritualPractice) {
-      return { ok: false, msg: 'Anda sudah meluangkan masa untuk amalan jiwa & kebajikan tahun ini.' };
+    if (s.yearlyActions.communityCharity) {
+      return { ok: false, msg: 'Anda sudah menyertai aktiviti kebajikan komuniti tahun ini.' };
     }
-    const b = GameState.getBeliefObj(s.belief);
     const charityCost = s.age >= 18 ? Utils.usdToLocal(35, s.countryId) : 0;
     if (s.age >= 18 && s.money < charityCost) {
-      // Boleh lakukan tanpa derma tunai jika poket sempit
-      s.yearlyActions.spiritualPractice = true;
-      s.devotion = Utils.clamp((s.devotion || 40) + Utils.randInt(6, 12), 0, 100);
+      s.yearlyActions.communityCharity = true;
       GameState.adjustStats({ happiness: 7, health: 3 });
-      GameState.addJournalEntry(`${b.icon} ${b.practiceTitle}: Anda menenangkan fikiran dan mengukuhkan ketahanan jiwa.`, 'spiritual');
+      GameState.addJournalEntry('🤝 Sukarelawan Komuniti: Anda meluangkan masa membantu jiran dan komuniti setempat.', 'mindful');
       GameState.save();
-      return { ok: true, msg: `Jiwa lebih tenang (${b.name})!` };
+      return { ok: true, msg: 'Aktiviti sukarelawan selesai! Hati terasa lebih tenang.' };
     }
     if (charityCost > 0) s.money -= charityCost;
-    s.yearlyActions.spiritualPractice = true;
-    s.devotion = Utils.clamp((s.devotion || 40) + Utils.randInt(8, 15), 0, 100);
-    GameState.adjustStats({ happiness: 10, health: 3, smarts: b.isReligious ? 1 : 3 });
+    s.yearlyActions.communityCharity = true;
+    GameState.adjustStats({ happiness: 10, health: 3, smarts: 2 });
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 8, stress: -5 });
     GameState.addJournalEntry(
-      `${b.icon} ${b.practiceTitle}${charityCost > 0 ? ` (${b.charityLabel}: ${Utils.formatMoney(charityCost, s.countryId)})` : ''}: Hati terasa lapang dan ketahanan emosi anda semakin teguh.`,
-      'spiritual'
+      `🤝 Sumbangan & Sukarelawan Komuniti${charityCost > 0 ? ` (Derma: ${Utils.formatMoney(charityCost, s.countryId)})` : ''}: Hati terasa lapang setelah membantu golongan memerlukan.`,
+      'mindful'
     );
     GameState.save();
-    return { ok: true, msg: `${b.practiceTitle} selesai! Ketahanan jiwa meningkat.` };
+    return { ok: true, msg: 'Aktiviti kebajikan komuniti selesai!' };
   }
 };

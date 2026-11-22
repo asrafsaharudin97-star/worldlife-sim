@@ -90,25 +90,7 @@ window.Utils = {
     return this.pick(gender === 'female' ? pool.female : pool.male);
   },
 
-  formatIslamicName(givenName, gender, fatherFullName, { isAdopted = false, isOutOfWedlock = false } = {}) {
-    const connector = gender === 'female' ? 'binti' : 'bin';
-    const cleanGiven = this.extractGivenName(givenName) || 'Ahmad';
-    if (isAdopted || isOutOfWedlock || !fatherFullName) {
-      return `${cleanGiven} ${connector} Abdullah`;
-    }
-    const fatherGiven = this.extractGivenName(fatherFullName) || 'Abdullah';
-    return `${cleanGiven} ${connector} ${fatherGiven}`;
-  },
-
-  generateChildName({ countryId, gender, heritageId = null, belief = 'unassigned', fatherFullName = null, isAdopted = false, isOutOfWedlock = false, customGivenName = null }) {
-    if (belief === 'islam') {
-      const trimmedCustom = customGivenName && customGivenName.trim();
-      if (trimmedCustom && /\s+(?:bin|binti|binte)\s+/i.test(trimmedCustom)) {
-        return trimmedCustom;
-      }
-      const given = trimmedCustom || this.generateGivenName(countryId, gender, heritageId);
-      return this.formatIslamicName(given, gender, fatherFullName, { isAdopted, isOutOfWedlock });
-    }
+  generateChildName({ countryId, gender, heritageId = null, customGivenName = null }) {
     if (customGivenName && customGivenName.trim()) {
       return customGivenName.trim();
     }

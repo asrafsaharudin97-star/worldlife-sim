@@ -6,8 +6,7 @@ window.App = {
   creator: {
     countryId: 'MY',
     gender: 'male',
-    heritageId: 'malay',
-    religion: 'Islam'
+    heritageId: 'malay'
   },
 
   init() {
@@ -152,16 +151,9 @@ window.App = {
 
     document.getElementById('heritage-select').addEventListener('change', (e) => {
       this.creator.heritageId = e.target.value;
-      this._syncCreatorReligion();
       this._refreshRandomPlaceholder();
     });
 
-    const relSel = document.getElementById('religion-select');
-    if (relSel) {
-      relSel.addEventListener('change', (e) => {
-        this.creator.religion = e.target.value;
-      });
-    }
 
     document.getElementById('btn-random-name').addEventListener('click', () => {
       const name = Utils.generateName(this.creator.countryId, this.creator.gender, this.creator.heritageId);
@@ -174,7 +166,6 @@ window.App = {
         countryId: this.creator.countryId,
         gender: this.creator.gender,
         heritageId: this.creator.heritageId,
-        religion: this.creator.religion,
         customName
       });
       this.showGameScreen();
@@ -264,18 +255,9 @@ window.App = {
       </div>
     `;
 
-    this._syncCreatorReligion();
     this._refreshRandomPlaceholder();
   },
 
-  _syncCreatorReligion() {
-    const picked = (window.LegalInheritanceEngine && LegalInheritanceEngine.pickReligionByDemographics)
-      ? LegalInheritanceEngine.pickReligionByDemographics(this.creator.countryId, this.creator.heritageId)
-      : 'Islam';
-    this.creator.religion = picked;
-    const relSel = document.getElementById('religion-select');
-    if (relSel) relSel.value = picked;
-  },
 
   _refreshRandomPlaceholder() {
     const sample = Utils.generateName(this.creator.countryId, this.creator.gender, this.creator.heritageId);
@@ -405,16 +387,9 @@ window.App = {
     document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}`;
 
     const genPrefix = (s.generation && s.generation > 1) ? `Gen ${s.generation} • ` : '';
-    const relMeta = (window.LegalInheritanceEngine && s.religion)
-      ? LegalInheritanceEngine.getReligionMeta(s.religion)
-      : null;
-    const beliefObj = GameState.getBeliefObj(s.belief);
-    const beliefSnippet = relMeta
-      ? ` • ${relMeta.icon} ${relMeta.label}`
-      : ` • ${beliefObj.icon} ${beliefObj.name}`;
     const cultureTag = s.countryId === s.birthCountryId
-      ? `${genPrefix}${birthC.flag} ${s.heritageLabel}${beliefSnippet}`
-      : `${genPrefix}Lahir ${birthC.flag} → ${c.flag} ${c.name}${beliefSnippet}`;
+      ? `${genPrefix}${birthC.flag} ${s.heritageLabel}`
+      : `${genPrefix}Lahir ${birthC.flag} → ${c.flag} ${c.name}`;
     document.getElementById('char-culture-tag').textContent = cultureTag;
 
     const moneyEl = document.getElementById('char-money');

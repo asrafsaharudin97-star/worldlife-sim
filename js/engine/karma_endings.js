@@ -81,7 +81,7 @@ window.KarmaEndings = {
       publicMemory: 'Pasportnya penuh cop kenangan daripada sahabat dan keluarga merentas benua.'
     },
     {
-      id: 'spiritual_seeker',
+      id: 'mindful_seeker',
       title: 'Pencari Makna & Jiwa Tenang',
       icon: '🌌',
       desc: 'Menempuh perjalanan rohani yang mendalam dan kekal tabah menghadapi ujian kehidupan.',
@@ -125,14 +125,7 @@ window.KarmaEndings = {
     }
     if (deltas.notoriety) a.notoriety = Utils.clamp(a.notoriety + deltas.notoriety, 0, 100);
     if (deltas.stress) {
-      let d = deltas.stress;
-      // Ketahanan jiwa/pegangan membantu mengurangkan lonjakan stres
-      if (d > 0 && s.belief && s.belief !== 'unassigned') {
-        const b = GameState.getBeliefObj(s.belief);
-        const factor = Math.min(0.25, (b.resilienceBonus || 0.1) * ((s.devotion || 40) / 100));
-        d = Math.max(1, Math.round(d * (1 - factor)));
-      }
-      a.stress = Utils.clamp(a.stress + d, 0, 100);
+      a.stress = Utils.clamp(a.stress + deltas.stress, 0, 100);
     }
   },
 
@@ -372,7 +365,7 @@ window.KarmaEndings = {
                 KarmaEndings.adjustAlignment({ karma: 22, stress: -8 });
                 GameState.adjustStats({ happiness: 18 });
                 KarmaEndings.addHighlight('📜', 'Menunaikan amanah wasiat rahsia keluarga secara adil');
-                return { outcome: `Waris yang terpisah itu menangis terharu! Anda tetap menerima bahagian halal ${Utils.formatMoney(share, st.countryId)} bersama keberkatan jiwa.` };
+                return { outcome: `Waris yang terpisah itu menangis terharu! Anda tetap menerima bahagian sah ${Utils.formatMoney(share, st.countryId)} bersama keberkatan jiwa.` };
               }
             },
             {
@@ -642,7 +635,7 @@ window.KarmaEndings = {
           {
             label: 'Bersabar, buktikan dengan tindakan & maafkan',
             hint: 'Karma ++, ganjaran tertunda yang besar',
-            journalType: 'spiritual',
+            journalType: 'mindful',
             customAction: (st) => {
               KarmaEndings.adjustAlignment({ karma: 14, fame: 6, stress: -5 });
               GameState.adjustStats({ happiness: 8, smarts: 3 });
@@ -671,14 +664,14 @@ window.KarmaEndings = {
         choices: [
           {
             label: 'Laporkan pepijat itu dengan jujur kepada pemilik sistem',
-            hint: 'Karma +++, ganjaran halal & hormat',
+            hint: 'Karma +++, ganjaran sah & hormat',
             journalType: 'milestone',
             customAction: (st) => {
               const bounty = Utils.usdToLocal(Utils.randInt(2000, 6500), st.countryId);
               st.money += bounty;
               KarmaEndings.adjustAlignment({ karma: 18, fame: 5 });
               GameState.adjustStats({ happiness: 14, smarts: 4 });
-              return { outcome: `Pihak syarikat amat kagum dengan kejujuran anda dan menganugerahkan ganjaran bug-bounty halal sebanyak ${Utils.formatMoney(bounty, st.countryId)}!` };
+              return { outcome: `Pihak syarikat amat kagum dengan kejujuran anda dan menganugerahkan ganjaran bug-bounty sah sebanyak ${Utils.formatMoney(bounty, st.countryId)}!` };
             }
           },
           {
@@ -721,7 +714,7 @@ window.KarmaEndings = {
           {
             label: 'Bertaubat, derma besar & perlahankan jalan gelap',
             hint: 'Karma ++, Wang -, Stres --',
-            journalType: 'spiritual',
+            journalType: 'mindful',
             customAction: (st) => {
               const charity = Utils.usdToLocal(1500, st.countryId);
               st.money -= charity;
@@ -769,8 +762,8 @@ window.KarmaEndings = {
       id = 'underworld_outlaw';
     } else if (s.countriesLivedIn.length >= 3 || s.citizenships.length >= 3) {
       id = 'world_nomad';
-    } else if ((s.spiritualHistory && s.spiritualHistory.length >= 2) || (s.devotion >= 82 && s.belief !== 'unassigned')) {
-      id = 'spiritual_seeker';
+    } else if ((a.karma || 0) >= 82 && (a.stress || 0) <= 25) {
+      id = 'mindful_seeker';
     }
 
     const ending = this.ENDINGS_CATALOG.find(e => e.id === id) || this.ENDINGS_CATALOG[this.ENDINGS_CATALOG.length - 1];

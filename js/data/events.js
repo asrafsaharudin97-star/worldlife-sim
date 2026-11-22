@@ -180,7 +180,7 @@ window.GAME_EVENTS = {
       id: 'arr_th',
       icon: '🇹🇭',
       title: 'Selamat Tiba di Thailand!',
-      text: 'Senyuman manis, kuil keemasan dan bau Pad Kra Pao panas menyambut anda di Negara Senyuman!',
+      text: 'Senyuman manis, istana keemasan dan bau Pad Kra Pao panas menyambut anda di Negara Senyuman!',
       choices: [
         {
           label: 'Terus cuba Pad Thai jalanan & Teh Ais Thai',

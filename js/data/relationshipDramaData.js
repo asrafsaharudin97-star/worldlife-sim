@@ -244,22 +244,21 @@ window.RelationshipDramaData = {
   },
 
   buildBrokenEngagementEvent(s, partner) {
-    const muslim = window.Relationships ? Relationships.isMuslim(s) : (s.religion === 'Islam');
     const isColdFeet = Utils.chance(0.42);
     const depositLost = Math.min(Math.max(0, s.money || 0), Math.round(Utils.usdToLocal(950, s.countryId)));
     const reason = partner.unresolvedConflict
       ? 'konflik kecurangan serta salah faham yang tidak pernah diselesaikan'
       : ((partner.trust ?? 60) < 55)
         ? 'kepercayaan yang semakin pudar'
-        : 'pertelingkahan keluarga serta isu hantaran perkahwinan';
+        : 'pertelingkahan keluarga serta isu persiapan perkahwinan';
 
     return {
       id: `broken_engagement_${partner.id}_${s.age}_${Date.now()}`,
       icon: isColdFeet ? '🚨' : '💔',
-      title: isColdFeet ? 'Pasangan Tarik Diri Saat Akhir (Cold Feet)!' : 'Putus Tunang & Batal Nikah!',
+      title: isColdFeet ? 'Pasangan Tarik Diri Saat Akhir (Cold Feet)!' : 'Putus Tunang & Batal Perkahwinan!',
       text: isColdFeet
-        ? `Menjelang tarikh ${muslim ? 'majlis akad nikah' : 'perkahwinan'} yang semakin hampir, ${partner.name} tiba-tiba menghubungi anda dalam keadaan sebak dan membatalkan perkahwinan saat akhir (Cold Feet) akibat ${reason}!\n\nMajlis terpaksa dibatalkan serta-merta dan wang deposit persiapan hangus.`
-        : `Pertunangan anda bersama ${partner.name} tidak dapat diselamatkan lagi akibat ${reason}. Keluarga kedua-dua belah pihak memulangkan cincin tanda dan membatalkan segala persiapan ${muslim ? 'akad nikah' : 'perkahwinan'}.`,
+        ? `Menjelang tarikh majlis perkahwinan yang semakin hampir, ${partner.name} tiba-tiba menghubungi anda dalam keadaan sebak dan membatalkan perkahwinan saat akhir (Cold Feet) akibat ${reason}!\n\nMajlis terpaksa dibatalkan serta-merta dan wang deposit persiapan hangus.`
+        : `Pertunangan anda bersama ${partner.name} tidak dapat diselamatkan lagi akibat ${reason}. Keluarga kedua-dua belah pihak memulangkan cincin tanda dan membatalkan segala persiapan perkahwinan.`,
       choices: [
         {
           label: '💔 Terima Hakikat & Batalkan Tempahan Majlis',
@@ -284,7 +283,7 @@ window.RelationshipDramaData = {
               p.trust = 12;
             }
             const logMsg = isColdFeet
-              ? `🚨 PASANGAN TARIK DIRI SAAT AKHIR (Cold Feet): ${partner.name} membatalkan ${muslim ? 'akad nikah' : 'perkahwinan'} akibat ${reason}. Deposit persiapan ${Utils.formatMoney(depositLost, state.countryId)} hangus (Gembira ${hapHit}, Stres +${stressHit}%).`
+              ? `🚨 PASANGAN TARIK DIRI SAAT AKHIR (Cold Feet): ${partner.name} membatalkan perkahwinan akibat ${reason}. Deposit persiapan ${Utils.formatMoney(depositLost, state.countryId)} hangus (Gembira ${hapHit}, Stres +${stressHit}%).`
               : `💔 PUTUS TUNANG: Ikatan pertunangan dengan ${partner.name} terlerai akibat ${reason}. Deposit majlis ${Utils.formatMoney(depositLost, state.countryId)} hangus tidak dapat dikembalikan (Gembira ${hapHit}, Stres +${stressHit}%).`;
             GameState.addJournalEntry(logMsg, 'warning');
             return { outcome: logMsg, toastType: 'error' };
@@ -424,9 +423,7 @@ window.RelationshipDramaData = {
 
   buildSpouseInitiatedDivorceEvent(s, partner, reason) {
     const isMarried = Boolean(s.married);
-    const courtLabel = (window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic(s))
-      ? 'Mahkamah Syariah'
-      : `Mahkamah Sivil ${Utils.getCountry(s.countryId).name}`;
+    const courtLabel = `Mahkamah Sivil ${Utils.getCountry(s.countryId).name}`;
 
     if (!isMarried) {
       return {
@@ -796,18 +793,18 @@ window.RelationshipDramaData = {
           }
         },
         {
-          label: '🤲 Majlis Ringkas & Doa Keluarga',
+          label: '🕯️ Majlis Peringatan Ringkas Keluarga',
           hint: 'Sederhana • Mengenang pemergian bersama ahli keluarga terdekat (+Karma)',
           customAction: (state) => {
             if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
             return {
-              outcome: `Majlis pengebumian ringkas dan bacaan doa diadakan untuk mengenang pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
+              outcome: `Majlis pengebumian dan peringatan ringkas diadakan untuk mengenang pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
               toastType: 'culture'
             };
           }
         },
         {
-          label: `💝 Sedekah / Amal Jariah Atas Nama Arwah (${Utils.formatMoney(charityCost, s.countryId)})`,
+          label: `💝 Sumbangan Kebajikan Atas Nama Mendiang (${Utils.formatMoney(charityCost, s.countryId)})`,
           hint: 'Sumber & Pahala • Sumbangan kebajikan atas nama si mati (+Karma ++, -Stres)',
           customAction: (state) => {
             if (state.money >= charityCost) state.money -= charityCost;
@@ -852,7 +849,7 @@ window.RelationshipDramaData = {
   },
 
   // --------------------------------------------------------------------------
-  // 6. KONFLIK HARTA KELUARGA & WARIS DINAFIKAN HAK (HIBAH TINGGI / WASIAT)
+  // 6. KONFLIK HARTA KELUARGA & WARIS DINAFIKAN HAK (WASIAT)
   // --------------------------------------------------------------------------
   buildHeirBacklashEvent(s, backlash) {
     if (!backlash || backlash.severity === 'none') return null;
@@ -865,7 +862,7 @@ window.RelationshipDramaData = {
         id: `heir_backlash_severe_${s.age}_${Date.now()}`,
         icon: '💔',
         title: 'Waris Dinafikan Hak / Hubungan Retak',
-        text: `Keluarga anda gempar apabila mengetahui keputusan anda memperuntukkan ${backlash.hibahPct}% harta kepada ${backlash.recipientLabel}, meninggalkan hampir tiada hak (${backlash.faraidLeft}%) untuk waris sah: ${heirNames}.\n\nMereka berasa amat dikhianati, menuntut penjelasan, dan ramai yang mula memutuskan hubungan dengan anda!`,
+        text: `Keluarga anda gempar apabila mengetahui keputusan anda mengubah peruntukan wasiat harta kepada ${backlash.recipientLabel}, meninggalkan bahagian kecil untuk waris: ${heirNames}.\n\nMereka berasa amat dikhianati, menuntut penjelasan, dan ramai yang mula memutuskan hubungan dengan anda!`,
         choices: [
           {
             label: '🪨 Pertahankan Keputusan Muktamad',
@@ -914,8 +911,7 @@ window.RelationshipDramaData = {
                 state.wasiat.civilMode = 'equal';
                 state.wasiat.civilTargetHeirId = null;
               } else {
-                state.wasiat.hibahPct = 20;
-                if (state.wasiat.hibahRecipientType === 'adopted') state.wasiat.hibahAdoptedPct = 20;
+                if (state.legal && state.legal.wasiat) state.legal.wasiat.mode = 'equal';
               }
               for (const h of heirs) {
                 const rel = state.relationships.find(r => r.id === h.id);
@@ -939,7 +935,7 @@ window.RelationshipDramaData = {
       id: `heir_backlash_high_${s.age}_${Date.now()}`,
       icon: '🔥',
       title: 'Konflik Harta Keluarga',
-      text: `Waris sah anda (${heirNames}) bersemuka dengan anda secara tegang selepas mengetahui ${backlash.hibahPct}% harta diperuntukkan sebagai Hibah kepada ${backlash.recipientLabel} (baki Faraid tinggal ${backlash.faraidLeft}%).`,
+      text: `Waris sah anda (${heirNames}) bersemuka dengan anda secara tegang selepas mengetahui perubahan peruntukan wasiat harta anda kepada ${backlash.recipientLabel}.`,
       choices: [
         {
           label: '🪨 Pertahankan Keputusan',
@@ -982,8 +978,7 @@ window.RelationshipDramaData = {
           label: '📜 Ubah Semula Pembahagian (Turunkan ke 20%)',
           hint: 'Redakan konflik keluarga dengan pembahagian lebih seimbang',
           customAction: (state) => {
-            state.wasiat.hibahPct = 20;
-            if (state.wasiat.hibahRecipientType === 'adopted') state.wasiat.hibahAdoptedPct = 20;
+            if (state.legal && state.legal.wasiat) state.legal.wasiat.mode = 'equal';
             for (const h of heirs) {
               const rel = state.relationships.find(r => r.id === h.id);
               if (rel) {
@@ -992,7 +987,7 @@ window.RelationshipDramaData = {
               }
             }
             return {
-              outcome: `Anda melaraskan semula Hibah kepada 20% demi menjaga silaturahim keluarga. ${heirNames} berasa lega dan hubungan kembali tenang.`,
+              outcome: `Anda melaraskan semula wasiat secara sama rata demi menjaga silaturahim keluarga. ${heirNames} berasa lega dan hubungan kembali tenang.`,
               toastType: 'success'
             };
           }

@@ -16,12 +16,11 @@ window.ModeModals = {
   },
 
   // --------------------------------------------------------------------------
-  // 2. HAB LAMAN SOSIAL, KERJAYA VIRAL & APLIKASI JODOH / TA'ARUF HALAL
+  // 2. HAB LAMAN SOSIAL, KERJAYA VIRAL & APLIKASI SESI DATE
   // --------------------------------------------------------------------------
   showSocialHub(activeTab = 'social') {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    const muslim = Relationships.isMuslim(s);
 
     const tabsHtml = `
       <div class="tab-pills">
@@ -108,7 +107,7 @@ window.ModeModals = {
         </div>
       `;
     } else if (activeTab === 'dating') {
-      const minAge = muslim ? 18 : 16;
+      const minAge = 16;
       if (s.age < minAge) {
         body += `<div class="info-banner">Platform ini dibuka pada umur ${minAge} tahun.</div>`;
       } else if (s.partnerId) {
@@ -122,8 +121,6 @@ window.ModeModals = {
           </div>
           <div class="action-list">
             ${pool.map(cand => {
-              const bObj = GameState.getBeliefObj(cand.belief);
-              const relLabel = cand.religion || bObj.name;
               return `
                 <div class="dating-card">
                   <div class="dc-top">
@@ -132,7 +129,7 @@ window.ModeModals = {
                   </div>
                   <div class="dc-meta">
                     💼 ${Utils.escapeHtml(cand.job)} • 💰 ${cand.wealth}<br/>
-                    ${bObj.icon} Agama: <strong>${Utils.escapeHtml(relLabel)}</strong> • 🤝 Keserasian ${cand.compatibility}%
+                    🤝 Keserasian ${cand.compatibility}%
                   </div>
                   <button class="btn-sm primary match-cand-btn" data-uid="${cand.uid}" style="width:100%;margin-top:8px;">
                     💘 Mula Sesi Date
@@ -225,7 +222,6 @@ window.ModeModals = {
     const unlocked = KarmaEndings.getUnlocked();
     const c = Utils.getCountry(s.countryId);
     const birthC = Utils.getCountry(s.birthCountryId);
-    const beliefObj = GameState.getBeliefObj(s.belief);
     const livingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
 
     const highlightsHtml = (s.highlights && s.highlights.length > 0)
@@ -317,10 +313,6 @@ window.ModeModals = {
           <div class="summary-stat">
             <span class="lbl">Populariti Tertinggi</span>
             <span class="val">⭐ ${s.alignment.peakFame || s.alignment.fame}% • ${SocialMedia.formatFollowers(s.socialMedia.followers)} Pengikut</span>
-          </div>
-          <div class="summary-stat">
-            <span class="lbl">Agama</span>
-            <span class="val">${window.LegalInheritanceEngine ? `${LegalInheritanceEngine.getReligionMeta(s.religion).icon} ${LegalInheritanceEngine.getReligionMeta(s.religion).label}` : `${beliefObj.icon} ${beliefObj.name}`}</span>
           </div>
           <div class="summary-stat">
             <span class="lbl">Status Dinasti (Gen ${s.generation || 1})</span>

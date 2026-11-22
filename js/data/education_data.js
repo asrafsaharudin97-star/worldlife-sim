@@ -358,8 +358,8 @@ window.EducationData = {
       desc: 'Diiktiraf seluruh dunia untuk memimpin projek korporat dan teknologi bernilai jutaan.'
     },
     {
-      id: 'cert_islamic_finance',
-      title: 'Sijil Kewangan Islam & Penasihat Syariah (CIFP)',
+      id: 'cert_ethical_finance',
+      title: 'Sijil Kewangan Lestari & ESG (CESGA)',
       icon: '🌙',
       group: 'Perniagaan & Kewangan',
       minEducation: 'bachelor',
@@ -368,7 +368,7 @@ window.EducationData = {
       smartsReq: 58,
       salaryBonusPct: 18,
       interviewBonus: 18,
-      desc: 'Kepakaran perbankan Islam, sukuk dan struktur pelaburan patuh Syariah.'
+      desc: 'Kepakaran perbankan lestari, bon hijau dan struktur pelaburan beretika ESG.'
     },
 
     // === E. PERUBATAN & KESIHATAN (3 Sijil) ===

@@ -434,7 +434,6 @@ window.Modals = {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     const c = Utils.getCountry(s.countryId);
-    const muslim = Relationships.isMuslim(s);
     const living = s.relationships.filter(r => r.alive);
 
     const partnerList = living.filter(r => r.id === s.partnerId);
@@ -456,19 +455,6 @@ window.Modals = {
         </div>
       `;
     }
-    if (window.LegalInheritanceEngine && LegalInheritanceEngine.canRujuk(s)) {
-      const idah = s.idahState;
-      html += `
-        <button class="action-item" id="btn-rujuk-spouse" style="background:#f0fdf4;border-color:#86efac;">
-          <span class="ai-icon">💍</span>
-          <span class="ai-content">
-            <span class="ai-title">Rujuk Semula bersama ${Utils.escapeHtml(idah.exSpouseName)}</span>
-            <span class="ai-desc">Tempoh Idah aktif (${idah.yearsLeft} tahun berbaki • Talak ${idah.talakCount}) — peluang sekali untuk kembali sah sebagai suami isteri</span>
-          </span>
-          <span class="ai-right" style="color:#15803d;">Rujuk</span>
-        </button>
-      `;
-    }
     if (s.age >= 7) {
       const friendSrc = s.age < 18 || s.education.stage === 'university' ? 'Sekolah / Kampus' : (s.job ? 'Tempat Kerja / Komuniti' : 'Komuniti');
       html += `
@@ -483,7 +469,7 @@ window.Modals = {
       `;
     }
 
-    const minLoveAge = muslim ? 18 : 16;
+    const minLoveAge = 16;
     if (!s.partnerId && s.age >= minLoveAge) {
       html += `
         <button class="action-item" id="btn-find-love">
@@ -503,7 +489,7 @@ window.Modals = {
           <span class="ai-icon">🏡</span>
           <span class="ai-content">
             <span class="ai-title">Ambil Anak Angkat</span>
-            <span class="ai-desc">${muslim ? 'Beri kasih sayang kepada anak angkat (berbinkan/berbintikan Abdullah)' : 'Beri rumah yang penyayang kepada anak angkat baru'}</span>
+            <span class="ai-desc">Beri rumah yang penyayang kepada anak angkat baru</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(adoptCost, s.countryId)}</span>
         </button>
@@ -515,7 +501,7 @@ window.Modals = {
           <span class="ai-icon">📜</span>
           <span class="ai-content">
             <span class="ai-title">Urus Wasiat &amp; Harta Pusaka</span>
-            <span class="ai-desc">${muslim ? 'Tetapkan Wasiat Islam (maks. 1/3 harta bersih) & semak Faraid' : `Tetapkan Wasiat Sivil ${c.name} (Sama Rata / 1 Waris / Amal)`}</span>
+            <span class="ai-desc">Tetapkan Wasiat Sivil ${c.name} (Sama Rata / 1 Waris / Amal)</span>
           </span>
           <span class="ai-right">Wasiat</span>
         </button>
@@ -530,8 +516,7 @@ window.Modals = {
       if (isChildItem && window.Relationships && Relationships.ensureChildEducationFields) {
         Relationships.ensureChildEducationFields(s, r);
       }
-      const bObj = GameState.getBeliefObj(r.belief);
-      const distLabel = r.countryId !== s.countryId ? ` • ${rc.flag} Luar Negara` : '';
+            const distLabel = r.countryId !== s.countryId ? ` • ${rc.flag} Luar Negara` : '';
       const adoptTag = r.isAdopted ? ' • Anak Angkat' : '';
       const childSchoolTag = (isChildItem && r.schoolLabel)
         ? ` • 🏫 ${Utils.escapeHtml(r.schoolLabel)}${r.yearlySchoolFee > 0 ? ` (${Utils.formatMoney(r.yearlySchoolFee, s.countryId)}/thn)` : ''}`
@@ -545,7 +530,7 @@ window.Modals = {
           <span class="ai-icon">${icon}</span>
           <span class="ai-content">
             <span class="ai-title">${Utils.escapeHtml(r.name)} <small style="font-weight:600;color:#64748b;">(${r.role}, ${r.age})</small></span>
-            <span class="ai-desc">${bObj.icon} ${bObj.name} • Kepercayaan ${r.trust ?? 65}%${childSchoolTag}${adoptTag}${distLabel}</span>
+            <span class="ai-desc">Kepercayaan ${r.trust ?? 65}%${childSchoolTag}${adoptTag}${distLabel}</span>
             <div class="rel-meter">
               <div class="rel-meter-fill" style="width:${r.closeness}%;background:${Utils.getStatColor(r.closeness)}"></div>
             </div>
@@ -571,7 +556,7 @@ window.Modals = {
     this.open({
       icon: '❤️',
       title: 'Hubungan & Sosial',
-      subtitle: muslim ? 'Keluarga, Rakan & Laluan Pernikahan Sah' : 'Keluarga, Rakan, Cinta & Perkahwinan',
+      subtitle: 'Keluarga, Rakan, Cinta & Perkahwinan',
       bodyHtml: html
     });
 
@@ -650,14 +635,11 @@ window.Modals = {
       Relationships.ensureChildEducationFields(s, rel);
     }
     const isMinorChild = isChild && rel.age < 18;
-    const muslim = Relationships.isMuslim(s);
-    const interfaithBlocked = isPartner && muslim && (rel.belief !== 'islam' || rel.gender === s.gender);
     const longDist = rel.countryId !== s.countryId;
     const rc = Utils.getCountry(rel.countryId);
-    const bObj = GameState.getBeliefObj(rel.belief);
 
     const stageLabel = isPartner
-      ? (s.married ? 'Berkahwin' : rel.stage === 'engaged' ? 'Bertunang' : rel.stage === 'cohabiting' ? 'Tinggal Bersama' : rel.stage === 'taaruf' ? 'Ta\'aruf' : 'Bercinta')
+      ? (s.married ? 'Berkahwin' : rel.stage === 'engaged' ? 'Bertunang' : rel.stage === 'cohabiting' ? 'Tinggal Bersama' : 'Sesi Date')
       : (rel.origin || rel.role);
 
     const trustVal = rel.trust ?? 65;
@@ -744,7 +726,7 @@ window.Modals = {
     const html = `
       <div class="info-banner">
         <strong>${Utils.escapeHtml(rel.name)}</strong> (${rel.role}, Umur ${rel.age})<br/>
-        Agama / Pegangan: <strong>${bObj.icon} ${bObj.name}</strong> • Status: <strong>${stageLabel}${hasPrenupBadge}</strong><br/>
+        Status: <strong>${stageLabel}${hasPrenupBadge}</strong><br/>
         Kemesraan: <strong>${rel.closeness}%</strong> • Kepercayaan: <strong>${trustVal}%</strong> • Keserasian: <strong>${rel.compatibility ?? 75}%</strong><br/>
         ${isPartner ? `
           <div style="margin-top:6px;">
@@ -767,11 +749,7 @@ window.Modals = {
         </div>
       ` : ''}
       ${childUpbringingHtml}
-      ${interfaithBlocked ? `
-        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">
-          ☪️ <strong>Batas Agama:</strong> Sebagai watak beragama Islam, pernikahan hanya sah bersama pasangan seakidah. Bincangkan haluan hubungan secara jujur.
-        </div>
-      ` : ''}
+      
       <div class="action-list">
         <button class="action-item rel-act-btn" data-act="spend_time">
           <span class="ai-icon">${longDist ? '📱' : '☕'}</span>
@@ -812,18 +790,9 @@ window.Modals = {
           </button>
         ` : ''}
 
-        ${interfaithBlocked ? `
-          <button class="action-item rel-act-btn" data-act="interfaith_talk">
-            <span class="ai-icon">☪️</span>
-            <span class="ai-content">
-              <span class="ai-title">Bincang Batas Agama &amp; Masa Depan</span>
-              <span class="ai-desc">Tentukan sama ada pasangan terbuka memeluk Islam atau berpisah baik</span>
-            </span>
-            <span class="ai-right">Penting</span>
-          </button>
-        ` : ''}
+        
 
-        ${isPartner && !s.married && !muslim && rel.stage !== 'cohabiting' ? `
+        ${isPartner && !s.married && rel.stage !== 'cohabiting' ? `
           <button class="action-item rel-act-btn" data-act="cohabit">
             <span class="ai-icon">🏠</span>
             <span class="ai-content">
@@ -834,22 +803,22 @@ window.Modals = {
           </button>
         ` : ''}
 
-        ${isPartner && !s.married && rel.stage !== 'engaged' && !interfaithBlocked ? `
+        ${isPartner && !s.married && rel.stage !== 'engaged' ? `
           <button class="action-item rel-act-btn" data-act="engage">
             <span class="ai-icon">💐</span>
             <span class="ai-content">
-              <span class="ai-title">${muslim ? 'Merisik &amp; Bertunang' : 'Bertunang'}</span>
+              <span class="ai-title">Bertunang</span>
               <span class="ai-desc">Langkah rasmi menuju perkahwinan (perlu kemesraan 60%+)</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(350, s.countryId), s.countryId)}</span>
           </button>
         ` : ''}
 
-        ${isPartner && !s.married && !interfaithBlocked ? `
+        ${isPartner && !s.married ? `
           <button class="action-item rel-act-btn" data-act="propose">
             <span class="ai-icon">💍</span>
             <span class="ai-content">
-              <span class="ai-title">${muslim ? 'Akad Nikah &amp; Walimatulurus' : 'Lamar &amp; Berkahwin'}</span>
+              <span class="ai-title">Lamar &amp; Majlis Perkahwinan</span>
               <span class="ai-desc">Sah bergelar suami isteri (perlu kemesraan 70%+)</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(1800, s.countryId), s.countryId)}</span>
@@ -867,7 +836,7 @@ window.Modals = {
           </button>
         ` : ''}
 
-        ${isPartner && s.age >= 18 && (!muslim || s.married) ? `
+        ${isPartner && s.age >= 18 ? `
           <button class="action-item rel-act-btn" data-act="have_kid">
             <span class="ai-icon">👶</span>
             <span class="ai-content">
@@ -905,7 +874,7 @@ window.Modals = {
     this.open({
       icon: isPartner ? (s.married ? '💍' : '💑') : isFriend ? '🧑‍🤝‍🧑' : '👤',
       title: rel.name,
-      subtitle: `${rel.role} • ${bObj.icon} ${bObj.name} • ${rc.flag} ${rc.name}`,
+      subtitle: `${rel.role} • ${rc.flag} ${rc.name}`,
       bodyHtml: html
     });
 
@@ -924,7 +893,7 @@ window.Modals = {
     document.querySelectorAll('.rel-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
-        if (act === 'propose' && !muslim && window.LegalInheritanceEngine) {
+        if (act === 'propose' && window.LegalInheritanceEngine) {
           this.showCivilMarriagePrenupModal(relId);
           return;
         }
@@ -1222,7 +1191,7 @@ window.Modals = {
         <div class="info-banner" style="background:#fff7ed;border-color:#fdba74;line-height:1.6;">
           <strong>⚠️ Pengesahan Serah Legasi Semasa Hidup</strong><br/>
           Kawalan permainan akan berpindah <strong>secara kekal</strong> kepada anak anda, <strong>${Utils.escapeHtml(child.name)}</strong> (Umur ${child.age} tahun).<br/>
-          Watak semasa anda (<strong>${Utils.escapeHtml(s.name)}</strong>) akan terus hidup sebagai <strong>NPC ${s.gender === 'male' ? 'Bapa' : 'Ibu'}</strong> — tiada kematian, Obituari atau pembahagian Faraid/Pusaka pramatang akan berlaku sekarang.
+          Watak semasa anda (<strong>${Utils.escapeHtml(s.name)}</strong>) akan terus hidup sebagai <strong>NPC ${s.gender === 'male' ? 'Bapa' : 'Ibu'}</strong> — tiada kematian, Obituari atau pembahagian harta pusaka pramatang akan berlaku sekarang.
         </div>
 
         ${maxGift > 0 ? `
@@ -1309,9 +1278,7 @@ window.Modals = {
             <input type="text" id="baby-name-input" class="input-field" value="${Utils.escapeHtml(draft.suggestedName)}" maxlength="48" placeholder="Masukkan nama anak..." />
             <button type="button" id="btn-baby-random-name" class="secondary-btn" title="Jana nama rawak mengikut budaya">🎲 Nama Rawak</button>
           </div>
-          <small style="opacity:0.78;display:block;margin-top:4px;">${Relationships.isMuslim(s)
-            ? 'Tip: Anda boleh tulis nama panggilan ringkas (cth. "Aiman") — format bin/binti akan dilengkapkan secara automatik.'
-            : 'Tip: Anda boleh tulis nama panggilan ringkas — nama keluarga akan dilengkapkan secara automatik.'}</small>
+          
         </div>
 
         <button type="button" class="primary-btn" id="btn-baby-confirm-name" style="margin-top:12px;">✅ Sahkan Nama</button>
@@ -1351,7 +1318,7 @@ window.Modals = {
   },
 
   // --------------------------------------------------------------------------
-  // 4B. MODAL PERJANJIAN PRANIKAH (PRENUP) UNTUK PERKAHWINAN SIVIL
+  // 4B. MODAL PERJANJIAN PRA-PERKAHWINAN (PRENUP) UNTUK PERKAHWINAN SIVIL
   // --------------------------------------------------------------------------
   showCivilMarriagePrenupModal(relId) {
     const s = GameState.current;
@@ -1365,7 +1332,7 @@ window.Modals = {
     this.open({
       icon: '💍',
       title: `Perkahwinan Sivil (${c.name})`,
-      subtitle: `Pilihan Perjanjian Pranikah (Prenup) bersama ${rel.name}`,
+      subtitle: `Pilihan Perjanjian Pra-Perkahwinan (Prenup) bersama ${rel.name}`,
       bodyHtml: `
         <div class="info-banner highlight">
           <strong>🛡️ Lindungi Aset Sebelum Kahwin?</strong><br/>
@@ -1376,7 +1343,7 @@ window.Modals = {
           <button class="action-item" id="btn-marry-with-prenup">
             <span class="ai-icon">🛡️</span>
             <span class="ai-content">
-              <span class="ai-title">Berkahwin Dengan Perjanjian Pranikah (Prenup)</span>
+              <span class="ai-title">Berkahwin Dengan Perjanjian Pra-Perkahwinan (Prenup)</span>
               <span class="ai-desc">Melindungi 100% aset sebelum kahwin &amp; mengecualikan Alimoni jika bercerai</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(ringCost + prenupFee, s.countryId)}</span>
@@ -1385,7 +1352,7 @@ window.Modals = {
             <span class="ai-icon">💍</span>
             <span class="ai-content">
               <span class="ai-title">Berkahwin Tanpa Prenup</span>
-              <span class="ai-desc">Perkahwinan sivil biasa tanpa perjanjian pranikah</span>
+              <span class="ai-desc">Perkahwinan sivil biasa tanpa perjanjian pra-perkahwinan</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(ringCost, s.countryId)}</span>
           </button>
@@ -1412,401 +1379,135 @@ window.Modals = {
   },
 
   // --------------------------------------------------------------------------
-  // 4C. MODAL PROSIDING PENCERAIAN (MAHKAMAH SYARIAH & MAHKAMAH SIVIL)
+  // 4C. MODAL PROSIDING PENCERAIAN (MAHKAMAH SIVIL)
   // --------------------------------------------------------------------------
   showDivorceModal(partnerId, meta = {}, opts = {}) {
     const s = GameState.current;
-    GameState.ensureUpgradedState();
-    const partner = s.relationships.find(r => r.id === partnerId);
+    const partner = (s.relationships || []).find(r => r.id === partnerId);
     if (!partner || !window.LegalInheritanceEngine) {
       this.showRelationships();
       return;
     }
 
-    const islamic = LegalInheritanceEngine.isSyariahApplicable(s);
-    const isHusband = s.gender === 'male';
-    const priorTalak = Math.max((s.marriageMeta && s.marriageMeta.talakCount) || 0, partner.talakCount || 0);
+    const selectedMode = opts.settlementMode || 'mutual';
+    const prev = LegalInheritanceEngine.previewDivorce(s, partner, { settlementMode: selectedMode });
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
 
-    const selectedPath = opts.path || (islamic
-      ? (meta.initiatedBy === 'spouse'
-          ? (isHusband ? 'khuluk' : (priorTalak >= 2 ? 'talak3' : 'talak1'))
-          : (isHusband ? (priorTalak >= 2 ? 'talak3' : 'talak1') : 'fasakh'))
-      : 'civil');
-    const selectedMode = opts.settlementMode || (islamic ? 'sulh' : 'mediasi');
-
-    const prev = LegalInheritanceEngine.previewDivorce(s, partner, {
-      path: selectedPath,
-      settlementMode: selectedMode
-    });
-
-    const fmt = (val) => Utils.formatMoney(Math.abs(val), s.countryId);
-    const fmtSigned = (val) => val >= 0 ? `+${fmt(val)}` : `-${fmt(val)}`;
-
-    let controlsHtml = '';
-    let breakdownHtml = '';
-
-    if (islamic) {
-      const pathOptions = isHusband
-        ? [
-            ...(priorTalak < 2 ? [{ id: 'talak1', label: `📜 Talak ${priorTalak + 1} (Idah 1 Thn • Boleh Rujuk)` }] : []),
-            { id: 'talak3', label: '🚫 Talak 3 (Talak Bain Kubra — Kekal)' },
-            { id: 'khuluk', label: '🤝 Khuluk (Tebus Talak)' }
-          ]
-        : [
-            { id: 'fasakh', label: '⚖️ Tuntutan Fasakh (Hakim Syarie)' },
-            { id: 'khuluk', label: '💸 Khuluk (Tebus Talak)' },
-            ...(meta.initiatedBy === 'spouse' ? [{ id: priorTalak >= 2 ? 'talak3' : 'talak1', label: `📜 Suami Lafaz Talak ${Math.min(3, priorTalak + 1)}` }] : [])
-          ];
-
-      controlsHtml = `
-        <div class="section-heading">1. Laluan Penceraian Syariah</div>
-        <div class="tab-pills" style="margin-bottom:10px;">
-          ${pathOptions.map(p => `
-            <button type="button" class="tab-pill div-path-pill ${p.id === selectedPath ? 'active' : ''}" data-path="${p.id}">${p.label}</button>
-          `).join('')}
-        </div>
-        <div class="section-heading">2. Kaedah Penyelesaian Harta Sepencarian</div>
-        <div class="tab-pills" style="margin-bottom:10px;">
-          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'sulh' ? 'active' : ''}" data-mode="sulh">🤝 Runding Secara Baik (Sulh)</button>
-          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'peguam' ? 'active' : ''}" data-mode="peguam">⚖️ Lantik Peguam Syariah</button>
-        </div>
-      `;
-
-      breakdownHtml = `
-        <div class="info-banner" style="line-height:1.65;">
-          <strong>⚖️ Anggaran Perintah Mahkamah Syariah</strong><br/>
-          Laluan: <strong>${Utils.escapeHtml(prev.pathLabel)}</strong><br/>
-          Harta Sepencarian (${prev.sepencarianPct}% daripada ${fmt(prev.maritalAssets)}): <strong>${fmtSigned(prev.sepencarianDelta)}</strong><br/>
-          ${Utils.escapeHtml(prev.mutaahLabel)}: <strong>${fmtSigned(prev.mutaahIdahDelta)}</strong><br/>
-          Kos Guaman / Mahkamah Syariah: <strong>-${fmt(prev.legalFee)}</strong><br/>
-          ${prev.minorKidsCount > 0 ? `Nafkah Anak Tahunan (${prev.minorKidsCount} anak, ${prev.nafkahYears} thn): <strong>${fmtSigned(prev.nafkahAnakAnnual)}/thn</strong><br/>Hadanah: <small>${Utils.escapeHtml(prev.hadanahText)}</small><br/>` : ''}
-          <strong>Kesan Tunai Serta-Merta: ${fmtSigned(prev.netCashDelta)}</strong>
-        </div>
-        ${prev.inIdah
-          ? `<div class="info-banner" style="background:#f0fdf4;border-color:#86efac;">⏳ <strong>Tempoh Idah (1 Tahun):</strong> Pilihan sekali <strong>Rujuk Semula</strong> akan dibuka di tab Hubungan sepanjang tempoh Idah.</div>`
-          : `<div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">🚫 <strong>Penceraian Kekal:</strong> Tiada pilihan Rujuk Semula untuk laluan ini.</div>`
-        }
-      `;
-    } else {
-      controlsHtml = `
-        ${prev.hasPrenup
-          ? `<div class="info-banner" style="background:#eff6ff;border-color:#93c5fd;">🛡️ <strong>Prenup Aktif!</strong> Aset sebelum kahwin bernilai <strong>${fmt(prev.protectedAmount)}</strong> dilindungi 100% dan Alimoni dikecualikan.</div>`
-          : `<div class="info-banner" style="background:#fff7ed;border-color:#fdba74;">⚠️ <strong>Tiada Prenup:</strong> Aset perkahwinan dibahagi <strong>40–50%</strong> dan Alimoni boleh dikenakan jika terdapat jurang pendapatan.</div>`
-        }
-        <div class="section-heading">Kaedah Prosiding Sivil</div>
-        <div class="tab-pills" style="margin-bottom:10px;">
-          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'mediasi' ? 'active' : ''}" data-mode="mediasi">🤝 Mediasi / Rundingan Baik</button>
-          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'litigasi' ? 'active' : ''}" data-mode="litigasi">⚖️ Litigasi Peguam Sivil</button>
-        </div>
-      `;
-
-      breakdownHtml = `
-        <div class="info-banner" style="line-height:1.65;">
-          <strong>⚖️ Anggaran Perintah ${Utils.escapeHtml(prev.courtName)}</strong><br/>
-          Pembahagian Aset (${prev.splitPct}% daripada ${fmt(prev.maritalAssets)}): <strong>-${fmt(prev.assetSplitLoss)}</strong><br/>
-          Yuran Guaman Sivil: <strong>-${fmt(prev.legalFee)}</strong><br/>
-          ${prev.alimonyAnnual !== 0 ? `Alimoni (${prev.alimonyYears} tahun): <strong>${fmtSigned(prev.alimonyAnnual)}/thn</strong><br/>` : 'Alimoni: <strong>Tiada</strong><br/>'}
-          ${prev.minorKidsCount > 0 ? `Nafkah Anak Sivil (${prev.minorKidsCount} anak, ${prev.childSupportYears} thn): <strong>${fmtSigned(prev.childSupportAnnual)}/thn</strong><br/>Hak Jagaan: <small>${Utils.escapeHtml(prev.custodyText)}</small><br/>` : ''}
-          <strong>Kesan Tunai Serta-Merta: ${fmtSigned(prev.netCashDelta)}</strong>
-        </div>
-      `;
-    }
-
-    const isForced = meta && meta.initiatedBy === 'spouse';
     this.open({
       icon: '⚖️',
-      title: `${prev.courtName} — Penceraian`,
-      subtitle: `${partner.name} • Tempoh perkahwinan: ${prev.yearsMarried} tahun`,
-      locked: isForced,
+      title: 'Prosiding Perceraian Sivil',
+      subtitle: `${partner.name} • ${prev.courtLabel}`,
       bodyHtml: `
-        ${isForced ? `<div class="info-banner" style="background:#fef2f2;border-color:#fecaca;">💔 <strong>${Utils.escapeHtml(partner.name)}</strong> telah memfailkan tuntutan penceraian (${Utils.escapeHtml(meta.reason || 'kepercayaan runtuh')}).</div>` : ''}
-        ${controlsHtml}
-        ${breakdownHtml}
-        <button class="primary-btn" id="btn-confirm-divorce" style="background:linear-gradient(135deg,#dc2626,#b91c1c);">⚖️ Sahkan Keputusan ${Utils.escapeHtml(prev.courtName)}</button>
-        ${!isForced ? `<button class="ghost-btn" id="btn-cancel-divorce" style="margin-top:8px;">← Batalkan &amp; Kembali</button>` : ''}
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">
+          <strong>⚖️ ${prev.courtLabel}:</strong> ${Utils.escapeHtml(prev.summary)}
+        </div>
+
+        <div class="section-heading">Pilih Laluan Penyelesaian</div>
+        <div class="tab-pills" style="margin-bottom:8px;">
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'mutual' ? 'active' : ''}" data-mode="mutual">🤝 Persetujuan Bersama</button>
+          <button type="button" class="tab-pill div-mode-pill ${selectedMode === 'contested' ? 'active' : ''}" data-mode="contested">⚖️ Bertikai di Mahkamah</button>
+        </div>
+
+        <div class="info-banner">
+          <div>💼 Yuran Guaman: <strong>${fmt(prev.legalFeeLocal)}</strong></div>
+          <div>🏠 Pembahagian Harta (${prev.splitPct}%): <strong>${fmt(prev.settlementLocal)}</strong></div>
+          ${prev.alimonyAnnualLocal > 0 ? `<div>📅 Nafkah Tahunan: <strong>${fmt(prev.alimonyAnnualLocal)}/thn</strong> (${prev.alimonyYears} tahun)</div>` : '<div>✅ Tiada nafkah berkala dikenakan.</div>'}
+          ${prev.hasPrenup ? '<div style="color:#16a34a;margin-top:4px;">🛡️ Perjanjian Pra-Perkahwinan (Prenup) aktif.</div>' : ''}
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button type="button" class="primary-btn" id="btn-confirm-divorce" style="flex:1;background:#dc2626;">⚖️ Sahkan Perceraian</button>
+          <button type="button" class="secondary-btn" id="btn-cancel-divorce" style="flex:1;">Batal</button>
+        </div>
       `
     });
 
-    document.querySelectorAll('.div-path-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        this.showDivorceModal(partnerId, meta, { path: pill.dataset.path, settlementMode: selectedMode });
-      });
-    });
     document.querySelectorAll('.div-mode-pill').forEach(pill => {
       pill.addEventListener('click', () => {
-        this.showDivorceModal(partnerId, meta, { path: selectedPath, settlementMode: pill.dataset.mode });
+        this.showDivorceModal(partnerId, meta, { settlementMode: pill.dataset.mode });
       });
     });
+
+    document.getElementById('btn-cancel-divorce').addEventListener('click', () => this.showRelationships());
     document.getElementById('btn-confirm-divorce').addEventListener('click', () => {
-      const res = LegalInheritanceEngine.executeDivorce(s, partnerId, { path: selectedPath, settlementMode: selectedMode });
-      this.close(true);
+      const res = LegalInheritanceEngine.executeDivorce(s, partnerId, { settlementMode: selectedMode });
       App.renderAll();
-      App.toast(res.msg, 'error');
+      App.toast(res.msg, res.ok ? 'warning' : 'error');
+      this.showRelationships();
     });
-    const cancelBtn = document.getElementById('btn-cancel-divorce');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.showRelationDetail(partnerId));
-    }
   },
 
-  // --------------------------------------------------------------------------
-  // 4D. MODAL PENGURUSAN WASIAT SEMASA HIDUP (ISLAM & SIVIL)
-  // --------------------------------------------------------------------------
   showWasiatModal(onBack = null) {
     const s = GameState.current;
-    GameState.ensureUpgradedState();
-    const islamic = LegalInheritanceEngine.isSyariahApplicable(s);
-    const c = Utils.getCountry(s.countryId);
-    const livingKids = s.relationships.filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
-
-    let bodyHtml = '';
-    if (islamic) {
-      const curPct = (s.wasiat && s.wasiat.islamicPct) || 0;
-      const pctOpts = [
-        { val: 0, label: '0% (100% Faraid)' },
-        { val: 10, label: '10% Wakaf / Kebajikan' },
-        { val: 20, label: '20% Wakaf / Kebajikan' },
-        { val: 33.33, label: '33.3% (Maksimum 1/3 Syarak)' }
-      ];
-      const adoptedKids = livingKids.filter(k => k.isAdopted);
-      const curHibahPct = (s.wasiat && typeof s.wasiat.hibahPct === 'number')
-        ? s.wasiat.hibahPct
-        : (adoptedKids.length > 0 ? (adoptedKids.length === 1 ? 8 : 10) : 0);
-      const curRecType = (s.wasiat && s.wasiat.hibahRecipientType) || (adoptedKids.length > 0 ? 'adopted' : 'other');
-      const curRecId = (s.wasiat && s.wasiat.hibahRecipientId) || '';
-
-      const livingSpouse = (s.married && s.partnerId)
-        ? s.relationships.find(r => r.id === s.partnerId && r.alive)
-        : null;
-      const hibahRecipients = [livingSpouse, ...livingKids].filter(Boolean);
-
-      const customRecipientOptions = [];
-      if (adoptedKids.length > 0) {
-        customRecipientOptions.push({ val: 'adopted:', label: `👶 Anak Angkat (${adoptedKids.length} orang — bukan waris Faraid)` });
-      }
-      if (livingSpouse) {
-        customRecipientOptions.push({ val: `spouse:${livingSpouse.id}`, label: `💍 Pasangan: ${livingSpouse.name} (${livingSpouse.role})` });
-      }
-      for (const k of livingKids) {
-        customRecipientOptions.push({ val: `child:${k.id}`, label: `👤 Anak: ${k.name} (${k.role}${k.isAdopted ? ' • Angkat' : ''})` });
-      }
-      customRecipientOptions.push({ val: 'other:', label: '🌍 Lain-lain / Badan Kebajikan' });
-      const selectedRecKey = `${curRecType}:${curRecId}`;
-      const faraidRemain = Math.max(0, Math.round((100 - curHibahPct - curPct) * 10) / 10);
-
-      const hibahItems = [];
-      const curCash = Math.max(0, s.money || 0);
-      if (curCash >= 100) {
-        const cash10 = Math.round(curCash * 0.10);
-        const cash25 = Math.round(curCash * 0.25);
-        if (cash10 > 0) hibahItems.push({ val: `cash:${cash10}`, label: `💵 Tunai 10% (${Utils.formatMoney(cash10, s.countryId)})` });
-        if (cash25 > 0) hibahItems.push({ val: `cash:${cash25}`, label: `💵 Tunai 25% (${Utils.formatMoney(cash25, s.countryId)})` });
-      }
-      for (const p of ((s.assets && s.assets.properties) || [])) {
-        hibahItems.push({ val: `property:${p.id}`, label: `🏠 ${p.name} (${Utils.formatMoney(p.value || 0, s.countryId)})` });
-      }
-      for (const v of ((s.assets && s.assets.vehicles) || [])) {
-        hibahItems.push({ val: `vehicle:${v.id}`, label: `🚗 ${v.name} (${Utils.formatMoney(v.value || 0, s.countryId)})` });
-      }
-      for (const col of ((s.assets && s.assets.collectibles) || []).filter(x => x && x.isHeirloom)) {
-        hibahItems.push({ val: `heirloom:${col.id}`, label: `🏛️ ${col.name} (${Utils.formatMoney(col.value || 0, s.countryId)})` });
-      }
-
-      bodyHtml = `
-        <div class="info-banner highlight">
-          <strong>☪️ Wasiat Islam &amp; Hukum Faraid</strong><br/>
-          Menurut hukum syarak, anda boleh mewasiatkan <strong>maksimum 1/3 (33.3%)</strong> daripada harta pusaka bersih kepada badan kebajikan, wakaf atau bukan waris. Baki harta akan dibahagikan secara tepat mengikut <strong>Faraid</strong>.
-        </div>
-        <div class="section-heading">Pilih Peruntukan Wasiat (Semasa: ${curPct}%)</div>
-        <div class="action-list">
-          ${pctOpts.map(o => `
-            <button class="action-item wasiat-islamic-btn ${Math.abs(curPct - o.val) < 0.1 ? 'active' : ''}" data-pct="${o.val}">
-              <span class="ai-icon">📜</span>
-              <span class="ai-content">
-                <span class="ai-title">${o.label}</span>
-                <span class="ai-desc">${o.val === 0 ? 'Semua harta bersih diagihkan kepada waris Faraid' : 'Ditolak selepas hutang sebelum pengiraan Faraid'}</span>
-              </span>
-              <span class="ai-right">${Math.abs(curPct - o.val) < 0.1 ? '✓ Aktif' : 'Pilih'}</span>
-            </button>
-          `).join('')}
-        </div>
-
-        <div class="section-heading" style="margin-top:14px;">🎁 Pengurusan Hibah (0%–100%)</div>
-        <div class="info-banner" style="background:#f0f9ff;border-color:#bae6fd;line-height:1.55;">
-          <strong>1. Peruntukan Hibah Tersuai (Sebelum Faraid)</strong><br/>
-          <small style="opacity:0.85;">${adoptedKids.length > 0 ? 'Anak angkat bukan waris Faraid — diagih sebagai Hibah sebelum Faraid.' : 'Pilih penerima & peratusan Hibah (0%–100%). Hibah > 40% boleh mencetuskan konflik waris!'}</small>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-            <select id="hibah-custom-recipient" class="input-field">
-              ${customRecipientOptions.map(o => `<option value="${Utils.escapeHtml(o.val)}" ${o.val === selectedRecKey ? 'selected' : ''}>${Utils.escapeHtml(o.label)}</option>`).join('')}
-            </select>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <input type="range" id="hibah-pct-slider" min="0" max="100" step="1" value="${curHibahPct}" style="flex:1;" />
-              <input type="number" id="hibah-pct-input" class="input-field" min="0" max="100" value="${curHibahPct}" style="width:74px;text-align:center;padding:6px;" />
-              <strong>%</strong>
-            </div>
-            <div id="hibah-faraid-preview" style="font-size:12px;color:#0f172a;">
-              Wasiat: <strong>${curPct}%</strong> • Hibah: <strong>${curHibahPct}%</strong> • Baki Faraid: <strong>${faraidRemain}%</strong>
-            </div>
-            <button type="button" class="secondary-btn" id="btn-save-custom-hibah" style="width:100%;">🎁 Simpan Peruntukan Hibah</button>
-          </div>
-        </div>
-
-        <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;line-height:1.55;">
-          <strong>2. Hibah Semasa Hidup</strong><br/>
-          <small style="opacity:0.82;">Pindah milik tunai atau aset terus kepada pasangan/anak sekarang (dikecualikan daripada Faraid kelak).</small>
-          ${hibahRecipients.length > 0 && hibahItems.length > 0 ? `
-            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-              <select id="hibah-recipient-select" class="input-field">
-                ${hibahRecipients.map(r => `<option value="${r.id}">${Utils.escapeHtml(r.name)} (${Utils.escapeHtml(r.role)})</option>`).join('')}
-              </select>
-              <select id="hibah-item-select" class="input-field">
-                ${hibahItems.map(it => `<option value="${Utils.escapeHtml(it.val)}">${Utils.escapeHtml(it.label)}</option>`).join('')}
-              </select>
-              <button type="button" class="secondary-btn" id="btn-confirm-living-hibah" style="width:100%;">🎁 Sahkan Hibah Sekarang</button>
-            </div>
-          ` : `<div style="margin-top:6px;"><small style="opacity:0.75;">${hibahRecipients.length === 0 ? 'Tiada pasangan atau anak hidup untuk menerima Hibah.' : 'Tiada tunai atau aset tersedia untuk dihibahkan buat masa ini.'}</small></div>`}
-        </div>
-      `;
-    } else {
-      const curMode = (s.wasiat && s.wasiat.civilMode) || 'none';
-      const curTarget = (s.wasiat && s.wasiat.civilTargetHeirId) || (livingKids[0] && livingKids[0].id) || '';
-      const heirSelectHtml = livingKids.length > 0
-        ? `
-          <div style="margin:8px 0 12px;">
-            <label class="creator-label">Pilih Waris Tunggal (jika pilih 1 Waris Utama)</label>
-            <select id="wasiat-single-heir-select" class="input-field">
-              ${livingKids.map(k => `<option value="${k.id}" ${k.id === curTarget ? 'selected' : ''}>${Utils.escapeHtml(k.name)} (${k.role}, Umur ${k.age})</option>`).join('')}
-            </select>
-          </div>
-        `
-        : `<div class="info-banner">Tiada anak hidup buat masa ini — jika pilih 1 Waris Utama, harta akan disalurkan kepada pasangan/waris terdekat.</div>`;
-
-      const modeOpts = [
-        { id: 'none', icon: '⚖️', title: 'Tiada Wasiat (Intestate)', desc: 'Lalai sivil: 50% pasangan + 50% anak-anak (atau 100% anak-anak)' },
-        { id: 'equal', icon: '🤝', title: 'Wasiat Sama Rata', desc: 'Semua harta bersih dibahagi sama rata antara pasangan & anak-anak' },
-        { id: 'single_heir', icon: '👑', title: 'Wasiat 1 Waris Utama', desc: 'Serahkan 100% harta bersih kepada seorang waris pilihan anda' },
-        { id: 'charity', icon: '💚', title: 'Wasiat Amal & Kebajikan', desc: `Dermakan 100% harta bersih kepada tabung kebajikan ${c.name}` }
-      ];
-
-      bodyHtml = `
-        <div class="info-banner highlight">
-          <strong>⚖️ Wasiat Sivil (${c.name})</strong><br/>
-          Tentukan bagaimana harta bersih anda (selepas hutang &amp; Cukai Pusaka ${c.name}) akan diagihkan apabila anda meninggal dunia.
-        </div>
-        ${heirSelectHtml}
-        <div class="action-list">
-          ${modeOpts.map(m => `
-            <button class="action-item wasiat-civil-btn" data-mode="${m.id}">
-              <span class="ai-icon">${m.icon}</span>
-              <span class="ai-content">
-                <span class="ai-title">${m.title}</span>
-                <span class="ai-desc">${m.desc}</span>
-              </span>
-              <span class="ai-right">${curMode === m.id ? '✓ Aktif' : 'Pilih'}</span>
-            </button>
-          `).join('')}
-        </div>
-      `;
-    }
+    if (!s || !window.LegalInheritanceEngine) return;
+    LegalInheritanceEngine.ensureLegalFields(s);
+    const report = LegalInheritanceEngine.calculateEstateStatement(s);
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const curMode = (s.legal.wasiat && s.legal.wasiat.mode) || 'equal';
+    const children = (s.relationships || []).filter(r => r.type === 'child' && r.alive);
 
     this.open({
       icon: '📜',
-      title: 'Pengurusan Wasiat & Pusaka',
-      subtitle: islamic ? 'Sistem Faraid, Wasiat & Hibah Islam' : `Undang-undang Sivil ${c.name}`,
-      bodyHtml: `${bodyHtml}<button class="ghost-btn" id="btn-wasiat-back" style="margin-top:10px;">← Kembali</button>`
+      title: 'Pengurusan Wasiat Sivil',
+      subtitle: 'Undang-Undang Sivil & Wasiat',
+      bodyHtml: `
+        <div class="info-banner highlight">
+          <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
+          Nilai Harta Bersih Anggaran: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (Bebas Cukai Pusaka)'}
+        </div>
+
+        <div class="section-heading">Pilih Mod Pembahagian Wasiat</div>
+        <div class="action-list">
+          <button type="button" class="action-item civil-wasiat-btn" data-mode="equal">
+            <span class="ai-icon">⚖️</span>
+            <span class="ai-content">
+              <span class="ai-title">Pembahagian Sama Rata ${curMode === 'equal' ? '✓' : ''}</span>
+              <span class="ai-desc">Pasangan &amp; semua anak (kandung serta anak angkat) menerima bahagian adil</span>
+            </span>
+          </button>
+          <button type="button" class="action-item civil-wasiat-btn" data-mode="spouse_all">
+            <span class="ai-icon">💍</span>
+            <span class="ai-content">
+              <span class="ai-title">100% Kepada Pasangan ${curMode === 'spouse_all' ? '✓' : ''}</span>
+              <span class="ai-desc">Seluruh harta pusaka diserahkan kepada pasangan hidup anda</span>
+            </span>
+          </button>
+          ${children.map(ch => `
+            <button type="button" class="action-item civil-wasiat-btn" data-mode="single_child" data-target="${ch.id}">
+              <span class="ai-icon">👶</span>
+              <span class="ai-content">
+                <span class="ai-title">100% Kepada ${Utils.escapeHtml(ch.name)} ${curMode === 'single_child' && s.legal.wasiat.soleBeneficiaryId === ch.id ? '✓' : ''}</span>
+                <span class="ai-desc">${ch.isAdopted ? 'Anak Angkat' : 'Anak'} (${ch.age} tahun)</span>
+              </span>
+            </button>
+          `).join('')}
+          <button type="button" class="action-item civil-wasiat-btn" data-mode="charity">
+            <span class="ai-icon">🤝</span>
+            <span class="ai-content">
+              <span class="ai-title">100% Yayasan Kebajikan ${curMode === 'charity' ? '✓' : ''}</span>
+              <span class="ai-desc">Dermakan seluruh harta pusaka kepada tabung kebajikan awam</span>
+            </span>
+          </button>
+        </div>
+
+        <button type="button" class="secondary-btn" id="btn-wasiat-back" style="width:100%;margin-top:8px;">← Kembali</button>
+      `
     });
 
-    document.querySelectorAll('.wasiat-islamic-btn').forEach(btn => {
+    document.querySelectorAll('.civil-wasiat-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const res = LegalInheritanceEngine.setIslamicWasiat(s, Number(btn.dataset.pct));
+        const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode, btn.dataset.target || null);
         App.toast(res.msg, res.ok ? 'success' : 'error');
-        this.showWasiatModal(onBack);
-      });
-    });
-
-    const hibahSlider = document.getElementById('hibah-pct-slider');
-    const hibahInput = document.getElementById('hibah-pct-input');
-    const hibahPrev = document.getElementById('hibah-faraid-preview');
-    const syncHibahPreview = (rawVal) => {
-      const v = Math.max(0, Math.min(100, Math.round(Number(rawVal) || 0)));
-      if (hibahSlider) hibahSlider.value = String(v);
-      if (hibahInput) hibahInput.value = String(v);
-      const curW = Math.min((s.wasiat && s.wasiat.islamicPct) || 0, Math.max(0, 100 - v));
-      const rem = Math.max(0, Math.round((100 - v - curW) * 10) / 10);
-      if (hibahPrev) {
-        const warn = v >= 80 ? ' • ⚠️ <strong style="color:#dc2626;">Waris akan dinafikan hak!</strong>'
-          : (v > 40 ? ' • ⚠️ <strong style="color:#d97706;">Risiko konflik keluarga</strong>' : '');
-        hibahPrev.innerHTML = `Wasiat: <strong>${curW}%</strong> • Hibah: <strong>${v}%</strong> • Baki Faraid: <strong>${rem}%</strong>${warn}`;
-      }
-    };
-    if (hibahSlider) hibahSlider.addEventListener('input', (e) => syncHibahPreview(e.target.value));
-    if (hibahInput) hibahInput.addEventListener('input', (e) => syncHibahPreview(e.target.value));
-
-    const saveCustomHibahBtn = document.getElementById('btn-save-custom-hibah');
-    if (saveCustomHibahBtn) {
-      saveCustomHibahBtn.addEventListener('click', () => {
-        const pctVal = hibahInput ? Number(hibahInput.value) : 0;
-        const recSel = document.getElementById('hibah-custom-recipient');
-        const [recType, recId] = (recSel && recSel.value ? recSel.value : 'other:').split(':');
-        const recObj = recId ? (s.relationships || []).find(r => r.id === recId) : null;
-        const recName = recObj ? recObj.name : (recType === 'adopted' ? 'Anak Angkat' : 'Lain-lain / Kebajikan');
-        const res = LegalInheritanceEngine.setCustomHibah(s, {
-          pct: pctVal,
-          recipientType: recType || 'other',
-          recipientId: recId || null,
-          recipientName: recName
-        });
-        App.toast(res.msg, res.ok ? 'success' : 'error');
-        App.renderAll();
-        if (res.backlashEvent) {
-          this.showEvent(res.backlashEvent);
-          return;
-        }
-        this.showWasiatModal(onBack);
-      });
-    }
-
-    const livingHibahBtn = document.getElementById('btn-confirm-living-hibah');
-    if (livingHibahBtn) {
-      livingHibahBtn.addEventListener('click', () => {
-        const recSel = document.getElementById('hibah-recipient-select');
-        const itemSel = document.getElementById('hibah-item-select');
-        if (!recSel || !itemSel || !itemSel.value) return;
-        const [type, rawVal] = itemSel.value.split(':');
-        const payload = type === 'cash'
-          ? { recipientId: recSel.value, type: 'cash', amountLocal: Number(rawVal) }
-          : { recipientId: recSel.value, type, assetId: rawVal };
-        const res = LegalInheritanceEngine.giveLivingHibah(s, payload);
-        App.toast(res.msg, res.ok ? 'success' : 'error');
-        App.renderAll();
-        this.showWasiatModal(onBack);
-      });
-    }
-
-    document.querySelectorAll('.wasiat-civil-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const sel = document.getElementById('wasiat-single-heir-select');
-        const targetId = sel ? sel.value : null;
-        const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode, targetId);
-        App.toast(res.msg, res.ok ? 'success' : 'error');
-        App.renderAll();
-        if (res.backlashEvent) {
-          this.showEvent(res.backlashEvent);
-          return;
-        }
         this.showWasiatModal(onBack);
       });
     });
 
     document.getElementById('btn-wasiat-back').addEventListener('click', () => {
       if (typeof onBack === 'function') onBack();
-      else this.close(true);
+      else this.close();
     });
   },
 
-  // --------------------------------------------------------------------------
-  // 4E. MODAL PENYATA HARTA PUSAKA (DIPAPARKAN SEBELUM PEWARIS MENYAMBUNG)
-  // --------------------------------------------------------------------------
   showEstateStatementModal(preselectedKidId = null) {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
@@ -1860,9 +1561,7 @@ window.Modals = {
         </button>
       `;
 
-    const jurisdictionBadge = report.isIslamic
-      ? `<div class="info-banner" style="background:#ecfdf5;border-color:#6ee7b7;margin-bottom:8px;font-weight:700;">⚖️ Jurisdiksi: Undang-Undang Syariah (Muslim • ${Utils.escapeHtml(report.countryName)})</div>`
-      : `<div class="info-banner" style="background:#eff6ff;border-color:#93c5fd;margin-bottom:8px;font-weight:700;">⚖️ Jurisdiksi: Undang-Undang Sivil (${Utils.escapeHtml(report.countryName)})</div>`;
+    const jurisdictionBadge = `<div class=\"info-banner\" style=\"background:#eff6ff;border-color:#bfdbfe;margin-bottom:8px;font-weight:700;\">⚖️ Sistem Pewarisan: ${Utils.escapeHtml(report.systemName || 'Undang-Undang Sivil & Wasiat')}</div>`;
 
     this.open({
       icon: '📜',
@@ -1877,11 +1576,9 @@ window.Modals = {
           Jumlah Harta Kasar: <strong>${fmt(report.grossEstate)}</strong><br/>
           Tolak Hutang &amp; Gadai Janji: <strong style="color:#dc2626;">-${fmt(report.totalDebts)}</strong><br/>
           <strong>Harta Pusaka Bersih: ${fmt(report.netEstate)}</strong><br/>
-          ${report.isIslamic && report.wasiatAmount > 0 ? `Tolak ${Utils.escapeHtml(report.wasiatLabel)}: <strong>-${fmt(report.wasiatAmount)}</strong><br/>` : ''}
-          ${report.isIslamic && report.hibahAnakAngkatAmount > 0 ? `Tolak ${Utils.escapeHtml(report.hibahAnakAngkatLabel || 'Hibah Anak Angkat')}: <strong style="color:#0284c7;">-${fmt(report.hibahAnakAngkatAmount)}</strong><br/>` : ''}
-          ${!report.isIslamic && report.estateTaxAmount > 0 ? `Tolak Cukai Pusaka ${Utils.escapeHtml(report.countryName)} (${report.estateTaxRate}%): <strong style="color:#dc2626;">-${fmt(report.estateTaxAmount)}</strong><br/>` : ''}
-          ${!report.isIslamic ? `Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>` : ''}
-          <strong>Jumlah Diagihkan Kepada Waris${report.isIslamic ? ' Faraid' : ''}: ${fmt(report.distributableEstate)}</strong>
+          ${report.estateTax > 0 ? `Tolak Cukai Pusaka ${Utils.escapeHtml(report.countryName)} (${report.estateTaxRate}%): <strong style="color:#dc2626;">-${fmt(report.estateTaxAmount)}</strong><br/>` : ''}
+          ${true ? `Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>` : ''}
+          <strong>Jumlah Diagihkan Kepada Waris: ${fmt(report.distributableEstate)}</strong>
         </div>
 
         <div class="section-heading">🧾 Pecahan Agihan Harta Pusaka</div>
@@ -2074,8 +1771,6 @@ window.Modals = {
       const birthC = Utils.getCountry(s.birthCountryId);
       const adapt = GameState.getCurrentAdaptation();
       const isCitizen = s.citizenships.includes(s.countryId);
-      const beliefObj = GameState.getBeliefObj(s.belief);
-      const famBeliefObj = GameState.getBeliefObj(s.familyBelief);
 
       const displayName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
       const occ = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: 'Tiada Pekerjaan', badge: '—', secondaryRole: null };
@@ -2084,16 +1779,7 @@ window.Modals = {
         ? `<br/><small style="opacity:0.85;">Sumber: ${inc.breakdown.map(b => `${b.icon} ${Utils.escapeHtml(b.label)} (${Utils.formatMoney(b.gross, s.countryId)}/thn)`).join(' • ')}</small>`
         : '';
 
-      const relMeta = window.LegalInheritanceEngine
-        ? LegalInheritanceEngine.getReligionMeta(s.religion)
-        : { icon: beliefObj.icon, label: s.religion || beliefObj.name };
-      const islamic = window.LegalInheritanceEngine && LegalInheritanceEngine.isSyariahApplicable(s);
-      const wasiatSummary = islamic
-        ? ((s.wasiat && s.wasiat.islamicPct > 0) ? `Wasiat Islam ${s.wasiat.islamicPct}% (${s.wasiat.islamicBeneficiary})` : '100% Faraid (Tiada Wasiat)')
-        : ((s.wasiat && s.wasiat.civilMode === 'equal') ? 'Wasiat Sama Rata'
-          : (s.wasiat && s.wasiat.civilMode === 'single_heir') ? 'Wasiat 1 Waris Utama'
-          : (s.wasiat && s.wasiat.civilMode === 'charity') ? 'Wasiat Amal 100%'
-          : 'Tiada Wasiat (Intestate)');
+      const wasiatSummary = (s.legal && s.legal.wasiat && s.legal.wasiat.mode) ? `Mod Wasiat: ${s.legal.wasiat.mode}` : 'Pembahagian Sama Rata';
 
       const edObj = s.education || {};
       const edLvlInfo = (window.EducationData && EducationData.LEVEL_INFO[edObj.educationLevel || 'none']) || { icon: '📄', label: 'Tiada/Sekolah' };
@@ -2115,10 +1801,8 @@ window.Modals = {
           Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong>${cgpaLabel}${deansBadge}<br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
-          Agama: <strong>${relMeta.icon} ${Utils.escapeHtml(relMeta.label)}</strong> • Ketahanan Jiwa: ${s.devotion || 40}%<br/>
           Status Perkahwinan: <strong>${s.married ? '💍 Berkahwin' : (s.maritalStatus ? `🕊️ ${Utils.escapeHtml(s.maritalStatus)}` : 'Bujang')}</strong><br/>
           Status Wasiat: <strong>${Utils.escapeHtml(wasiatSummary)}</strong><br/>
-          Latar Keluarga: ${famBeliefObj.icon} ${famBeliefObj.name}<br/>
           Status Semasa: <strong>${c.flag} ${c.name} — ${App._residencyLabel(s.residencyStatus)}</strong> (${s.yearsInCurrentCountry} tahun)<br/>
           Kewarganegaraan: ${s.citizenships.map(id => `${Utils.getCountry(id).flag} ${Utils.getCountry(id).name}`).join(', ')}
         </div>
@@ -2131,18 +1815,6 @@ window.Modals = {
         ${s.age >= 18 && window.LegalInheritanceEngine ? `<button class="secondary-btn" id="btn-biodata-wasiat" style="width:100%;margin-bottom:10px;">📜 Urus Wasiat &amp; Perancangan Pusaka</button>` : ''}
       `;
 
-      if (s.spiritualHistory && s.spiritualHistory.length > 0) {
-        contentHtml += `
-          <div class="info-banner" style="background:#f5f3ff;border-color:#ddd6fe;">
-            <strong>🌌 Perjalanan Rohani (${s.spiritualHistory.length} perubahan)</strong><br/>
-            ${s.spiritualHistory.map(h => {
-              const fb = GameState.getBeliefObj(h.fromBelief);
-              const tb = GameState.getBeliefObj(h.toBelief);
-              return `• Umur ${h.age} (${h.year}): ${fb.icon} ${fb.name} → <strong>${tb.icon} ${tb.name}</strong>`;
-            }).join('<br/>')}
-          </div>
-        `;
-      }
 
       if (!isCitizen) {
         const nextStep = s.residencyStatus === 'PR' ? `Warganegara ${c.name}` : `Penduduk Tetap (PR)`;
@@ -2175,8 +1847,7 @@ window.Modals = {
       const gymCost = Utils.usdToLocal(25, s.countryId);
       const vacationCost = s.age < 18 ? Utils.usdToLocal(40, s.countryId) : Utils.usdToLocal(180, s.countryId);
       const therapyCost = s.age < 18 ? 0 : Utils.usdToLocal(120, s.countryId);
-      const beliefObj = GameState.getBeliefObj(s.belief);
-      const charityCost = Utils.usdToLocal(35, s.countryId);
+            const charityCost = Utils.usdToLocal(35, s.countryId);
       const curStress = Math.round((s.alignment && s.alignment.stress) || 0);
       const stressTierLabel = curStress >= 90
         ? '🚨 Tekanan Melampau (Risiko Masuk Hospital / Strok)'
@@ -2253,11 +1924,11 @@ window.Modals = {
 
         <div class="section-heading">💪 Minda, Jiwa &amp; Badan</div>
         <div class="action-list">
-          <button class="action-item" id="act-spiritual" ${s.yearlyActions.spiritualPractice ? 'disabled' : ''}>
-            <span class="ai-icon">${beliefObj.icon}</span>
+          <button class="action-item" id="act-community-charity" ${s.yearlyActions.communityCharity ? 'disabled' : ''}>
+            <span class="ai-icon">🤝</span>
             <span class="ai-content">
-              <span class="ai-title">${Utils.escapeHtml(beliefObj.practiceTitle)} (${beliefObj.name})</span>
-              <span class="ai-desc">${Utils.escapeHtml(beliefObj.practiceDesc)}</span>
+              <span class="ai-title">Sukarelawan &amp; Kebajikan Komuniti</span>
+              <span class="ai-desc">Luangkan masa membantu komuniti setempat dan menyumbang kepada kebajikan</span>
             </span>
             <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(charityCost, s.countryId)}</span>
           </button>
@@ -2455,9 +2126,9 @@ window.Modals = {
       App.renderAll();
     });
 
-    const spiritualBtn = document.getElementById('act-spiritual');
-    if (spiritualBtn) spiritualBtn.addEventListener('click', () => {
-      const res = Sim.doSpiritualPractice();
+    const charityBtn = document.getElementById('act-community-charity');
+    if (charityBtn) charityBtn.addEventListener('click', () => {
+      const res = Sim.doCommunityCharity();
       App.toast(res.msg, res.ok ? 'culture' : 'error');
       App.renderAll();
       this.showActivities('lifestyle');
@@ -2794,7 +2465,6 @@ window.Modals = {
           </div>
           <div class="summary-stat" style="grid-column: span 2;">
             <span class="lbl">Pegangan / Kepercayaan Akhir</span>
-            <span class="val">${GameState.getBeliefObj(s.belief).icon} ${GameState.getBeliefObj(s.belief).name}</span>
           </div>
         </div>
         ${kidsHtml}
@@ -2856,8 +2526,7 @@ window.Modals = {
     const roll = stateOverride || Sim.rollSpouseMigrationDecision(s, destCountryId);
     const agreed = Boolean(roll.agreed);
     const persuasionUsed = Boolean(roll.persuasionUsed);
-    const syariah = window.LegalInheritanceEngine && LegalInheritanceEngine.isSyariahApplicable(s);
-    const courtLabel = syariah ? 'Mahkamah Syariah' : `Mahkamah Sivil ${fromC.name}`;
+    const courtLabel = `Mahkamah Sivil ${fromC.name}`;
 
     let bodyHtml = `
       <div class="info-banner highlight" style="line-height:1.6;">

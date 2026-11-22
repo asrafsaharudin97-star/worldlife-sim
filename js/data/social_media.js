@@ -1,5 +1,5 @@
 /* ==========================================================================
-   WorldLife — Laman Sosial, Kerjaya Viral & Aplikasi Jodoh / Ta'aruf Halal
+   WorldLife — Laman Sosial, Kerjaya Viral & Aplikasi Sesi Date
    Bahasa Melayu
    ========================================================================== */
 
@@ -196,7 +196,7 @@ window.SocialMedia = {
   },
 
   // --------------------------------------------------------------------------
-  // APLIKASI JODOH (SwipeMatch) & PLATFORM TA'ARUF HALAL (BaitulMuslim)
+  // APLIKASI SESI DATE (SwipeMatch)
   // --------------------------------------------------------------------------
   HIDDEN_TRAITS: [
     { id: 'soulmate', label: 'Jodoh Sejati', isRedFlag: false, desc: 'Setia, penyayang & menyokong jatuh bangun anda.' },
@@ -210,27 +210,11 @@ window.SocialMedia = {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     const c = Utils.getCountry(s.countryId);
-    const muslim = Relationships.isMuslim(s);
     const targetGender = s.gender === 'male' ? 'female' : 'male';
-    const minAge = muslim ? 18 : 16;
+    const minAge = 16;
 
     const wealthTiers = ['Sederhana', 'Stabil', 'Berada', 'Mewah'];
     const list = [];
-    const religionPool = ['islam', 'christianity', 'buddhism', 'hinduism', 'sikhism', 'none'];
-    const shuffledReligions = [...religionPool].sort(() => Math.random() - 0.5);
-    // Pastikan kepelbagaian agama yang nyata dalam setiap senarai 3 calon (tidak terkunci pada Islam sahaja)
-    const isMuslimMajority = window.LegalInheritanceEngine && LegalInheritanceEngine.isMuslimCountry(s.countryId);
-    const pickedBeliefs = [];
-    for (let i = 0; i < 3; i++) {
-      if (i === 0 && isMuslimMajority && Utils.chance(0.45)) {
-        pickedBeliefs.push('islam');
-      } else {
-        const nextUnused = shuffledReligions.find(r => !pickedBeliefs.includes(r));
-        pickedBeliefs.push(nextUnused || Utils.pick(religionPool));
-      }
-    }
-    // Kocok susunan calon supaya agama tidak sentiasa pada kedudukan tetap
-    pickedBeliefs.sort(() => Math.random() - 0.5);
 
     for (let i = 0; i < 3; i++) {
       const heritage = Utils.pick(c.heritages).id;
@@ -240,13 +224,7 @@ window.SocialMedia = {
       const looks = Utils.randInt(45, 96);
       const wealth = Utils.pick(wealthTiers);
 
-      const belief = pickedBeliefs[i];
-      const bObj = GameState.getBeliefObj(belief);
-      const religionLabel = bObj ? bObj.name : 'Tidak Beragama';
-
-      const traitPool = muslim
-        ? (Utils.chance(0.62) ? [this.HIDDEN_TRAITS[0]] : [this.HIDDEN_TRAITS[1], this.HIDDEN_TRAITS[2], this.HIDDEN_TRAITS[4]])
-        : (Utils.chance(0.42) ? [this.HIDDEN_TRAITS[0]] : this.HIDDEN_TRAITS.slice(1));
+      const traitPool = Utils.chance(0.50) ? [this.HIDDEN_TRAITS[0]] : this.HIDDEN_TRAITS.slice(1);
       const hiddenTrait = Utils.pick(traitPool);
 
       list.push({
@@ -257,9 +235,7 @@ window.SocialMedia = {
         job,
         looks,
         wealth,
-        belief,
-        religion: religionLabel,
-        compatibility: Relationships.computeCompatibility(s, belief),
+        compatibility: Utils.randInt(55, 96),
         hiddenTraitId: hiddenTrait.id
       });
     }
@@ -271,8 +247,7 @@ window.SocialMedia = {
   matchCandidate(uid) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    const muslim = Relationships.isMuslim(s);
-    const minAge = muslim ? 18 : 16;
+    const minAge = 16;
     if (s.age < minAge) return { ok: false, msg: `Tunggu umur ${minAge} tahun dahulu!` };
     if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan aktif!' };
 
@@ -309,7 +284,6 @@ window.SocialMedia = {
       const courtRes = Relationships.evaluateCourtingAcceptance(s, {
         name: cand.name,
         age: cand.age,
-        belief: cand.belief,
         job: cand.job
       });
       if (!courtRes.accepted) {
@@ -327,17 +301,13 @@ window.SocialMedia = {
       }
     }
 
-    const roleLabel = muslim
-      ? (cand.gender === 'female' ? 'Sesi Date (Wanita)' : 'Sesi Date (Lelaki)')
-      : (cand.gender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
-
-    const bObj = GameState.getBeliefObj(cand.belief);
+    const roleLabel = cand.gender === 'female' ? 'Teman Wanita (Sesi Date)' : 'Teman Lelaki (Sesi Date)';
     const partner = {
       id: 'rel_partner_' + Date.now(),
       name: cand.name,
       role: roleLabel,
       category: 'partner',
-      stage: muslim ? 'taaruf' : 'dating',
+      stage: 'dating',
       origin: 'Sesi Date',
       gender: cand.gender,
       age: cand.age,
@@ -345,8 +315,6 @@ window.SocialMedia = {
       closeness: cand.hiddenTraitId === 'soulmate' ? Utils.randInt(72, 88) : Utils.randInt(54, 72),
       trust: cand.hiddenTraitId === 'soulmate' ? Utils.randInt(78, 92) : Utils.randInt(42, 68),
       compatibility: cand.compatibility,
-      belief: cand.belief,
-      religion: cand.religion || bObj.name,
       yearsTogether: 0,
       unresolvedConflict: false,
       hiddenTraitId: cand.hiddenTraitId,
@@ -359,23 +327,9 @@ window.SocialMedia = {
     s.partnerId = partner.id;
     s._datingPool = [];
 
-    // Jika watak Islam dan calon bukan Islam -> cetus dilema batas agama!
-    if (muslim && cand.belief !== 'islam') {
-      GameState.addJournalEntry(
-        `💘 Anda berkenalan dalam Sesi Date bersama ${cand.name} (${cand.age} thn, ${bObj.icon} ${bObj.name}). Perbezaan pegangan perlu dibincangkan mengikut batas syariah.`,
-        'spiritual'
-      );
-      GameState.save();
-      return {
-        ok: true,
-        msg: `Berpadanan dengan ${cand.name} — bincangkan batas agama dahulu.`,
-        followUpEvent: window.LIFE_EVENTS.buildInterfaithDilemmaEvent(s, partner, 'meeting')
-      };
-    }
-
     GameState.adjustStats({ happiness: 13 });
     GameState.addJournalEntry(
-      `💘 Melalui Sesi Date, anda mula mengenali ${cand.name} (${cand.age} thn, ${cand.job}, ${bObj.icon} ${bObj.name}) dan keluar bersama!`,
+      `💘 Melalui Sesi Date, anda mula mengenali ${cand.name} (${cand.age} thn, ${cand.job}) dan keluar bersama!`,
       'romance'
     );
     GameState.save();

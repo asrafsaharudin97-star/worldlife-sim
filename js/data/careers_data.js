@@ -339,11 +339,11 @@ window.CareersData = {
       desc: 'Menasihati CEO syarikat multinasional menyelesaikan masalah perniagaan rumit.'
     },
     {
-      id: 'car_shariah_finance', title: 'Eksekutif Perbankan Islam & Sukuk', industry: 'finance', icon: '🌙',
-      minEducation: 'bachelor', requiredFields: ['business_finance', 'law'], preferredCerts: ['cert_islamic_finance', 'cert_cfa'],
+      id: 'car_esg_finance', title: 'Eksekutif Kewangan Lestari & ESG', industry: 'finance', icon: '🌿',
+      minEducation: 'bachelor', requiredFields: ['business_finance', 'law'], preferredCerts: ['cert_ethical_finance', 'cert_cfa'],
       baseSalary: 58000, stressLevel: 52, isRare: false,
-      promotionLadder: ['Pegawai Kewangan Islam', 'Penganalisis Sukuk Kanan', 'Pengurus Produk Syariah', 'Ketua Perbankan Islam', 'Pengarah Kewangan Islam'],
-      desc: 'Merangka instrumen pelaburan patuh Syariah, takaful dan sukuk global.'
+      promotionLadder: ['Pegawai Kewangan ESG', 'Penganalisis Bon Hijau Kanan', 'Pengurus Produk Lestari', 'Ketua Kewangan Lestari', 'Pengarah Pelaburan ESG'],
+      desc: 'Merangka instrumen pelaburan beretika ESG, bon hijau dan dana lestari global.'
     },
     {
       id: 'car_marketing_mgr', title: 'Pengurus Pemasaran & Jenama Digital', industry: 'finance', icon: '📣',

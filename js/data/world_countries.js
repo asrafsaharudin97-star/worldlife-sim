@@ -60,11 +60,11 @@
       female: ['Ananya', 'Priya', 'Diya', 'Kavya', 'Meera', 'Sneha', 'Pooja', 'Neha', 'Riya', 'Aisha'],
       last: ['Sharma', 'Patel', 'Verma', 'Singh', 'Gupta', 'Reddy', 'Nair', 'Desai', 'Mehta', 'Perera']
     },
-    south_asian_muslim: {
+    south_asian_west: {
       style: 'standard',
       male: ['Bilal', 'Hamza', 'Usman', 'Tariq', 'Zain', 'Imran', 'Saad', 'Faisal', 'Hassan', 'Rafiq'],
       female: ['Ayesha', 'Fatima', 'Zara', 'Hina', 'Sana', 'Mariam', 'Nadia', 'Amina', 'Sadia', 'Farzana'],
-      last: ['Khan', 'Ahmed', 'Hussain', 'Rahman', 'Malik', 'Chowdhury', 'Siddiqui', 'Qureshi', 'Islam', 'Ali']
+      last: ['Khan', 'Ahmed', 'Hussain', 'Rahman', 'Malik', 'Chowdhury', 'Siddiqui', 'Qureshi', 'Karim', 'Ali']
     },
     arabic_me: {
       style: 'arabic',
@@ -123,7 +123,7 @@
     east_african: {
       style: 'standard',
       male: ['Juma', 'Baraka', 'Dawit', 'Samuel', 'Kelvin', 'Brian', 'Yohannes', 'Abdi', 'Hassan', 'David'],
-      female: ['Amina', 'Wanjiku', 'Neema', 'Selam', 'Faith', 'Grace', 'Halima', 'Bethlehem', 'Asha', 'Lydia'],
+      female: ['Amina', 'Wanjiku', 'Neema', 'Selam', 'Farah', 'Grace', 'Halima', 'Bethlehem', 'Asha', 'Lydia'],
       last: ['Ochieng', 'Kamau', 'Mwangi', 'Tesfaye', 'Bekele', 'Njoroge', 'Hassan', 'Mushi', 'Kariuki', 'Abebe']
     },
     southern_african: {
@@ -143,11 +143,11 @@
   // Format: [id, name, flag, continent, currencyCode, currencySymbol, usdRate, salaryMult, costOfLiving, taxRate, healthTier, healthCostFactor, eduQuality, safetyIndex, lifeExp, cultureGroup, capitalCity]
   const WORLD_LIST = [
     // ================= ASIA (48) =================
-    ['AF','Afghanistan','🇦🇫','Asia','AFN','؋',71,0.14,0.24,0.10,'Terhad',0.25,35,28,63,'south_asian_muslim','Kabul'],
+    ['AF','Afghanistan','🇦🇫','Asia','AFN','؋',71,0.14,0.24,0.10,'Terhad',0.25,35,28,63,'south_asian_west','Kabul'],
     ['AM','Armenia','🇦🇲','Asia','AMD','֏',390,0.34,0.40,0.20,'Subsidi',0.45,74,78,76,'slavic_east_eu','Yerevan'],
     ['AZ','Azerbaijan','🇦🇿','Asia','AZN','₼',1.7,0.38,0.42,0.14,'Subsidi',0.45,72,72,74,'persian_turkic','Baku'],
     ['BH','Bahrain','🇧🇭','Asia','BHD','BD ',0.38,0.92,0.68,0.00,'Percuma / Subsidi',0.35,80,76,79,'arabic_me','Manama'],
-    ['BD','Bangladesh','🇧🇩','Asia','BDT','৳',118,0.22,0.28,0.15,'Subsidi',0.25,58,56,74,'south_asian_muslim','Dhaka'],
+    ['BD','Bangladesh','🇧🇩','Asia','BDT','৳',118,0.22,0.28,0.15,'Subsidi',0.25,58,56,74,'south_asian_west','Dhaka'],
     ['BT','Bhutan','🇧🇹','Asia','BTN','Nu ',83,0.26,0.32,0.10,'Percuma',0.15,66,82,73,'south_asian','Thimphu'],
     ['BN','Brunei','🇧🇳','Asia','BND','B$',1.34,0.95,0.62,0.00,'Percuma',0.10,82,86,77,'malay_sea','Bandar Seri Begawan'],
     ['KH','Kemboja','🇰🇭','Asia','KHR','៛',4100,0.24,0.34,0.12,'Swasta / Subsidi',0.35,55,62,71,'thai_sea','Phnom Penh'],
@@ -167,13 +167,13 @@
     ['LA','Laos','🇱🇦','Asia','LAK','₭',21000,0.20,0.32,0.12,'Terhad',0.30,54,68,69,'thai_sea','Vientiane'],
     ['LB','Lubnan','🇱🇧','Asia','LBP','L£',89000,0.28,0.46,0.14,'Swasta',0.60,72,46,76,'arabic_me','Beirut'],
     ['MY','Malaysia','🇲🇾','Asia','MYR','RM ',4.45,0.52,0.42,0.14,'Subsidi (KKM)',0.18,80,74,77,'malay_sea','Kuala Lumpur'],
-    ['MV','Maldives','🇲🇻','Asia','MVR','Rf ',15.4,0.48,0.58,0.08,'Subsidi',0.40,72,78,80,'south_asian_muslim','Malé'],
+    ['MV','Maldives','🇲🇻','Asia','MVR','Rf ',15.4,0.48,0.58,0.08,'Subsidi',0.40,72,78,80,'south_asian_west','Malé'],
     ['MN','Mongolia','🇲🇳','Asia','MNT','₮',3420,0.32,0.38,0.10,'Subsidi',0.35,74,70,72,'east_asian_cn','Ulaanbaatar'],
     ['MM','Myanmar','🇲🇲','Asia','MMK','K ',2100,0.18,0.28,0.10,'Terhad',0.30,50,38,67,'thai_sea','Naypyidaw'],
     ['NP','Nepal','🇳🇵','Asia','NPR','Rs ',133,0.20,0.26,0.12,'Subsidi',0.25,58,68,71,'south_asian','Kathmandu'],
     ['KP','Korea Utara','🇰🇵','Asia','KPW','₩',900,0.14,0.25,0.05,'Kerajaan',0.20,62,48,73,'korean','Pyongyang'],
     ['OM','Oman','🇴🇲','Asia','OMR','OMR ',0.38,0.92,0.62,0.00,'Percuma / Subsidi',0.25,78,86,78,'arabic_me','Muscat'],
-    ['PK','Pakistan','🇵🇰','Asia','PKR','Rs ',278,0.22,0.25,0.14,'Subsidi / Swasta',0.28,55,48,68,'south_asian_muslim','Islamabad'],
+    ['PK','Pakistan','🇵🇰','Asia','PKR','Rs ',278,0.22,0.25,0.14,'Subsidi / Swasta',0.28,55,48,68,'south_asian_west','Islamabad'],
     ['PS','Palestin','🇵🇸','Asia','ILS','₪',3.7,0.30,0.42,0.10,'Subsidi',0.35,74,40,75,'arabic_me','Baitulmaqdis / Ramallah'],
     ['PH','Filipina','🇵🇭','Asia','PHP','₱',56.5,0.32,0.36,0.18,'Subsidi / Swasta',0.38,70,58,72,'filipino','Manila'],
     ['QA','Qatar','🇶🇦','Asia','QAR','QR ',3.64,1.35,0.82,0.00,'Percuma / Subsidi',0.25,84,92,81,'arabic_me','Doha'],

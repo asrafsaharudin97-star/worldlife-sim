@@ -482,7 +482,7 @@ window.Dynasty = {
         {
           label: '🕊️ Pertahankan: Jawab Telus Guna Reputasi & Karma Tinggi',
           hint: `Percuma • Peluang menang ~${Math.round(karmaProb * 100)}% (bergantung Karma & Reputasi)`,
-          journalType: 'spiritual',
+          journalType: 'mindful',
           customAction: (st) => resolveDefense(st, karmaProb, 0, 'penjelasan telus & rekod integriti')
         },
         {
@@ -584,7 +584,7 @@ window.Dynasty = {
         {
           label: '🔥 Tampil Sendiri Dengan Keberanian & Kejujuran',
           hint: `Percuma • Peluang berjaya ~${Math.round(gritProb * 100)}%`,
-          journalType: 'spiritual',
+          journalType: 'mindful',
           customAction: (st) => resolveRedeem(st, gritProb, 0, 'keberanian dan kejujuran peribadi')
         },
         {

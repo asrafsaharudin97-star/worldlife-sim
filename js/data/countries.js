@@ -229,7 +229,7 @@ window.COUNTRIES = {
       uniDuration: 4
     },
     festivals: [
-      { name: 'Oshogatsu (Tahun Baru Jepun)', icon: '⛩️', desc: 'Kunjungan kuil Hatsumode, ramalan Omikuji dan sampul Otoshidama!' },
+      { name: 'Oshogatsu (Tahun Baru Jepun)', icon: '⛩️', desc: 'Kunjungan tradisi Hatsumode, ramalan Omikuji dan sampul Otoshidama!' },
       { name: 'Musim Sakura Hanami', icon: '🌸', desc: 'Berkelah di bawah bunga sakura mekar bersama rakan.' },
       { name: 'Matsuri Musim Panas & Bunga Api', icon: '🎆', desc: 'Memakai Yukata, makan Takoyaki dan menonton bunga api tepi sungai.' },
       { name: 'Musim Luruh Momiji', icon: '🍁', desc: 'Mengembara menyaksikan daun maple merah menyala.' }
@@ -239,7 +239,7 @@ window.COUNTRIES = {
       { id: 'jp_onsen', title: 'Percutian Onsen Hakone', icon: '♨️', desc: 'Berendam di kolam air panas mineral dan bersantai memakai Yukata.', cost: 16000, effects: { health: 12, happiness: 15, adaptation: 11 } },
       { id: 'jp_izakaya', title: 'Makan Malam di Lorong Izakaya', icon: '🍢', desc: 'Yakitori panas, ramen dan suasana lorong tanglung klasik.', cost: 4500, effects: { happiness: 12, health: -2, adaptation: 10 } },
       { id: 'jp_lang', title: 'Belajar Bahasa Jepun & Keigo', icon: '🈶', desc: 'Berlatih tulisan Kanji dan bahasa sopan harian.', cost: 6000, effects: { smarts: 5, adaptation: 16 } },
-      { id: 'jp_shinkansen', title: 'Lawatan Shinkansen ke Kyoto', icon: '🚄', desc: 'Naik kereta api laju ke hutan buluh Arashiyama & kuil bersejarah.', cost: 28000, effects: { happiness: 16, smarts: 2, adaptation: 12 } }
+      { id: 'jp_shinkansen', title: 'Lawatan Shinkansen ke Kyoto', icon: '🚄', desc: 'Naik kereta api laju ke hutan buluh Arashiyama & taman bersejarah.', cost: 28000, effects: { happiness: 16, smarts: 2, adaptation: 12 } }
     ],
     jobs: [
       { id: 'jp_konbini_staff', title: 'Pekerja Konbini (Baito)', icon: '🏪', minAge: 18, reqDegree: false, salary: 2800000, desc: 'Layanan pelanggan pantas dan serba kemas.' },

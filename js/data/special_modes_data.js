@@ -193,7 +193,7 @@ window.SpecialModesData = {
         { id: 'fm_lindung_krisis', icon: '☂️', risk: 'low', baseSuccess: 89, title: 'Strategi Lindung Nilai (Hedging) Risiko', desc: 'Lindungi modal pelabur daripada kejutan pasaran mengejut.', m1: 5, m2: -5, smarts: 3, rep: 3, stress: -4 },
         { id: 'fm_dana_kripto',    icon: '₿',  title: 'Buka Meja Arbitraj Aset Digital', desc: 'Eksploitasi perbezaan harga antara bursa kripto global.', m1: 11, m2: 7, moneyUsd: 42000, stress: 8 },
         { id: 'fm_sidang_kewangan',icon: '🎤', title: 'Panelis Utama Sidang Kewangan Global', desc: 'Pandangan pasaran anda menggerakkan indeks bursa seluruh rantau!', m1: 8, m2: -2, fame: 11, rep: 6 },
-        { id: 'fm_syariah_fund',   icon: '🌙', title: 'Lancar Dana Pelaburan Etika & Patuh Syariah', desc: 'Tarik pelabur institusi beretika dengan pulangan mantap.', m1: 9, m2: -6, karma: 10, rep: 6, moneyUsd: 20000 },
+        { id: 'fm_ethical_fund',   icon: '🌿', title: 'Lancar Dana Pelaburan Etika & Lestari ESG', desc: 'Tarik pelabur institusi beretika dengan pulangan mantap.', m1: 9, m2: -6, karma: 10, rep: 6, moneyUsd: 20000 },
         { id: 'fm_rare_big_short', icon: '⚡', isRare: true, title: '🌟 PELUANG EMAS: Ramalan "The Big Short" Dekad Ini!', desc: 'PELUANG TERHAD: Data anda mengesan kejatuhan besar pasaran kredit — pertaruhan berani ini boleh mencipta sejarah!', m1: 24, m2: 6, moneyUsd: 165000, fame: 16, rep: 10, stress: 12 }
       ],
       dilemmas: [

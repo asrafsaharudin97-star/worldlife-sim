@@ -49,7 +49,7 @@ window.ActivitiesData = {
       mountain: 'lembah Hakone & denai kaki Gunung Fuji',
       coast: 'pesisir Okinawa & Teluk Kamakura',
       foodSpot: 'kedai ramen lorong sempit, takoyaki Dotonbori & pasar Tsukiji',
-      heritage: 'kuil klasik Kyoto & pekan lama Takayama',
+      heritage: 'taman klasik Kyoto & pekan lama Takayama',
       rail: 'kereta api Shinkansen & tren desa tempatan',
       market: 'kedai vintage Shimokitazawa & pasar Ameyoko'
     },
@@ -65,7 +65,7 @@ window.ActivitiesData = {
       mountain: 'pergunungan Doi Inthanon Chiang Mai',
       coast: 'Pulau Krabi & Teluk Phang Nga',
       foodSpot: 'gerai pad thai, tomyam pekat & pulut mangga jalanan Bangkok',
-      heritage: 'kota purba Ayutthaya & kuil lama',
+      heritage: 'kota purba Ayutthaya & istana lama',
       rail: 'kereta api malam dari Bangkok ke Chiang Mai',
       market: 'Pasar Minggu Chatuchak & pasar malam Jodd Fairs'
     },
@@ -836,7 +836,7 @@ window.ActivitiesData = {
       encounterGroup: 'volunteer',
       desc: 'Turun padang mengagihkan makanan panas kepada golongan memerlukan atau membersihkan pantai di {country}.',
       outcomes: [
-        { tier: 'great', text: 'Doa dan senyuman mereka yang dibantu menyentuh hati anda. Usaha murni komuniti anda turut mendapat pujian ramai di {city}!', stats: { happiness: 16, health: 3 }, karma: 14, rep: 6, stress: -14 },
+        { tier: 'great', text: 'Ucapan terima kasih dan senyuman mereka yang dibantu menyentuh hati anda. Usaha murni komuniti anda turut mendapat pujian ramai di {city}!', stats: { happiness: 16, health: 3 }, karma: 14, rep: 6, stress: -14 },
         { tier: 'normal', text: 'Penat bekerja seharian, tetapi hati terasa sangat bersih dan bermakna.', stats: { happiness: 11 }, karma: 9, rep: 3, stress: -9 },
         { tier: 'twist', text: 'Cuaca panas terik membuatkan anda hampir pitam akibat dehidrasi ringan semasa bertugas.', stats: { health: -5, happiness: 4 }, karma: 7 }
       ]
@@ -1975,7 +1975,7 @@ window.ActivitiesData = {
         {
           label: 'Tenangkan kanak-kanak itu & bawa ke kaunter keselamatan',
           hint: 'Karma +++, Reputasi Keluarga ++',
-          effect: { stats: { happiness: 15 }, karma: 15, rep: 6, stress: -8, outcomeText: 'Ibu bapanya berlari memeluk anak mereka sambil menangis kesyukuran dan mendoakan kesejahteraan hidup anda sekeluarga!' }
+          effect: { stats: { happiness: 15 }, karma: 15, rep: 6, stress: -8, outcomeText: 'Ibu bapanya berlari memeluk anak mereka sambil menangis kesyukuran dan mengucapkan jutaan terima kasih kepada anda sekeluarga!' }
         },
         {
           label: 'Belikan aiskrim sementara pengawal membuat pengumuman pembesar suara',

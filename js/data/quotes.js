@@ -45,7 +45,7 @@ window.LIFE_QUOTES = [
   },
   {
     "category": "struggle",
-    "quote": "Jangan berdoa untuk hidup yang mudah; berdoalah agar diberi kekuatan untuk mengharungi hidup yang sukar.",
+    "quote": "Jangan hanya berharap hidup yang mudah; binalah kekuatan untuk mengharungi hidup yang sukar.",
     "author": "Bruce Lee"
   },
   {

@@ -1,31 +1,14 @@
 /* ==========================================================================
    WorldLife — Enjin Hubungan Sosial, Rakan, Pasangan & Perkahwinan
-   (Termasuk Peraturan Patuh Syariah untuk Watak Beragama Islam)
    ========================================================================== */
 
 window.Relationships = {
-  isMuslim(s) {
-    if (!s) return false;
-    if (window.LegalInheritanceEngine && LegalInheritanceEngine.isIslamic) {
-      return LegalInheritanceEngine.isIslamic(s);
-    }
-    if (s.religion) return s.religion === 'Islam';
-    return s.belief === 'islam';
-  },
 
   ensureRelationshipFields(s) {
     if (!s || !Array.isArray(s.relationships)) return;
-    const famBelief = s.familyBelief || s.belief || 'unassigned';
     for (const r of s.relationships) {
       if (typeof r.trust !== 'number') r.trust = Utils.clamp((r.closeness || 65) + Utils.randInt(-8, 8), 20, 100);
       if (typeof r.compatibility !== 'number') r.compatibility = Utils.randInt(55, 95);
-      if (!r.belief) {
-        if (['Ibu', 'Ayah', 'Abang', 'Kakak', 'Adik/Abang', 'Adik/Kakak', 'Anak Lelaki', 'Anak Perempuan'].includes(r.role)) {
-          r.belief = famBelief;
-        } else {
-          r.belief = window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(r.countryId || s.countryId) : 'unassigned';
-        }
-      }
       if (!r.category) {
         if (r.id === s.partnerId) r.category = s.married ? 'spouse' : 'partner';
         else if (r.role === 'Rakan' || r.role === 'Sahabat Karib') r.category = 'friend';
@@ -34,7 +17,7 @@ window.Relationships = {
       }
       if (r.id === s.partnerId && !r.stage) {
         if (s.married) r.stage = 'married';
-        else r.stage = this.isMuslim(s) ? 'taaruf' : 'dating';
+        else r.stage = 'dating';
       }
       if (typeof r.isAlive !== 'boolean') r.isAlive = Boolean(r.alive);
       if (r.category === 'partner' || r.category === 'spouse' || r.id === s.partnerId) {
@@ -102,9 +85,9 @@ window.Relationships = {
         desc: 'Sekolah Kebangsaan kerajaan (Percuma) • Pertumbuhan Kepintaran standard'
       },
       {
-        id: 'sekolah_agama_swasta',
-        label: 'Sekolah Rendah (Agama / Swasta)',
-        short: 'Sekolah Agama / Swasta',
+        id: 'sekolah_swasta',
+        label: 'Sekolah Rendah Swasta',
+        short: 'Sekolah Swasta',
         icon: '🕌',
         feeUsd: 850,
         smartsBonus: [4, 6],
@@ -151,9 +134,9 @@ window.Relationships = {
         desc: 'Syarat Kepintaran >= 75% • Kos rendah, lonjakan kuat +Kepintaran & disiplin tinggi'
       },
       {
-        id: 'sekolah_agama_swasta',
-        label: 'Sekolah Menengah (Agama / Swasta)',
-        short: 'Sekolah Agama / Swasta',
+        id: 'sekolah_swasta',
+        label: 'Sekolah Menengah Swasta',
+        short: 'Sekolah Swasta',
         icon: '🕌',
         feeUsd: 1100,
         smartsBonus: [4, 7],
@@ -262,7 +245,7 @@ window.Relationships = {
           child.schoolLabel = 'Belum Mendaftar Tadika';
           child.yearlySchoolFee = 0;
         } else {
-          // Bawa jenis sekolah setara jika bertukar dari rendah ke menengah (cth: agama/swasta atau antarabangsa)
+          // Bawa jenis sekolah setara jika bertukar dari rendah ke menengah (cth: swasta atau antarabangsa)
           let fallbackOpt = stageOpts[0];
           if (child.schoolType && stageOpts.some(o => o.id === child.schoolType)) {
             fallbackOpt = stageOpts.find(o => o.id === child.schoolType);
@@ -707,18 +690,14 @@ window.Relationships = {
     return { ok: true, stayed: false, droppedOut: true, msg };
   },
 
-  computeCompatibility(s, npcBelief) {
-    let base = Utils.randInt(52, 92);
-    if (s.belief && npcBelief && s.belief === npcBelief) base = Utils.clamp(base + 12, 40, 100);
-    else if (this.isMuslim(s) && npcBelief !== 'islam') base = Utils.clamp(base - 10, 30, 85);
-    return base;
+  computeCompatibility(s) {
+    return Utils.randInt(52, 95);
   },
 
   // --------------------------------------------------------------------------
-  // 0B. PENGIRAAN PELUANG PENOLAKAN TA'ARUF / BERKENALAN & LAMARAN
+  // 0B. PENGIRAAN PELUANG PENOLAKAN SESI DATE & LAMARAN
   // --------------------------------------------------------------------------
   evaluateCourtingAcceptance(s, candidate = {}) {
-    const muslim = this.isMuslim(s);
     const looks = (s.stats && s.stats.looks) ?? 65;
     const smarts = (s.stats && s.stats.smarts) ?? 65;
     const karma = (s.alignment && s.alignment.karma) ?? 0;
@@ -726,8 +705,6 @@ window.Relationships = {
     const crim = (s.criminalRecord || 0) + ((s.prison && s.prison.timesImprisoned) || 0);
     const candAge = candidate.age ?? s.age;
     const ageGap = Math.abs(s.age - candAge);
-    const candBelief = candidate.belief || s.belief;
-    const sameReligion = Boolean(s.belief && candBelief && s.belief === candBelief);
     const hasIncomeOrFunds = Boolean(s.job || s.activeSpecialMode || (s.money || 0) >= Utils.usdToLocal(1500, s.countryId));
 
     let acceptProb = 0.74;
@@ -738,8 +715,6 @@ window.Relationships = {
     else if (s.age >= 23) acceptProb -= 0.14;
     if ((s.money || 0) < 0) acceptProb -= 0.12;
 
-    if (sameReligion) acceptProb += 0.06;
-    else if (muslim && candBelief !== 'islam') acceptProb -= 0.18;
 
     if (ageGap >= 15) acceptProb -= 0.25;
     else if (ageGap >= 9) acceptProb -= 0.12;
@@ -762,9 +737,7 @@ window.Relationships = {
     if (crim > 0 || notoriety >= 30 || (s.fugitive && s.fugitive.isFugitive)) {
       reasonTag = 'criminal_record';
       shortMsg = `${cName} menolak perkenalan: "Tolak sebab rekod jenayah / latar belakang"`;
-      logText = muslim
-        ? `🚫 Sesi ta'aruf bersama ${cName} (${candAge} thn) ditolak oleh pihak keluarganya kerana bimbang akan rekod jenayah dan latar belakang masa silam anda.`
-        : `🚫 ${cName} (${candAge} thn) menolak untuk keluar bersama selepas mengetahui rekod jenayah dan reputasi buruk anda.`;
+      logText = `🚫 ${cName} (${candAge} thn) menolak untuk keluar bersama selepas mengetahui rekod jenayah dan reputasi buruk anda.`;
     } else if (ageGap >= 10) {
       reasonTag = 'age_gap';
       shortMsg = `${cName} menolak: "Tolak sebab jurang umur & perbezaan latar belakang"`;
@@ -772,23 +745,15 @@ window.Relationships = {
     } else if (!hasIncomeOrFunds && s.age >= 23 && Utils.chance(0.55)) {
       reasonTag = 'financial_background';
       shortMsg = `${cName} menolak: "Tolak sebab latar belakang kewangan belum stabil"`;
-      logText = muslim
-        ? `😔 Wakil keluarga ${cName} memaklumkan pihak mereka menolak ta'aruf buat masa ini kerana kedudukan kerjaya dan kewangan anda masih belum stabil.`
-        : `😔 ${cName} menolak ajakan bercinta kerana merasakan kedudukan kerjaya serta kewangan anda belum cukup kukuh.`;
+      logText = `😔 ${cName} menolak ajakan bercinta kerana merasakan kedudukan kerjaya serta kewangan anda belum cukup kukuh.`;
     } else if (Utils.chance(0.45)) {
       reasonTag = 'ghosted';
-      shortMsg = muslim
-        ? `Kena ghost selepas taaruf oleh ${cName}!`
-        : `Kena ghost selepas sesi perkenalan dengan ${cName}!`;
-      logText = muslim
-        ? `👻 Kena ghost selepas taaruf! Selepas pertemuan awal, ${cName} terus menyepi dan tidak lagi membalas sebarang kiriman khabar melalui orang tengah.`
-        : `👻 Kena ghost selepas berkenalan! ${cName} terus hilang tanpa berita dan menyekat mesej anda selepas pertemuan pertama.`;
+      shortMsg = `Kena ghost selepas sesi perkenalan dengan ${cName}!`;
+      logText = `👻 Kena ghost selepas berkenalan! ${cName} terus hilang tanpa berita dan menyekat mesej anda selepas pertemuan pertama.`;
     } else {
       reasonTag = 'friendzone';
       shortMsg = `${cName}: "Tiada keserasian / Hanya anggap kawan"`;
-      logText = muslim
-        ? `🕊️ Selepas sesi ta'aruf, ${cName} menyampaikan secara berhemah bahawa tiada keserasian hati dan lebih selesa menganggap anda sebagai kenalan biasa.`
-        : `🕊️ ${cName} berterus terang bahawa tiada keserasian romantik antara kalian — "Maaf, saya hanya anggap awak sebagai kawan."`;
+      logText = `🕊️ ${cName} berterus terang bahawa tiada keserasian romantik antara kalian — "Maaf, saya hanya anggap awak sebagai kawan."`;
     }
 
     return {
@@ -801,7 +766,6 @@ window.Relationships = {
   },
 
   buildFamilyRejectionEvent(s, rel, stageLabel = 'Merisik & Bertunang') {
-    const muslim = this.isMuslim(s);
     const hasCrime = (s.criminalRecord || 0) > 0 || ((s.alignment && s.alignment.notoriety) || 0) >= 25 || Boolean(s.fugitive && s.fugitive.isFugitive);
     const reasonDesc = hasCrime
       ? 'rekod jenayah serta reputasi buruk anda'
@@ -813,7 +777,7 @@ window.Relationships = {
       id: `family_reject_${rel.id}_${s.age}_${Date.now()}`,
       icon: '🛑',
       title: `Penolakan Keluarga Pasangan (${stageLabel})`,
-      text: `Ibu bapa ${rel.name} tidak merestui hubungan ini! Dalam pertemuan bersama keluarga, wakil keluarga ${rel.name} menyuarakan bantahan tegas kerana ${reasonDesc}.\n\n"${muslim ? 'Kami berat hati untuk menerima pinangan ini selagi belum nampak perubahan dan jaminan hidup yang kukuh.' : 'Kami tidak merestui hubungan kamu berdua selagi keadaan hidup dan reputasi kamu masih begini.'}"`,
+      text: `Ibu bapa ${rel.name} tidak merestui hubungan ini! Dalam pertemuan bersama keluarga, wakil keluarga ${rel.name} menyuarakan bantahan tegas kerana ${reasonDesc}.\n\n"Kami tidak merestui hubungan kamu berdua selagi keadaan hidup dan reputasi kamu masih begini."`,
       choices: [
         {
           label: '💪 Pujuk & Buktikan Diri (Cuba Semula Tahun Depan)',
@@ -884,10 +848,9 @@ window.Relationships = {
     const gender = Utils.chance(0.5) ? 'male' : 'female';
     const heritage = Utils.pick(c.heritages).id;
     const name = Utils.generateName(s.countryId, gender, heritage);
-    const belief = window.LIFE_EVENTS ? window.LIFE_EVENTS.pickFamilyBelief(s.countryId, heritage) : 'unassigned';
     const age = Utils.clamp(s.age + Utils.randInt(-4, 5), 7, 82);
     const job = age < 18 ? 'Pelajar' : (origin === 'Tempat Kerja' && s.job ? `Rakan Sekerja (${s.job.title})` : Utils.pick(c.jobs).title);
-    const compat = this.computeCompatibility(s, belief);
+    const compat = this.computeCompatibility(s);
 
     const friend = {
       id: 'rel_friend_' + Date.now() + '_' + Utils.randInt(10, 99),
@@ -901,7 +864,6 @@ window.Relationships = {
       closeness: Utils.randInt(45, 70),
       trust: Utils.randInt(45, 72),
       compatibility: compat,
-      belief,
       alive: true,
       job
     };
@@ -909,9 +871,8 @@ window.Relationships = {
     s.relationships.push(friend);
     s.yearlyActions.meetFriend = true;
     GameState.adjustStats({ happiness: 7, adaptation: 6 });
-    const bObj = GameState.getBeliefObj(belief);
     GameState.addJournalEntry(
-      `🤝 Anda berkenalan dengan rakan baru, ${name} (${age} thn, ${origin}, ${bObj.icon} ${bObj.name}) di ${s.city}.`,
+      `🤝 Anda berkenalan dengan rakan baru, ${name} (${age} thn, ${origin}) di ${s.city}.`,
       'culture'
     );
     GameState.save();
@@ -919,7 +880,7 @@ window.Relationships = {
   },
 
   // --------------------------------------------------------------------------
-  // 2. CARI PASANGAN / TA'ARUF (Patuh Peraturan Agama + Risiko Penolakan Realistik)
+  // 2. CARI PASANGAN / SESI DATE (Risiko Penolakan Realistik)
   // --------------------------------------------------------------------------
   meetLocalDate() {
     const s = GameState.current;
@@ -927,33 +888,24 @@ window.Relationships = {
     this.ensureRelationshipFields(s);
     const c = Utils.getCountry(s.countryId);
 
-    const muslim = this.isMuslim(s);
-    const minAge = muslim ? 18 : 16;
+    const minAge = 16;
     if (s.age < minAge) {
       return {
         ok: false,
-        msg: muslim
-          ? 'Tunggu sehingga umur 18 tahun untuk memulakan proses ta\'aruf yang serius!'
-          : 'Tunggu sehingga umur 16 tahun untuk bercinta!'
+        msg: 'Tunggu sehingga umur 16 tahun untuk memulakan Sesi Date!'
       };
     }
     if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan!' };
 
-    // Sentiasa pasangan berlawanan jantina (mematuhi peraturan ketat untuk watak Islam juga)
     const targetGender = s.gender === 'male' ? 'female' : 'male';
     const heritage = Utils.pick(c.heritages).id;
     const name = Utils.generateName(s.countryId, targetGender, heritage);
     const job = Utils.pick(c.jobs).title;
     const age = Utils.clamp(s.age + Utils.randInt(-4, 7), minAge, 75);
 
-    const religionPool = ['islam', 'christianity', 'buddhism', 'hinduism', 'sikhism', 'none'];
-    const isMuslimMajority = window.LegalInheritanceEngine && LegalInheritanceEngine.isMuslimCountry(s.countryId);
-    const partnerBelief = (isMuslimMajority && Utils.chance(0.32))
-      ? 'islam'
-      : Utils.pick(religionPool);
 
     // Semak penerimaan atau penolakan semasa Sesi Date
-    const courtRes = this.evaluateCourtingAcceptance(s, { name, age, belief: partnerBelief, job });
+    const courtRes = this.evaluateCourtingAcceptance(s, { name, age, job });
     if (!courtRes.accepted) {
       const hapHit = -Utils.randInt(5, 11);
       GameState.adjustStats({ happiness: hapHit });
@@ -968,18 +920,15 @@ window.Relationships = {
       };
     }
 
-    const compat = this.computeCompatibility(s, partnerBelief);
-    const bObj = GameState.getBeliefObj(partnerBelief);
-    const roleLabel = muslim
-      ? (targetGender === 'female' ? 'Sesi Date (Wanita)' : 'Sesi Date (Lelaki)')
-      : (targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
+    const compat = this.computeCompatibility(s);
+    const roleLabel = (targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
 
     const partner = {
       id: 'rel_partner_' + Date.now(),
       name,
       role: roleLabel,
       category: 'partner',
-      stage: muslim ? 'taaruf' : 'dating',
+      stage: 'dating',
       origin: 'Sesi Date',
       gender: targetGender,
       age,
@@ -987,8 +936,6 @@ window.Relationships = {
       closeness: Utils.randInt(54, 76),
       trust: Utils.randInt(58, 82),
       compatibility: compat,
-      belief: partnerBelief,
-      religion: bObj.name,
       yearsTogether: 0,
       unresolvedConflict: false,
       wantsChildren: Utils.chance(0.85),
@@ -1004,21 +951,9 @@ window.Relationships = {
     s.partnerId = partner.id;
     GameState.adjustStats({ happiness: 12, adaptation: 8 });
 
-    if (muslim && partnerBelief !== 'islam') {
-      GameState.addJournalEntry(
-        `💘 Anda berkenalan dalam Sesi Date bersama ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}. Perbezaan agama memerlukan perbincangan jujur mengenai batas syariah.`,
-        'spiritual'
-      );
-      GameState.save();
-      return {
-        ok: true,
-        msg: `Berkenalan dengan ${name} (${bObj.name}) — ada batas agama yang perlu dibincangkan.`,
-        followUpEvent: window.LIFE_EVENTS.buildInterfaithDilemmaEvent(s, partner, 'meeting')
-      };
-    }
 
     GameState.addJournalEntry(
-      `💘 Anda memulakan Sesi Date bersama ${name} (${age} thn, ${job}, ${bObj.icon} ${bObj.name}) di ${s.city}!`,
+      `💘 Anda memulakan Sesi Date bersama ${name} (${age} thn, ${job}) di ${s.city}!`,
       'romance'
     );
     GameState.save();
@@ -1039,8 +974,7 @@ window.Relationships = {
     const rel = s.relationships.find(r => r.id === relId);
     if (!rel || !rel.alive) return { ok: false, msg: 'Tidak dapat berinteraksi.' };
 
-    const muslim = this.isMuslim(s);
-    const nonRepeatable = !['engage', 'propose', 'have_kid', 'breakup', 'cohabit', 'cut_ties', 'interfaith_talk'].includes(action);
+    const nonRepeatable = !['engage', 'propose', 'have_kid', 'breakup', 'cohabit', 'cut_ties'].includes(action);
     const key = `rel_${relId}_${action}`;
     if (nonRepeatable && s.yearlyActions[key]) {
       return { ok: false, msg: `Anda sudah melakukan ini dengan ${rel.name} tahun ini.` };
@@ -1060,7 +994,7 @@ window.Relationships = {
       GameState.adjustStats({ happiness: 7 });
       const text = longDist
         ? `📱 Membuat panggilan video mesra bertanya khabar ${rel.name} di ${Utils.getCountry(rel.countryId).name}!`
-        : (muslim && rel.category === 'partner' && !s.married)
+        : (rel.category === 'partner' && !s.married)
           ? `☕ Berbual secara sopan dengan ${rel.name} (ditemani keluarga/di tempat awam) untuk saling mengenali hati budi.`
           : `😊 Meluangkan masa berkualiti bersama ${rel.name} di ${s.city}.`;
       GameState.addJournalEntry(text);
@@ -1133,20 +1067,8 @@ window.Relationships = {
       return { ok: true, msg: `Anda tidak lagi berkawan dengan ${rel.name}.` };
     }
 
-    // --- Bincang Batas Agama (untuk watak Islam bersama calon bukan Islam) ---
-    if (action === 'interfaith_talk') {
-      return {
-        ok: true,
-        msg: 'Membuka perbincangan jujur tentang batas agama...',
-        followUpEvent: window.LIFE_EVENTS.buildInterfaithDilemmaEvent(s, rel, 'talk')
-      };
-    }
-
-    // --- Tinggal Bersama Sebelum Kahwin (DISEKAT KETAT untuk watak Islam!) ---
+    // --- Tinggal Bersama Sebelum Kahwin ---
     if (action === 'cohabit') {
-      if (muslim) {
-        return { ok: false, msg: 'Tidak dibenarkan bagi watak beragama Islam — teruskan melalui bertunang dan akad nikah yang sah.' };
-      }
       if (s.married || rel.stage === 'cohabiting') return { ok: false, msg: 'Anda sudah tinggal bersama!' };
       if (rel.closeness < 65) return { ok: false, msg: 'Eratkan kemesraan ke 65%+ dahulu!' };
       rel.stage = 'cohabiting';
@@ -1161,13 +1083,6 @@ window.Relationships = {
     if (action === 'engage') {
       if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
       if (rel.stage === 'engaged') return { ok: false, msg: 'Anda sudah bertunang!' };
-      if (muslim && rel.belief !== 'islam') {
-        return {
-          ok: false,
-          msg: 'Bincangkan batas agama terlebih dahulu sebelum bertunang secara sah.',
-          followUpEvent: window.LIFE_EVENTS.buildInterfaithDilemmaEvent(s, rel, 'marriage_block')
-        };
-      }
       const cost = Utils.usdToLocal(350, s.countryId);
       const closeness = rel.closeness ?? 60;
       const trust = rel.trust ?? 60;
@@ -1176,7 +1091,7 @@ window.Relationships = {
       const isUnemployed = !s.job && !s.activeSpecialMode && !(s.isRetired || s.retired);
       const hasHeavyDebt = (s.money || 0) < cost || ((s.education && s.education.educationLoan > Utils.usdToLocal(25000, s.countryId)) && (s.money || 0) < cost * 2);
 
-      // Jika gagal sediakan kos cincin / hantaran merisik
+      // Jika gagal sediakan kos cincin & pertunangan
       if ((s.money || 0) < cost) {
         const hapLoss = -Utils.randInt(15, 25);
         const relLoss = Utils.randInt(20, 35);
@@ -1190,13 +1105,13 @@ window.Relationships = {
           rel.category = 'ex';
           rel.role = 'Bekas Pasangan';
           GameState.recordCrisis('heartbreak');
-          const brkMsg = `💔 Pinangan ditolak & hubungan putus! Anda gagal menyediakan kos cincin/hantaran (${Utils.formatMoney(cost, s.countryId)}) lalu ${rel.name} hilang keyakinan dan terus memutuskan hubungan.`;
+          const brkMsg = `💔 Pinangan ditolak & hubungan putus! Anda gagal menyediakan kos cincin pertunangan (${Utils.formatMoney(cost, s.countryId)}) lalu ${rel.name} hilang keyakinan dan terus memutuskan hubungan.`;
           GameState.addJournalEntry(brkMsg, 'warning');
           GameState.save();
           return { ok: false, rejected: true, brokeUp: true, msg: brkMsg };
         }
 
-        const rejMsg = `💔 Lamaran ditolak kerana anda tidak mampu menyediakan kos cincin/hantaran merisik (${Utils.formatMoney(cost, s.countryId)})! (Gembira ${hapLoss}, Kemesraan -${relLoss}%)`;
+        const rejMsg = `💔 Lamaran ditolak kerana anda tidak mampu menyediakan kos cincin pertunangan (${Utils.formatMoney(cost, s.countryId)})! (Gembira ${hapLoss}, Kemesraan -${relLoss}%)`;
         GameState.addJournalEntry(rejMsg, 'warning');
         GameState.save();
         return { ok: false, rejected: true, msg: rejMsg };
@@ -1219,9 +1134,9 @@ window.Relationships = {
       if (rejectRisk > 0 && Utils.chance(Math.min(0.92, rejectRisk))) {
         // Semak jika berpunca daripada Penolakan Keluarga Pasangan (rekod jenayah / reputasi buruk / tiada kerja)
         if (hasCrime || (isUnemployed && Utils.chance(0.65))) {
-          const famEv = this.buildFamilyRejectionEvent(s, rel, muslim ? 'Merisik & Bertunang' : 'Pertunangan');
+          const famEv = this.buildFamilyRejectionEvent(s, rel, 'Pertunangan');
           GameState.addJournalEntry(
-            `🛑 PENOLAKAN KELUARGA PASANGAN: Ibu bapa ${rel.name} tidak merestui hubungan ini apabila anda hadir untuk ${muslim ? 'merisik dan bertunang' : 'melamar pertunangan'}!`,
+            `🛑 PENOLAKAN KELUARGA PASANGAN: Ibu bapa ${rel.name} tidak merestui hubungan ini apabila anda hadir untuk melamar pertunangan!`,
             'warning'
           );
           GameState.save();
@@ -1258,7 +1173,7 @@ window.Relationships = {
           return { ok: false, rejected: true, brokeUp: true, msg: `Lamaran ditolak (${reasonText}) — ${rel.name} memutuskan hubungan!` };
         }
 
-        const rejLog = `💔 ${rel.name} menolak hasrat ${muslim ? 'merisik & bertunang' : 'bertunang'} buat masa ini kerana ${reasonText}. (Gembira ${hapLoss}, Kemesraan -${relLoss}%)`;
+        const rejLog = `💔 ${rel.name} menolak hasrat bertunang buat masa ini kerana ${reasonText}. (Gembira ${hapLoss}, Kemesraan -${relLoss}%)`;
         GameState.addJournalEntry(rejLog, 'warning');
         GameState.save();
         return { ok: false, rejected: true, msg: `Lamaran ditolak: ${reasonText}` };
@@ -1274,31 +1189,19 @@ window.Relationships = {
       rel.trust = Utils.clamp((rel.trust || 65) + 12);
       GameState.adjustStats({ happiness: 16 });
       GameState.addJournalEntry(
-        muslim
-          ? `💍 Majlis merisik & pertunangan bersama ${rel.name} berlangsung penuh adat dan restu keluarga di ${s.city}!`
-          : `💍 Anda dan ${rel.name} kini rasmi bertunang di ${s.city}!`,
+        `💍 Anda dan ${rel.name} kini rasmi bertunang di ${s.city}!`,
         'romance'
       );
       GameState.save();
       return { ok: true, msg: `Tahniah! Anda kini bertunang dengan ${rel.name}!` };
     }
 
-    // --- Lamar / Akad Nikah & Berkahwin ---
+    // --- Lamar & Majlis Perkahwinan ---
     if (action === 'propose') {
       if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
-      if (muslim && rel.gender === s.gender) {
-        return { ok: false, msg: 'Perkahwinan sejenis tidak dibenarkan bagi watak beragama Islam.' };
-      }
-      if (muslim && rel.belief !== 'islam') {
-        return {
-          ok: false,
-          msg: 'Perkahwinan berlainan agama tidak sah bagi watak Islam. Selesaikan isu kepercayaan dahulu.',
-          followUpEvent: window.LIFE_EVENTS.buildInterfaithDilemmaEvent(s, rel, 'marriage_block')
-        };
-      }
 
       const ringCost = Utils.usdToLocal(1800, s.countryId);
-      const usePrenup = Boolean(!muslim && opts && opts.hasPrenup);
+      const usePrenup = Boolean(opts && opts.hasPrenup);
       const prenupFee = (usePrenup && window.LegalInheritanceEngine)
         ? LegalInheritanceEngine.getPrenupFeeLocal(s.countryId)
         : 0;
@@ -1309,7 +1212,7 @@ window.Relationships = {
       const hasCrime = (s.criminalRecord || 0) > 0 || ((s.alignment && s.alignment.notoriety) || 0) >= 25 || Boolean(s.fugitive && s.fugitive.isFugitive);
       const isUnemployed = !s.job && !s.activeSpecialMode && !(s.isRetired || s.retired);
 
-      // Jika tidak mampu menyediakan Hantaran / Kos Majlis & Cincin
+      // Jika tidak mampu menyediakan Kos Majlis Perkahwinan & Cincin
       if (s.money < totalCost) {
         if (rel.stage !== 'engaged') {
           const hapLoss = -Utils.randInt(15, 25);
@@ -1317,7 +1220,7 @@ window.Relationships = {
           rel.closeness = Utils.clamp(closeness - relLoss, 0, 100);
           rel.trust = Utils.clamp(trust - Utils.randInt(10, 18), 0, 100);
           GameState.adjustStats({ happiness: hapLoss });
-          const msg = `💔 Lamaran ditolak kerana anda tidak mampu menyediakan kos ${muslim ? 'hantaran & akad nikah' : 'cincin & perkahwinan'} (${Utils.formatMoney(totalCost, s.countryId)})!`;
+          const msg = `💔 Lamaran ditolak kerana anda tidak mampu menyediakan kos cincin & perkahwinan (${Utils.formatMoney(totalCost, s.countryId)})!`;
           GameState.addJournalEntry(`${msg} (Gembira ${hapLoss}, Kemesraan -${relLoss}%)`, 'warning');
           if (rel.closeness < 25) {
             s.partnerId = null;
@@ -1345,7 +1248,7 @@ window.Relationships = {
 
         if (propRejectRisk > 0 && Utils.chance(Math.min(0.92, propRejectRisk))) {
           if (hasCrime || (isUnemployed && Utils.chance(0.60))) {
-            const famEv = this.buildFamilyRejectionEvent(s, rel, muslim ? 'Pinangan & Akad Nikah' : 'Lamaran Perkahwinan');
+            const famEv = this.buildFamilyRejectionEvent(s, rel, 'Lamaran Perkahwinan');
             GameState.addJournalEntry(
               `🛑 PENOLAKAN KELUARGA PASANGAN: Ibu bapa ${rel.name} menolak pinangan perkahwinan anda kerana tidak merestui latar belakang dan kedudukan semasa anda!`,
               'warning'
@@ -1390,8 +1293,8 @@ window.Relationships = {
         }
       }
 
-      // 2) SEMAKAN HARI PERKAHWINAN / AKAD NIKAH: Risiko "Putus Tunang / Batal Nikah / Cold Feet Saat Akhir"
-      // Hanya berlaku jika Kepercayaan < 55%, Kemesraan < 65%, konflik curang/hantaran belum selesai, atau tiada restu keluarga
+      // 2) SEMAKAN HARI PERKAHWINAN: Risiko "Putus Tunang / Batal Perkahwinan / Cold Feet Saat Akhir"
+      // Hanya berlaku jika Kepercayaan < 55%, Kemesraan < 65%, konflik curang/persiapan belum selesai, atau tiada restu keluarga
       let coldFeetRisk = 0;
       if (!smoothMarriageReady) {
         if (trust < 55) coldFeetRisk += 0.45 + (55 - trust) * 0.012;
@@ -1414,7 +1317,7 @@ window.Relationships = {
           ? 'isu kecurangan dan konflik lama yang tidak selesai'
           : (trust < 55)
             ? 'kepercayaan yang sudah retak'
-            : 'pertelingkahan keluarga serta isu hantaran saat akhir';
+            : 'pertelingkahan keluarga serta isu persiapan majlis saat akhir';
 
         s.partnerId = null;
         s.married = false;
@@ -1425,8 +1328,8 @@ window.Relationships = {
         rel.trust = 10;
 
         const cancelLog = isColdFeet
-          ? `🚨 PASANGAN TARIK DIRI SAAT AKHIR (Cold Feet)! Pada hari ${muslim ? 'majlis akad nikah' : 'perkahwinan'}, ${rel.name} membatalkan perkahwinan akibat ${cancelCause}. Majlis terpaksa dibatalkan, deposit hangus sebanyak ${Utils.formatMoney(depositLost, s.countryId)}, dan hati anda hancur luluh (Gembira ${hapHit}, Stres +${stressHit}%).`
-          : `💔 PUTUS TUNANG & BATAL NIKAH! Menjelang ${muslim ? 'majlis akad nikah' : 'hari perkahwinan'}, pertelingkahan mengenai ${cancelCause} menyebabkan pertunangan bersama ${rel.name} terputus. Deposit majlis ${Utils.formatMoney(depositLost, s.countryId)} hangus tidak dapat dikembalikan (Gembira ${hapHit}, Stres +${stressHit}%).`;
+          ? `🚨 PASANGAN TARIK DIRI SAAT AKHIR (Cold Feet)! Pada hari majlis perkahwinan, ${rel.name} membatalkan perkahwinan akibat ${cancelCause}. Majlis terpaksa dibatalkan, deposit hangus sebanyak ${Utils.formatMoney(depositLost, s.countryId)}, dan hati anda hancur luluh (Gembira ${hapHit}, Stres +${stressHit}%).`
+          : `💔 PUTUS TUNANG & BATAL PERKAHWINAN! Menjelang hari perkahwinan, pertelingkahan mengenai ${cancelCause} menyebabkan pertunangan bersama ${rel.name} terputus. Deposit majlis ${Utils.formatMoney(depositLost, s.countryId)} hangus tidak dapat dikembalikan (Gembira ${hapHit}, Stres +${stressHit}%).`;
 
         GameState.addJournalEntry(cancelLog, 'warning');
         GameState.save();
@@ -1437,7 +1340,7 @@ window.Relationships = {
           depositLost,
           msg: isColdFeet
             ? `🚨 ${rel.name} tarik diri saat akhir (Cold Feet)! Majlis batal & deposit ${Utils.formatMoney(depositLost, s.countryId)} hangus.`
-            : `💔 Putus Tunang & Batal Nikah! Deposit majlis ${Utils.formatMoney(depositLost, s.countryId)} hangus.`
+            : `💔 Putus Tunang & Batal Perkahwinan! Deposit majlis ${Utils.formatMoney(depositLost, s.countryId)} hangus.`
         };
       }
 
@@ -1456,9 +1359,7 @@ window.Relationships = {
       rel.familyApprovalPending = false;
       GameState.adjustStats({ happiness: 24, adaptation: 12 });
       GameState.addJournalEntry(
-        muslim
-          ? `💍 Alhamdulillah! Dengan sekali lafaz akad nikah, anda dan ${rel.name} sah bergelar suami isteri di ${s.city}, ${c.name} ${c.flag}!`
-          : `💍 Anda selamat berkahwin dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!${usePrenup ? ' (Perjanjian Pranikah / Prenup ditandatangani untuk melindungi aset sebelum kahwin).' : ''}`,
+        `💍 Anda selamat berkahwin dengan ${rel.name} dalam majlis perkahwinan indah di ${s.city}, ${c.name} ${c.flag}!${usePrenup ? ' (Perjanjian Pra-Perkahwinan / Prenup ditandatangani untuk melindungi aset sebelum kahwin).' : ''}`,
         'romance'
       );
       GameState.save();
@@ -1483,9 +1384,6 @@ window.Relationships = {
     // --- Timang Cahaya Mata (Kesuburan Realistik, Menopaus, Ketidaksuburan & Pasangan Tidak Mahu Anak) ---
     if (action === 'have_kid') {
       if (s.age < 18) return { ok: false, msg: 'Tunggu sehingga dewasa!' };
-      if (muslim && !s.married) {
-        return { ok: false, msg: 'Bagi watak beragama Islam, cahaya mata hanya selepas akad nikah yang sah.' };
-      }
       if (s.pregnancy && s.pregnancy.active) {
         return { ok: false, msg: 'Kehamilan sedang berlangsung — bayi akan dilahirkan pada tahun hadapan!' };
       }
@@ -1637,7 +1535,6 @@ window.Relationships = {
       countryId: s.countryId,
       gender,
       heritageId: heritage,
-      belief: s.belief || 'unassigned',
       fatherFullName,
       isAdopted,
       isOutOfWedlock
@@ -1679,8 +1576,7 @@ window.Relationships = {
           countryId: s.countryId,
           gender: draft.gender,
           heritageId: draft.heritage,
-          belief: s.belief || 'unassigned',
-          fatherFullName: draft.fatherFullName,
+              fatherFullName: draft.fatherFullName,
           isAdopted: draft.isAdopted,
           isOutOfWedlock: draft.isOutOfWedlock,
           customGivenName: trimmed
@@ -1706,7 +1602,6 @@ window.Relationships = {
       closeness: draft.isAdopted ? 90 : 100,
       trust: draft.isAdopted ? 90 : 100,
       compatibility: 95,
-      belief: s.belief || 'unassigned',
       isAdopted: Boolean(draft.isAdopted),
       isOutOfWedlock: Boolean(draft.isOutOfWedlock),
       educationCare: 68,
@@ -1734,13 +1629,6 @@ window.Relationships = {
     );
     GameState.save();
     return { ok: true, child: childObj, msg: `Selamat datang ke keluarga, ${finalName}!` };
-  },
-
-  rujukSpouse() {
-    if (!window.LegalInheritanceEngine) {
-      return { ok: false, msg: 'Sistem Rujuk Semula tidak tersedia.' };
-    }
-    return LegalInheritanceEngine.rujukSpouse(GameState.current);
   },
 
   // --------------------------------------------------------------------------
