@@ -898,6 +898,10 @@ window.Sim = {
       if (bnEv) return bnEv;
     }
 
+    // 0A1. Haba Polis > 70%: Risiko Dibuang Kerja (Nego 50/50) atau Ditangkap Polis (Rasuah 50/50, Lari 50/50, Penjara)
+    const heatEv = this._maybeTriggerHighPoliceHeatEvent(s, c);
+    if (heatEv) return heatEv;
+
     // 0A2. Krisis Mod Khas Mengejut pada Age-Up (15%–25% peluang setahun)
     if (window.SpecialModesEngine && SpecialModesEngine.maybeTriggerYearlyCrisisEvent) {
       const spCrisis = SpecialModesEngine.maybeTriggerYearlyCrisisEvent(s);
@@ -1068,6 +1072,136 @@ window.Sim = {
     }
 
     return recordRecent(this._buildProceduralFiveChoiceEvent(s, c));
+  },
+
+  _maybeTriggerHighPoliceHeatEvent(s, c) {
+    if (!s || (s.prison && s.prison.inPrison)) return null;
+    const heat = (s.alignment && typeof s.alignment.notoriety === 'number') ? s.alignment.notoriety : 0;
+    if (heat <= 70 || s.age < 13) return null;
+    if (!Utils.chance(0.55)) return null;
+
+    const hasJob = Boolean(s.job);
+    const triggerFiring = hasJob && Utils.chance(0.50);
+
+    if (triggerFiring) {
+      const jobTitle = s.job.title || 'pekerjaan semasa';
+      return {
+        id: `high_heat_job_firing_${s.year}`,
+        icon: '📋',
+        title: 'Notis Pemecatan Akibat Rekod Bermasalah',
+        text: `Majikan mengetahui rekod bermasalah dan Haba Polis anda kini melebihi 70% (${heat}%). Pihak pengurusan memanggil anda untuk menamatkan jawatan ${jobTitle} serta-merta.`,
+        choices: [
+          {
+            label: '🤝 Cuba Nego Dengan Majikan (50/50)',
+            customAction: (st) => {
+              if (Utils.chance(0.50)) {
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -5, stress: 6 });
+                return {
+                  outcome: `Rundingan berjaya! Majikan bersetuju memberi peluang terakhir untuk anda kekal sebagai ${jobTitle}.`,
+                  toastType: 'success'
+                };
+              }
+              st.job = null;
+              st.jobTenure = 0;
+              GameState.adjustStats({ happiness: -14 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+              return {
+                outcome: `Rundingan gagal! Majikan tetap memecat anda daripada jawatan ${jobTitle} serta-merta.`,
+                toastType: 'error'
+              };
+            }
+          },
+          {
+            label: '📦 Terima Pemecatan & Kemas Meja',
+            customAction: (st) => {
+              st.job = null;
+              st.jobTenure = 0;
+              GameState.adjustStats({ happiness: -10 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
+              return {
+                outcome: `Anda menerima surat pemecatan daripada jawatan ${jobTitle} dan meninggalkan pejabat dengan hati berat.`,
+                toastType: 'error'
+              };
+            }
+          }
+        ]
+      };
+    }
+
+    const bribeLocal = Utils.usdToLocal(s.age < 18 ? 300 : 2500, s.countryId);
+    const bribeFormatted = Utils.formatMoney(bribeLocal, s.countryId);
+    return {
+      id: `high_heat_police_arrest_${s.year}`,
+      icon: '🚨',
+      title: 'Serbuan & Tangkapan Polis!',
+      text: `Haba Polis anda sudah melebihi 70% (${heat}%)! Pasukan polis mengepung lokasi anda untuk membuat tangkapan atas rekod bermasalah anda. Apa tindakan anda?`,
+      choices: [
+        {
+          label: `💵 Cuba Rasuah Pegawai (50/50) — ${bribeFormatted}`,
+          customAction: (st) => {
+            if (st.money < bribeLocal) {
+              const yrs = Utils.randInt(2, 4);
+              if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+                PrisonFugitive.enterPrisonState(st, 'Rekod Haba Polis Tinggi & Cubaan Rasuah Gagal', yrs, 'medium');
+              }
+              return {
+                outcome: `Wang tunai tidak mencukupi (${bribeFormatted}) untuk merasuah! Anda terus digari dan dijatuhi hukuman ${yrs} tahun.`,
+                toastType: 'error'
+              };
+            }
+            st.money -= bribeLocal;
+            if (Utils.chance(0.50)) {
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -15, karma: -10, stress: 8 });
+              return {
+                outcome: `Rasuah ${bribeFormatted} berjaya! Pegawai itu menutup sebelah mata dan anda terlepas daripada tangkapan kali ini.`,
+                toastType: 'success'
+              };
+            }
+            const yrs = Utils.randInt(2, 5);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Rekod Jenayah & Cubaan Rasuah Polis', yrs, 'medium');
+            }
+            return {
+              outcome: `KANTOI MERASUAH! Pegawai itu menolak wang ${bribeFormatted}, menambah pertuduhan rasuah dan anda dihumban ke tahanan selama ${yrs} tahun!`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '🏃 Cuba Lari Daripada Polis (50/50)',
+          customAction: (st) => {
+            if (Utils.chance(0.50)) {
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -8, stress: 10 });
+              return {
+                outcome: 'Anda memecut melalui lorong belakang dan berjaya meloloskan diri daripada kepungan polis!',
+                toastType: 'success'
+              };
+            }
+            const yrs = Utils.randInt(2, 4);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Melarikan Diri Daripada Tangkapan Polis', yrs, 'medium');
+            }
+            return {
+              outcome: `Gagal melarikan diri! Polis berjaya memberkas anda dan anda dijatuhi hukuman tahanan selama ${yrs} tahun.`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '⛓️ Menyerah Diri & Masuk Penjara',
+          customAction: (st) => {
+            const yrs = Utils.randInt(1, 3);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Siasatan Haba Polis Tinggi', yrs, 'minimum');
+            }
+            return {
+              outcome: `Anda menyerah diri secara baik dan menerima hukuman tahanan selama ${yrs} tahun.`,
+              toastType: 'error'
+            };
+          }
+        }
+      ]
+    };
   },
 
   _buildProceduralFiveChoiceEvent(s, c) {
