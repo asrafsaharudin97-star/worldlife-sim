@@ -2255,8 +2255,6 @@ window.Modals = {
 
   async showSaveSlotsModal(confirmDeleteSlotId = null) {
     const fb = window.FirebaseService;
-    const isLoggedIn = Boolean(fb && fb.isLoggedIn());
-    const activeSlotId = GameState.getActiveSlotId();
 
     this.open({
       icon: '☁️',
@@ -2265,7 +2263,8 @@ window.Modals = {
       bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot simpanan...</div>`
     });
 
-    const { slots, localOnlyIds, isCloud } = await GameState.getMergedSlots();
+    const { slots, localOnlyIds, isCloud, activeSlotId } = await GameState.getMergedSlots();
+    if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
     const syncBadgeText = !isCloud
       ? '💾 Mod Tempatan (Tetamu)'

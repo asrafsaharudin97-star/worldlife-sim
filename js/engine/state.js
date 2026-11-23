@@ -1295,6 +1295,29 @@ window.GameState = {
     return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
   },
 
+  resolveDefaultActiveSlot(slotsMap = null) {
+    const map = slotsMap || this.getLocalSlots();
+    const filled = this.SLOT_IDS.filter(id => Boolean(map && map[id]));
+    if (filled.length === 0) {
+      return this.setActiveSlotId('slot_1');
+    }
+    const currentId = this.getActiveSlotId();
+    if (filled.includes(currentId)) {
+      return this.setActiveSlotId(currentId);
+    }
+    let bestId = filled[0];
+    let bestTs = (map[bestId] && map[bestId].updatedAt) || 0;
+    for (let i = 1; i < filled.length; i++) {
+      const id = filled[i];
+      const ts = (map[id] && map[id].updatedAt) || 0;
+      if (ts > bestTs) {
+        bestTs = ts;
+        bestId = id;
+      }
+    }
+    return this.setActiveSlotId(bestId);
+  },
+
   async getMergedSlots() {
     const localMap = this.getLocalSlots();
     const isCloud = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
@@ -1318,7 +1341,8 @@ window.GameState = {
       }
     });
 
-    return { slots: merged, localOnlyIds, isCloud };
+    const activeSlotId = this.resolveDefaultActiveSlot(merged);
+    return { slots: merged, localOnlyIds, isCloud, activeSlotId };
   },
 
   async uploadLocalSlotsToCloud() {
@@ -1374,7 +1398,7 @@ window.GameState = {
 
   load() {
     this._migrateLegacySaveIfNeeded();
-    const activeSlot = this.getActiveSlotId();
+    const activeSlot = this.resolveDefaultActiveSlot();
     const slotData = this.getLocalSlot(activeSlot);
     if (slotData && slotData.gameState) {
       this.current = slotData.gameState;
