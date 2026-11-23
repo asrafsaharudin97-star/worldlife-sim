@@ -970,6 +970,12 @@ window.GAME_EVENTS = {
   // --------------------------------------------------------------------------
   universal: [
     (function buildChildTalentEvent() {
+      // 'popularity' dipetakan ke Populariti (alignment.fame)
+      const applyFx = (fx) => {
+        const { popularity, ...rest } = fx || {};
+        GameState.adjustStats(rest);
+        if (popularity && window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: popularity });
+      };
       const sub = (catIcon, catTitle, intro, options) => ({
         id: 'uni_child_talent_sub',
         icon: catIcon,
