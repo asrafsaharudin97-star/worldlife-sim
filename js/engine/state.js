@@ -556,6 +556,7 @@ window.GameState = {
       ActivitiesDeck.generateYearlyDeck(state);
     }
     this.save();
+    this.syncActiveSlotToCloud('legacy');
     return state;
   },
 
@@ -853,6 +854,7 @@ window.GameState = {
       ActivitiesDeck.generateYearlyDeck(state);
     }
     this.save();
+    this.syncActiveSlotToCloud('legacy');
     return state;
   },
 
@@ -1129,6 +1131,226 @@ window.GameState = {
     return removed;
   },
 
+  SLOT_IDS: ['slot_1', 'slot_2', 'slot_3', 'slot_4', 'slot_5'],
+  ACTIVE_SLOT_KEY: 'worldlife_active_slot_v1',
+  SLOT_KEY_PREFIX: 'worldlife_save_',
+
+  getActiveSlotId() {
+    const raw = window.SafeStorage
+      ? SafeStorage.getRaw(this.ACTIVE_SLOT_KEY)
+      : (typeof localStorage !== 'undefined' ? localStorage.getItem(this.ACTIVE_SLOT_KEY) : null);
+    return this.SLOT_IDS.includes(raw) ? raw : 'slot_1';
+  },
+
+  setActiveSlotId(slotId) {
+    const valid = this.SLOT_IDS.includes(slotId) ? slotId : 'slot_1';
+    try {
+      if (window.localStorage) localStorage.setItem(this.ACTIVE_SLOT_KEY, valid);
+    } catch (e) {}
+    return valid;
+  },
+
+  _slotStorageKey(slotId) {
+    return `${this.SLOT_KEY_PREFIX}${slotId}`;
+  },
+
+  buildSlotPayload(slotId, stateObj = null) {
+    const s = stateObj || this.current;
+    if (!s) return null;
+    const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : { name: s.countryId || 'Dunia', flag: '🌍' };
+    let careerLabel = 'Tiada Kerjaya';
+    if (s.activeSpecialMode && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo) {
+      const sp = SpecialModesEngine.getActiveInfo(s);
+      if (sp) careerLabel = `${sp.def.icon} ${sp.rank.title}`;
+    } else if (s.job && s.job.title) {
+      careerLabel = s.job.title;
+    } else if (s.education && s.education.stage && s.education.stage !== 'none' && s.education.stage !== 'done') {
+      careerLabel = 'Pelajar';
+    }
+    const prevCurrent = this.current;
+    this.current = s;
+    let netWorth = s.money || 0;
+    try { netWorth = this.getNetWorth(); } catch (e) {}
+    this.current = prevCurrent;
+
+    return {
+      slotId,
+      updatedAt: Date.now(),
+      characterName: s.name || 'Watak Tanpa Nama',
+      age: s.age ?? 0,
+      country: c.name,
+      countryId: s.countryId,
+      countryFlag: c.flag || '🌍',
+      career: careerLabel,
+      netWorth: Math.round(netWorth),
+      netWorthFormatted: (window.Utils && Utils.formatMoney) ? Utils.formatMoney(netWorth, s.countryId, true) : String(Math.round(netWorth)),
+      generation: s.generation || 1,
+      alive: Boolean(s.alive),
+      gameState: JSON.parse(JSON.stringify(s))
+    };
+  },
+
+  _migrateLegacySaveIfNeeded() {
+    if (this._legacyMigrated) return;
+    this._legacyMigrated = true;
+    const slot1 = this.getLocalSlot('slot_1');
+    if (slot1) return;
+    try {
+      const legacy = window.SafeStorage
+        ? SafeStorage.getJSON(this.SAVE_KEY, null)
+        : JSON.parse(localStorage.getItem(this.SAVE_KEY) || 'null');
+      if (legacy && typeof legacy === 'object' && legacy.name) {
+        const payload = this.buildSlotPayload('slot_1', legacy);
+        if (payload) {
+          if (window.SafeStorage) SafeStorage.setJSON(this._slotStorageKey('slot_1'), payload);
+          else localStorage.setItem(this._slotStorageKey('slot_1'), JSON.stringify(payload));
+        }
+      }
+    } catch (e) {}
+  },
+
+  getLocalSlot(slotId) {
+    if (!this.SLOT_IDS.includes(slotId)) return null;
+    try {
+      const key = this._slotStorageKey(slotId);
+      const data = window.SafeStorage
+        ? SafeStorage.getJSON(key, null)
+        : JSON.parse(localStorage.getItem(key) || 'null');
+      return (data && typeof data === 'object' && data.gameState) ? { ...data, slotId } : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  getLocalSlots() {
+    this._migrateLegacySaveIfNeeded();
+    const map = {};
+    this.SLOT_IDS.forEach(id => {
+      map[id] = this.getLocalSlot(id);
+    });
+    return map;
+  },
+
+  hasAnyLocalSlot() {
+    const slots = this.getLocalSlots();
+    return this.SLOT_IDS.some(id => Boolean(slots[id]));
+  },
+
+  saveLocalSlot(slotId, stateObj = null) {
+    const s = stateObj || this.current;
+    if (!s || !this.SLOT_IDS.includes(slotId)) return false;
+    this.trimJournal(s);
+    const payload = this.buildSlotPayload(slotId, s);
+    if (!payload) return false;
+    const key = this._slotStorageKey(slotId);
+    if (window.SafeStorage) {
+      return SafeStorage.setJSON(key, payload, () => this.buildSlotPayload(slotId, s));
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(payload));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  deleteLocalSlot(slotId) {
+    if (!this.SLOT_IDS.includes(slotId)) return;
+    const key = this._slotStorageKey(slotId);
+    if (window.SafeStorage) SafeStorage.remove(key);
+    else { try { localStorage.removeItem(key); } catch (e) {} }
+    if (this.getActiveSlotId() === slotId) {
+      this.current = null;
+      if (window.SafeStorage) SafeStorage.remove(this.SAVE_KEY);
+      else { try { localStorage.removeItem(this.SAVE_KEY); } catch (e) {} }
+    }
+  },
+
+  loadSlotPayload(slotId, payload) {
+    if (!payload || !payload.gameState) return null;
+    this.setActiveSlotId(slotId);
+    this.current = JSON.parse(JSON.stringify(payload.gameState));
+    this.ensureUpgradedState();
+    this.trimJournal(this.current);
+    this.save();
+    return this.current;
+  },
+
+  async syncSlotToCloud(slotId, payloadOverride = null) {
+    if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
+      return { ok: false, msg: 'Log masuk Google untuk menggunakan Cloud Save.' };
+    }
+    const payload = payloadOverride || this.getLocalSlot(slotId) || (this.getActiveSlotId() === slotId && this.current ? this.buildSlotPayload(slotId, this.current) : null);
+    if (!payload) return { ok: false, msg: 'Tiada data untuk disegerakkan.' };
+    return await FirebaseService.saveCloudSlot(slotId, payload);
+  },
+
+  async syncActiveSlotToCloud(reason = 'manual') {
+    if (!this.current) return { ok: false, msg: 'Tiada watak aktif.' };
+    const slotId = this.getActiveSlotId();
+    this.saveLocalSlot(slotId, this.current);
+    if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
+      return { ok: false, offline: true, msg: 'Disimpan secara tempatan.' };
+    }
+    return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
+  },
+
+  async getMergedSlots() {
+    const localMap = this.getLocalSlots();
+    const isCloud = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
+    const cloudMap = isCloud ? await FirebaseService.listCloudSlots() : {};
+    const merged = {};
+    const localOnlyIds = [];
+
+    this.SLOT_IDS.forEach(id => {
+      const loc = localMap[id];
+      const cld = cloudMap[id];
+      if (cld && loc) {
+        const useCloud = (cld.updatedAt || 0) >= (loc.updatedAt || 0);
+        merged[id] = { ...(useCloud ? cld : loc), slotId: id, source: useCloud ? 'cloud' : 'local', inCloud: true };
+      } else if (cld) {
+        merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
+      } else if (loc) {
+        merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
+        if (isCloud) localOnlyIds.push(id);
+      } else {
+        merged[id] = null;
+      }
+    });
+
+    return { slots: merged, localOnlyIds, isCloud };
+  },
+
+  async uploadLocalSlotsToCloud() {
+    if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
+      return { ok: false, uploaded: 0, msg: 'Sila log masuk Google dahulu.' };
+    }
+    const { slots, localOnlyIds } = await this.getMergedSlots();
+    let uploaded = 0;
+    for (const id of localOnlyIds) {
+      const item = slots[id];
+      if (item && item.gameState) {
+        const res = await FirebaseService.saveCloudSlot(id, item);
+        if (res.ok) uploaded += 1;
+      }
+    }
+    return {
+      ok: uploaded > 0,
+      uploaded,
+      msg: uploaded > 0
+        ? `${uploaded} slot simpanan tempatan berjaya dimuat naik ke Cloud!`
+        : 'Tiada slot tempatan baru untuk dimuat naik.'
+    };
+  },
+
+  async deleteSlot(slotId) {
+    this.deleteLocalSlot(slotId);
+    if (window.FirebaseService && FirebaseService.isLoggedIn()) {
+      await FirebaseService.deleteCloudSlot(slotId);
+    }
+    return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam.` };
+  },
+
   save() {
     if (this._saveTimer && typeof clearTimeout === 'function') {
       clearTimeout(this._saveTimer);
@@ -1136,18 +1358,30 @@ window.GameState = {
     }
     if (!this.current) return false;
     this.trimJournal(this.current);
+    const activeSlot = this.getActiveSlotId();
+    const okSlot = this.saveLocalSlot(activeSlot, this.current);
     if (window.SafeStorage) {
-      return SafeStorage.setJSON(this.SAVE_KEY, this.current, () => this.current);
+      SafeStorage.setJSON(this.SAVE_KEY, this.current, () => this.current);
+      return okSlot;
     }
     try {
       localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.current));
-      return true;
+      return okSlot;
     } catch (e) {
-      return false;
+      return okSlot;
     }
   },
 
   load() {
+    this._migrateLegacySaveIfNeeded();
+    const activeSlot = this.getActiveSlotId();
+    const slotData = this.getLocalSlot(activeSlot);
+    if (slotData && slotData.gameState) {
+      this.current = slotData.gameState;
+      this.ensureUpgradedState();
+      this.trimJournal(this.current);
+      return this.current;
+    }
     try {
       const parsed = window.SafeStorage
         ? SafeStorage.getJSON(this.SAVE_KEY, null)
@@ -1163,14 +1397,8 @@ window.GameState = {
   },
 
   clearSave() {
-    this.current = null;
-    if (window.SafeStorage) {
-      SafeStorage.remove(this.SAVE_KEY);
-      return;
-    }
-    try {
-      localStorage.removeItem(this.SAVE_KEY);
-    } catch (e) {}
+    const activeSlot = this.getActiveSlotId();
+    this.deleteLocalSlot(activeSlot);
   },
 
   // --------------------------------------------------------------------------

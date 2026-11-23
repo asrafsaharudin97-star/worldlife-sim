@@ -145,6 +145,8 @@
       </div>
 
       <div class="creator-card">
+        <div id="auth-cloud-bar" style="margin-bottom:10px;"></div>
+        <div id="creator-slot-badge" style="font-size:12px;font-weight:600;color:#475569;margin-bottom:8px;"></div>
         <div class="creator-section">
           <div class="country-picker-head">
             <label class="creator-label" style="margin:0;">1. Negara Kelahiran</label>
@@ -180,7 +182,7 @@
 
         <div class="creator-actions">
           <button type="button" id="btn-start-life" class="primary-btn">✨ Mula Kehidupan Baru</button>
-          <button type="button" id="btn-continue-life" class="ghost-btn hidden">▶ Sambung Kehidupan Disimpan</button>
+          <button type="button" id="btn-continue-life" class="ghost-btn">📂 Sambung Kehidupan Disimpan (5 Slot)</button>
         </div>
       </div>
     </section>
@@ -239,6 +241,7 @@
   <script defer src="js/ui/modals_prison.js"></script>
   <script defer src="js/ui/modals_legacy.js"></script>
   <script defer src="js/ui/modals_modes.js"></script>
+  <script type="module" src="src/services/firebase.js"></script>
   <script defer src="js/ui/modals.js"></script>
   <script defer src="js/ui/app.js"></script>
 </body>

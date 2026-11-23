@@ -13,12 +13,92 @@ window.App = {
     if (Utils.loadMutePref) Utils.loadMutePref();
     this._bindGlobalEvents();
     this._initCreator();
+    this._bindFirebaseListeners();
 
-    const saved = GameState.load();
-    if (saved && saved.alive) {
-      document.getElementById('btn-continue-life').classList.remove('hidden');
-    }
+    GameState.load();
     this.showStartScreen();
+  },
+
+  _bindFirebaseListeners() {
+    const attach = () => {
+      if (!window.FirebaseService || this._fbListenersBound) return;
+      this._fbListenersBound = true;
+      FirebaseService.onAuthChange(() => {
+        this.renderStartAuthBar();
+      });
+      FirebaseService.onSyncStateChange(() => {
+        this.renderStartAuthBar();
+      });
+    };
+    attach();
+    if (!this._fbListenersBound) {
+      window.addEventListener('load', attach, { once: true });
+      setTimeout(attach, 400);
+    }
+  },
+
+  renderStartAuthBar() {
+    const bar = document.getElementById('auth-cloud-bar');
+    const slotBadge = document.getElementById('creator-slot-badge');
+    if (slotBadge && window.GameState) {
+      const slotNum = GameState.getActiveSlotId().replace('slot_', '');
+      slotBadge.innerHTML = `📂 Slot Sasaran Semasa: <strong>Slot ${slotNum}</strong> <span style="opacity:0.75;">(Tukar di "Sambung Kehidupan Disimpan")</span>`;
+    }
+    if (!bar) return;
+
+    const fb = window.FirebaseService;
+    if (fb && fb.isLoggedIn()) {
+      const u = fb.user;
+      const syncLabel = fb.syncState === 'syncing'
+        ? '🔄 Menyegerak...'
+        : fb.syncState === 'error'
+          ? '⚠️ Ralat Sync'
+          : '☁️ Disegerakkan';
+      const avatarHtml = u.photoURL
+        ? `<img src="${Utils.escapeHtml(u.photoURL)}" alt="" style="width:28px;height:28px;border-radius:999px;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />`
+        : `<span style="width:28px;height:28px;border-radius:999px;background:#e0e7ff;display:grid;place-items:center;font-size:14px;flex-shrink:0;">👤</span>`;
+      bar.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            ${avatarHtml}
+            <div style="min-width:0;">
+              <div style="font-size:12.5px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
+              <div style="font-size:11px;color:${fb.syncState === 'error' ? '#dc2626' : '#16a34a'};font-weight:600;">${syncLabel}</div>
+            </div>
+          </div>
+          <button type="button" id="btn-start-logout" class="secondary-btn" style="padding:5px 10px;font-size:11.5px;">Log Keluar</button>
+        </div>
+      `;
+      const logoutBtn = document.getElementById('btn-start-logout');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+          const res = await FirebaseService.signOutUser();
+          this.toast(res.msg, res.ok ? 'culture' : 'error');
+          this.renderStartAuthBar();
+        });
+      }
+    } else {
+      bar.innerHTML = `
+        <button type="button" id="btn-start-google-login" class="secondary-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;font-weight:700;">
+          🔐 Log Masuk dengan Google (Cloud Save)
+        </button>
+      `;
+      const loginBtn = document.getElementById('btn-start-google-login');
+      if (loginBtn) {
+        loginBtn.addEventListener('click', async () => {
+          if (!window.FirebaseService) {
+            this.toast('Memuatkan Firebase... Sila cuba sebentar lagi.', 'error');
+            return;
+          }
+          const res = await FirebaseService.signInWithGoogle();
+          this.toast(res.msg, res.ok ? 'success' : 'error');
+          this.renderStartAuthBar();
+          if (res.ok && window.Modals && Modals.showSaveSlotsModal) {
+            Modals.showSaveSlotsModal();
+          }
+        });
+      }
+    }
   },
 
   // Pendengar global tunggal (didaftarkan sekali sahaja — tiada pendengar berganda)
@@ -135,6 +215,7 @@ window.App = {
         heritageId: this.creator.heritageId,
         customName
       });
+      GameState.syncActiveSlotToCloud('new_life');
       this.showGameScreen();
       this.renderAll();
       const c = Utils.getCountry(GameState.current.countryId);
@@ -142,9 +223,8 @@ window.App = {
     });
 
     document.getElementById('btn-continue-life').addEventListener('click', () => {
-      if (GameState.current && GameState.current.alive) {
-        this.showGameScreen();
-        this.renderAll();
+      if (window.Modals && Modals.showSaveSlotsModal) {
+        Modals.showSaveSlotsModal();
       }
     });
 
@@ -229,7 +309,15 @@ window.App = {
     root.style.setProperty('--country-accent', c.theme.accent);
   },
 
-  showStartScreen() {
+  showStartScreen(opts = {}) {
+    const wasInGame = !document.getElementById('game-header').classList.contains('hidden');
+    if (wasInGame && GameState.current) {
+      GameState.syncActiveSlotToCloud('main_menu');
+    }
+    if (opts && opts.targetSlotId) {
+      GameState.setActiveSlotId(opts.targetSlotId);
+    }
+
     document.getElementById('start-screen').classList.remove('hidden');
     document.getElementById('game-header').classList.add('hidden');
     document.getElementById('life-feed-container').classList.add('hidden');
@@ -239,9 +327,7 @@ window.App = {
     if (countEl) countEl.textContent = String(Object.keys(window.COUNTRIES).length);
 
     this._initCreatorRandomCountry();
-
-    const saved = GameState.load();
-    document.getElementById('btn-continue-life').classList.toggle('hidden', !(saved && saved.alive));
+    this.renderStartAuthBar();
   },
 
   showGameScreen() {
@@ -259,6 +345,7 @@ window.App = {
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
     const { event, died, babyBirth, childMilestoneQueue } = Sim.ageUp();
+    GameState.syncActiveSlotToCloud('age_up');
     this.renderAll();
 
     if (died) {
