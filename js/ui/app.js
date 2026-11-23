@@ -474,6 +474,101 @@ window.App = {
     root.style.setProperty('--country-accent', c.theme.accent);
   },
 
+  cloudProgress: { active: false, action: null, percent: 0, label: '', _timer: null },
+
+  _getCloudProgressTitle(action) {
+    if (action === 'load') return '☁️ Memuatkan Simpanan';
+    if (action === 'delete') return '🗑️ Memadam Slot';
+    return '☁️ Menyimpan ke Cloud';
+  },
+
+  _getCloudStageLabel(action, pct) {
+    if (action === 'load') {
+      if (pct >= 100) return 'Selesai dimuatkan!';
+      if (pct >= 80) return 'Menyediakan dunia permainan...';
+      if (pct >= 48) return 'Memuatkan data watak...';
+      return 'Menyambung ke Cloud...';
+    }
+    if (action === 'delete') {
+      if (pct >= 100) return 'Slot berjaya dipadam!';
+      if (pct >= 82) return 'Mengemas kini senarai slot...';
+      if (pct >= 52) return 'Memadam data slot...';
+      return 'Menyambung ke Cloud...';
+    }
+    if (pct >= 100) return 'Berjaya disimpan!';
+    if (pct >= 82) return 'Mengesahkan simpanan...';
+    if (pct >= 50) return 'Menyimpan ke Cloud...';
+    return 'Menyediakan data watak...';
+  },
+
+  renderCloudProgressOverlay() {
+    const p = this.cloudProgress;
+    let overlay = document.getElementById('global-cloud-progress-overlay');
+    if (!p.active) {
+      if (overlay) overlay.remove();
+      return;
+    }
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'global-cloud-progress-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.58);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px;';
+      document.body.appendChild(overlay);
+    }
+    const pct = Math.min(100, Math.max(0, Math.round(p.percent)));
+    overlay.innerHTML = `
+      <div style="width:min(360px,92vw);background:#ffffff;border-radius:16px;padding:18px 20px;box-shadow:0 20px 48px rgba(15,23,42,0.28);border:1px solid #e2e8f0;">
+        <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:12px;">${Utils.escapeHtml(this._getCloudProgressTitle(p.action))}</div>
+        <div style="width:100%;height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:10px;">
+          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#3b82f6,#2563eb);border-radius:999px;transition:width 150ms ease;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;gap:8px;">
+          <span style="color:#475569;font-weight:500;">${Utils.escapeHtml(p.label)}</span>
+          <strong style="color:#2563eb;font-variant-numeric:tabular-nums;">${pct}%</strong>
+        </div>
+      </div>
+    `;
+  },
+
+  async runWithCloudProgress(action, taskFn) {
+    if (this.cloudProgress.active) return { ok: false, busy: true };
+    const p = this.cloudProgress;
+    p.active = true;
+    p.action = action;
+    p.percent = 12;
+    p.label = this._getCloudStageLabel(action, 12);
+    this.renderCloudProgressOverlay();
+
+    // Beri 1 bingkai supaya pelayar melukis overlay sebelum kerja Firestore bermula
+    await new Promise(r => setTimeout(r, 30));
+
+    p._timer = setInterval(() => {
+      if (!p.active) return;
+      if (p.percent < 90) {
+        const step = Math.max(1, Math.round((90 - p.percent) * 0.18));
+        p.percent = Math.min(90, p.percent + step);
+        p.label = this._getCloudStageLabel(action, p.percent);
+        this.renderCloudProgressOverlay();
+      }
+    }, 140);
+
+    try {
+      const result = await taskFn();
+      if (p._timer) { clearInterval(p._timer); p._timer = null; }
+      p.percent = 100;
+      p.label = this._getCloudStageLabel(action, 100);
+      this.renderCloudProgressOverlay();
+      await new Promise(r => setTimeout(r, 350));
+      return result;
+    } finally {
+      if (p._timer) { clearInterval(p._timer); p._timer = null; }
+      p.active = false;
+      p.action = null;
+      p.percent = 0;
+      p.label = '';
+      this.renderCloudProgressOverlay();
+    }
+  },
+
   showStartScreen(opts = {}) {
     const wasInGame = !document.getElementById('game-header').classList.contains('hidden');
     if (wasInGame && GameState.current && !(opts && opts.skipSave)) {

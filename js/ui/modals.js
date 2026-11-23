@@ -2341,115 +2341,6 @@ window.Modals = {
     }
   },
 
-  _cloudProgress: { active: false, action: null, percent: 0, label: '', _timer: null },
-
-  _getCloudStageLabel(action, pct) {
-    if (action === 'load') {
-      if (pct >= 100) return 'Selesai dimuatkan!';
-      if (pct >= 80) return 'Menyediakan dunia permainan...';
-      if (pct >= 50) return 'Memuatkan data slot...';
-      return 'Menyambung ke Cloud...';
-    }
-    if (action === 'delete') {
-      if (pct >= 100) return 'Slot berjaya dipadam!';
-      if (pct >= 85) return 'Mengemas kini senarai slot...';
-      if (pct >= 55) return 'Memadam data slot...';
-      return 'Menyambung ke Cloud...';
-    }
-    // default: save
-    if (pct >= 100) return 'Berjaya disimpan!';
-    if (pct >= 85) return 'Mengesahkan simpanan...';
-    if (pct >= 55) return 'Menyimpan ke Cloud...';
-    return 'Menyediakan data watak...';
-  },
-
-  _renderCloudProgressUI() {
-    const p = this._cloudProgress;
-    const slotBox = document.getElementById('cloud-progress-slot-box');
-    const lockSel = '#modal-body .slot-load-btn, #modal-body .slot-sync-btn, #modal-body .slot-del-btn, #modal-body .slot-new-btn, #modal-body .slot-confirm-del-btn, #slots-btn-upload-local, #menu-cloud-sync';
-    document.querySelectorAll(lockSel).forEach(el => {
-      if (p.active) el.setAttribute('disabled', 'disabled');
-      else el.removeAttribute('disabled');
-    });
-
-    const barHtml = `
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-bottom:6px;gap:8px;">
-        <span style="font-weight:600;color:#1e293b;">${Utils.escapeHtml(p.label)}</span>
-        <strong style="color:#2563eb;font-variant-numeric:tabular-nums;">${Math.round(p.percent)}%</strong>
-      </div>
-      <div style="width:100%;height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
-        <div style="width:${Math.min(100, Math.max(0, p.percent))}%;height:100%;background:linear-gradient(90deg,#3b82f6,#2563eb);border-radius:999px;transition:width 200ms ease;"></div>
-      </div>
-    `;
-
-    if (slotBox) {
-      if (p.active) {
-        slotBox.style.display = 'block';
-        slotBox.innerHTML = barHtml;
-      } else {
-        slotBox.style.display = 'none';
-        slotBox.innerHTML = '';
-      }
-      const existingFloat = document.getElementById('cloud-progress-floating');
-      if (existingFloat) existingFloat.remove();
-      return;
-    }
-
-    let floatEl = document.getElementById('cloud-progress-floating');
-    if (p.active) {
-      if (!floatEl) {
-        floatEl = document.createElement('div');
-        floatEl.id = 'cloud-progress-floating';
-        floatEl.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10005;width:min(340px,90vw);background:#ffffff;border:1px solid #cbd5e1;border-radius:14px;padding:12px 14px;box-shadow:0 12px 28px rgba(15,23,42,0.18);';
-        document.body.appendChild(floatEl);
-      }
-      floatEl.innerHTML = barHtml;
-    } else if (floatEl) {
-      floatEl.remove();
-    }
-  },
-
-  async _runWithCloudProgress(action, asyncFn) {
-    if (this._cloudProgress.active) return { ok: false, busy: true };
-    const p = this._cloudProgress;
-    p.active = true;
-    p.action = action;
-    p.percent = 15;
-    p.label = this._getCloudStageLabel(action, 15);
-    this._renderCloudProgressUI();
-
-    p._timer = setInterval(() => {
-      if (!p.active) return;
-      if (p.percent < 88) {
-        const step = Math.max(1, Math.round((88 - p.percent) * 0.18));
-        p.percent = Math.min(88, p.percent + step);
-        p.label = this._getCloudStageLabel(action, p.percent);
-        this._renderCloudProgressUI();
-      }
-    }, 150);
-
-    try {
-      const result = await asyncFn();
-      clearInterval(p._timer);
-      p._timer = null;
-      p.percent = 100;
-      p.label = this._getCloudStageLabel(action, 100);
-      this._renderCloudProgressUI();
-      await new Promise(r => setTimeout(r, 300));
-      return result;
-    } finally {
-      if (p._timer) {
-        clearInterval(p._timer);
-        p._timer = null;
-      }
-      p.active = false;
-      p.action = null;
-      p.percent = 0;
-      p.label = '';
-      this._renderCloudProgressUI();
-    }
-  },
-
   async showSaveSlotsModal(confirmDeleteSlotId = null) {
     const fb = window.FirebaseService;
 
@@ -2582,7 +2473,6 @@ window.Modals = {
       title: 'Slot Simpanan & Cloud Save',
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
       bodyHtml: `
-        <div id="cloud-progress-slot-box" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:10px 12px;margin-bottom:10px;"></div>
         ${authBarHtml}
         ${uploadLocalBanner}
         <div class="section-heading">📂 Senarai Slot Simpanan (Slot 1 – Slot 5)</div>
@@ -2617,7 +2507,7 @@ window.Modals = {
     const uploadBtn = document.getElementById('slots-btn-upload-local');
     if (uploadBtn) {
       uploadBtn.addEventListener('click', async () => {
-        const res = await this._runWithCloudProgress('save', () => GameState.uploadLocalSlotsToCloud());
+        const res = await App.runWithCloudProgress('save', () => GameState.uploadLocalSlotsToCloud());
         if (res && res.busy) return;
         App.toast(res.msg, res.ok ? 'success' : 'culture');
         this.showSaveSlotsModal();
@@ -2629,7 +2519,7 @@ window.Modals = {
         const sid = btn.dataset.slot;
         const item = slots[sid];
         if (!item) return;
-        const res = await this._runWithCloudProgress('load', async () => {
+        const res = await App.runWithCloudProgress('load', async () => {
           if (GameState.current && GameState.getActiveSlotId() !== sid) {
             await GameState.syncActiveSlotToCloud('switch_slot');
           }
@@ -2647,7 +2537,7 @@ window.Modals = {
     document.querySelectorAll('.slot-sync-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sid = btn.dataset.slot;
-        const res = await this._runWithCloudProgress('save', () => GameState.syncSlotToCloud(sid, slots[sid]));
+        const res = await App.runWithCloudProgress('save', () => GameState.syncSlotToCloud(sid, slots[sid]));
         if (res && res.busy) return;
         App.toast(res.msg, res.ok ? 'success' : 'error');
         this.showSaveSlotsModal();
@@ -2699,7 +2589,7 @@ window.Modals = {
     document.querySelectorAll('.slot-confirm-del-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sid = btn.dataset.slot;
-        const res = await this._runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
+        const res = await App.runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
         if (res && res.busy) return;
         App.toast(res.msg, 'culture');
         this.showSaveSlotsModal(null);
@@ -2844,7 +2734,7 @@ window.Modals = {
         this.showSaveSlotsModal();
         return;
       }
-      const res = await this._runWithCloudProgress('save', () => GameState.syncActiveSlotToCloud('manual'));
+      const res = await App.runWithCloudProgress('save', () => GameState.syncActiveSlotToCloud('manual'));
       if (res && res.busy) return;
       App.toast(res.msg, res.ok ? 'success' : 'error');
     });
