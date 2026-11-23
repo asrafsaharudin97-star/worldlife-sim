@@ -656,8 +656,10 @@ window.Modals = {
     const isPartner = rel.id === s.partnerId;
     const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
     const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
-    const canAskMoney = isParent || isPartner || isSibling;
+    const canAskMoney = isParent || isPartner || isSibling || isFriend;
     const askedMoneyThisYear = Boolean(s.yearlyActions[`rel_${rel.id}_ask_money`]);
+    const canStealMoney = isParent || isPartner || isSibling || isFriend;
+    const stoleMoneyThisYear = Array.isArray(s.stoleMoneyIdsThisYear) && s.stoleMoneyIdsThisYear.includes(rel.id);
     const isFriend = rel.category === 'friend';
     const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
     if (isChild && window.Relationships && Relationships.ensureChildEducationFields) {
@@ -805,6 +807,15 @@ window.Modals = {
             </span>
           </button>
         ` : ''}
+        ${canStealMoney ? `
+          <button class="action-item rel-act-btn" data-act="steal_money" ${stoleMoneyThisYear ? 'disabled' : ''}>
+            <span class="ai-icon">🕵️</span>
+            <span class="ai-content">
+              <span class="ai-title">Curi Duit</span>
+              <span class="ai-desc">${stoleMoneyThisYear ? 'Sudah mencuba mencuri wang daripadanya tahun ini' : 'Cuba ambil wang tunai secara senyap-senyap'}</span>
+            </span>
+          </button>
+        ` : ''}
 
         ${isFriend && s.age >= 18 ? `
           <button class="action-item rel-act-btn" data-act="ask_referral">
@@ -819,12 +830,11 @@ window.Modals = {
 
         ${isFriend ? `
           <button class="action-item rel-act-btn" data-act="cut_ties">
-            <span class="ai-icon">🚪</span>
+            <span class="ai-icon">💔</span>
             <span class="ai-content">
-              <span class="ai-title">Jauhkan Diri Daripada Rakan</span>
-              <span class="ai-desc">Tamatkan persahabatan jika hubungan sudah toksik</span>
+              <span class="ai-title">Putus Kawan</span>
+              <span class="ai-desc">Tamatkan persahabatan ini secara muktamad</span>
             </span>
-            <span class="ai-right cost">Tamat</span>
           </button>
         ` : ''}
 
@@ -889,10 +899,9 @@ window.Modals = {
           <button class="action-item rel-act-btn" data-act="breakup">
             <span class="ai-icon">💔</span>
             <span class="ai-content">
-              <span class="ai-title">${s.married ? 'Bercerai' : 'Tamatkan Hubungan'}</span>
+              <span class="ai-title">${s.married ? 'Cerai' : 'Putus Pasangan'}</span>
               <span class="ai-desc">Bawa haluan masing-masing</span>
             </span>
-            <span class="ai-right cost">Tamat</span>
           </button>
         ` : ''}
         ${isChild && rel.alive ? `

@@ -14,6 +14,8 @@ window.Sim = {
     s.year += 1;
     s.yearsInCurrentCountry += 1;
     s.yearlyActions = {};
+    s.stoleMoneyIdsThisYear = [];
+    s.askedMoneyCountThisYear = 0;
 
     const c = Utils.getCountry(s.countryId);
 

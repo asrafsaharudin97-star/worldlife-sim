@@ -974,7 +974,7 @@ window.Relationships = {
     const rel = s.relationships.find(r => r.id === relId);
     if (!rel || !rel.alive) return { ok: false, msg: 'Tidak dapat berinteraksi.' };
 
-    const nonRepeatable = !['engage', 'propose', 'have_kid', 'breakup', 'cohabit', 'cut_ties'].includes(action);
+    const nonRepeatable = !['engage', 'propose', 'have_kid', 'breakup', 'cohabit', 'cut_ties', 'steal_money'].includes(action);
     const key = `rel_${relId}_${action}`;
     if (nonRepeatable && s.yearlyActions[key]) {
       return { ok: false, msg: `Anda sudah melakukan ini dengan ${rel.name} tahun ini.` };
@@ -1475,9 +1475,15 @@ window.Relationships = {
       const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
       const isPartner = rel.id === s.partnerId;
       const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
-      if (!isParent && !isPartner && !isSibling) {
+      const isFriend = rel.category === 'friend';
+      if (!isParent && !isPartner && !isSibling && !isFriend) {
         return { ok: false, msg: 'Anda tidak boleh meminta duit daripada kenalan ini.' };
       }
+      s.askedMoneyCountThisYear = s.askedMoneyCountThisYear || 0;
+      if (s.askedMoneyCountThisYear >= 3) {
+        return { ok: false, msg: 'Anda sudah terlalu kerap meminta duit daripada orang lain tahun ini.' };
+      }
+      s.askedMoneyCountThisYear += 1;
       const cl = rel.closeness ?? 50;
       const isYoung = s.age < 18;
       let chance = isParent
@@ -1531,6 +1537,87 @@ window.Relationships = {
           ];
       const msg = Utils.pick(rejectLines);
       GameState.addJournalEntry(`💸 Minta Duit (${rel.name}): ${msg}`, 'warning');
+      GameState.save();
+      return { ok: false, msg };
+    }
+
+    if (action === 'steal_money') {
+      const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
+      const isPartner = rel.id === s.partnerId;
+      const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
+      const isFriend = rel.category === 'friend';
+      if (!isParent && !isPartner && !isSibling && !isFriend) {
+        return { ok: false, msg: 'Anda tidak boleh mencuri duit daripada kenalan ini.' };
+      }
+      if (!Array.isArray(s.stoleMoneyIdsThisYear)) s.stoleMoneyIdsThisYear = [];
+      if (s.stoleMoneyIdsThisYear.includes(rel.id)) {
+        return { ok: false, msg: `Anda sudah mencuba mencuri wang daripada ${rel.name} tahun ini.` };
+      }
+      s.stoleMoneyIdsThisYear.push(rel.id);
+
+      const smarts = (s.stats && s.stats.smarts) || 50;
+      const trust = rel.trust ?? 60;
+      // Peluang berjaya senyap-senyap (dipengaruhi kepintaran & tahap kepercayaan mangsa)
+      const successChance = Math.max(0.22, Math.min(0.68, 0.36 + (smarts - 50) / 260 + (trust >= 60 ? 0.08 : -0.06)));
+      const usd = s.age < 18 ? Utils.randInt(5, 35) : Utils.randInt(20, 160);
+      const stolenLocal = Math.max(1, Utils.usdToLocal(usd, s.countryId));
+
+      if (Utils.chance(successChance)) {
+        s.money += stolenLocal;
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -Utils.randInt(14, 20), stress: 5 });
+        const formatted = Utils.formatMoney(stolenLocal, s.countryId);
+        const msg = `Anda berjaya menyelinap dan mencuri ${formatted} daripada dompet ${rel.name} tanpa disedari.`;
+        GameState.addJournalEntry(`🕵️ Curi Duit (${rel.name}): ${msg}`, 'warning');
+        GameState.save();
+        return { ok: true, msg };
+      }
+
+      // KANTOI!
+      rel.closeness = 0;
+      rel.trust = 0;
+      const heatAdd = (isFriend || isPartner) ? Utils.randInt(4, 7) : 0;
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ karma: -Utils.randInt(22, 30), stress: 12, notoriety: heatAdd });
+      }
+
+      if (isPartner) {
+        if (Utils.chance(0.80)) {
+          const wasMarried = Boolean(s.married);
+          this._endPartnerFromCheating(s, rel, { lessDrama: false });
+          const msg = wasMarried
+            ? `KANTOI! ${rel.name} menangkap anda mencuri wangnya, memfailkan penceraian serta-merta dan mengugut melaporkannya kepada polis!`
+            : `KANTOI! ${rel.name} menangkap anda mencuri wangnya dan terus memutuskan hubungan serta-merta!`;
+          GameState.addJournalEntry(`🕵️💔 ${msg}`, 'warning');
+          GameState.save();
+          return { ok: false, brokeUp: true, msg };
+        }
+        GameState.adjustStats({ happiness: -12 });
+        const msg = `KANTOI! ${rel.name} menangkap anda mencuri wangnya. Kepercayaan dan kemesraan kini jatuh ke 0%!`;
+        GameState.addJournalEntry(`🕵️ ${msg}`, 'warning');
+        GameState.save();
+        return { ok: false, msg };
+      }
+
+      if (isFriend) {
+        if (Utils.chance(0.80)) {
+          s.relationships = s.relationships.filter(r => r.id !== rel.id);
+          GameState.adjustStats({ happiness: -10 });
+          const msg = `KANTOI! ${rel.name} menangkap anda mencuri duitnya, memutuskan persahabatan serta-merta dan mengugut melaporkan kepada polis!`;
+          GameState.addJournalEntry(`🕵️💔 ${msg}`, 'warning');
+          GameState.save();
+          return { ok: false, brokeUp: true, msg };
+        }
+        GameState.adjustStats({ happiness: -8 });
+        const msg = `KANTOI! ${rel.name} menangkap anda mencuri duitnya. Kepercayaan terhadap anda kini 0%!`;
+        GameState.addJournalEntry(`🕵️ ${msg}`, 'warning');
+        GameState.save();
+        return { ok: false, msg };
+      }
+
+      // Famili (Ibu/Bapa/Adik-Beradik)
+      GameState.adjustStats({ happiness: -10 });
+      const msg = `KANTOI! ${rel.name} menangkap anda mencuri wang keluarga! ${rel.name} amat kecewa dan marah — kepercayaan terhadap anda kini 0%!`;
+      GameState.addJournalEntry(`🕵️ ${msg}`, 'warning');
       GameState.save();
       return { ok: false, msg };
     }
