@@ -554,6 +554,9 @@ window.App = {
     try {
       const result = await taskFn();
       if (p._timer) { clearInterval(p._timer); p._timer = null; }
+      if (result && result.ok === false) {
+        return result;
+      }
       p.percent = 100;
       p.label = this._getCloudStageLabel(action, 100);
       this.renderCloudProgressOverlay();

@@ -1004,7 +1004,14 @@ window.Sim = {
     const recordRecent = (ev) => {
       if (!ev || !ev.id) return ev;
       s.recentRandomEventIds = [ev.id, ...s.recentRandomEventIds.filter(id => id !== ev.id)].slice(0, 15);
-      return { ...ev, isAgeUpRandom: true };
+      const shuffledChoices = Array.isArray(ev.choices) ? [...ev.choices] : ev.choices;
+      if (Array.isArray(shuffledChoices) && shuffledChoices.length > 1) {
+        for (let i = shuffledChoices.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffledChoices[i], shuffledChoices[j]] = [shuffledChoices[j], shuffledChoices[i]];
+        }
+      }
+      return { ...ev, choices: shuffledChoices, isAgeUpRandom: true };
     };
 
     const customRandomPool = (GAME_EVENTS.ageUpRandomPool || []).filter(
@@ -1535,8 +1542,8 @@ window.Sim = {
     const evText = `${(event && event.title) || ''} ${(event && event.text) || ''} ${(event && event.id) || ''}`.toLowerCase();
     const isDeathEvent = /meninggal|kematian|arwah|pemergian|maut|jenazah|pengebumian|berkabung|death|died|funeral|bereave/.test(evText);
     const statKeys = (tone === 'risky' && !isDeathEvent)
-      ? ['karma', 'fame', 'notoriety', 'stress']
-      : ['karma', 'fame', 'stress'];
+      ? ['karma', 'fame', 'notoriety', 'smarts', 'stress']
+      : ['karma', 'fame', 'smarts', 'stress'];
     // Kocok susunan dan pilih 2–4 statistik untuk dikemas kini secara rawak
     for (let i = statKeys.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -1548,8 +1555,12 @@ window.Sim = {
       karma: 'Karma',
       fame: 'Populariti',
       notoriety: 'Haba Polis',
+      smarts: 'Kepintaran',
       stress: 'Stres'
     };
+
+    if (!s.stats) s.stats = { health: 80, happiness: 80, smarts: 50, looks: 50 };
+    if (typeof s.stats.smarts !== 'number') s.stats.smarts = 50;
 
     const parts = [];
     for (const key of pickedKeys) {
@@ -1560,22 +1571,25 @@ window.Sim = {
       if (tone === 'helpful') {
         if (key === 'karma') sign = twist ? -1 : 1;
         else if (key === 'fame') sign = twist ? -1 : 1;
+        else if (key === 'smarts') sign = twist ? -1 : 1;
         else if (key === 'notoriety') sign = twist ? 1 : -1;
         else if (key === 'stress') sign = twist ? 1 : -1;
       } else if (tone === 'risky') {
         if (key === 'karma') sign = twist ? 1 : -1;
-        else if (key === 'fame') sign = Utils.chance(0.55) ? 1 : -1;
+        else if (key === 'fame') sign = Utils.chance(0.35) ? 1 : -1;
+        else if (key === 'smarts') sign = twist ? 1 : -1;
         else if (key === 'notoriety') sign = twist ? -1 : 1;
         else if (key === 'stress') sign = twist ? -1 : 1;
       } else {
         // neutral: campuran rawak ringan
         if (key === 'karma') sign = Utils.chance(0.55) ? 1 : -1;
         else if (key === 'fame') sign = Utils.chance(0.50) ? 1 : -1;
+        else if (key === 'smarts') sign = Utils.chance(0.50) ? 1 : -1;
         else if (key === 'notoriety') sign = Utils.chance(0.35) ? 1 : -1;
         else if (key === 'stress') sign = Utils.chance(0.45) ? 1 : -1;
       }
 
-      const prevVal = a[key];
+      const prevVal = key === 'smarts' ? s.stats.smarts : a[key];
       let delta = sign * mag;
 
       // Kendali statistik 0–100 yang bermula pada 0 (atau 100) supaya kesan sentiasa nyata
@@ -1591,7 +1605,11 @@ window.Sim = {
         ? Math.max(-100, Math.min(100, prevVal + delta))
         : Math.max(0, Math.min(100, prevVal + delta));
       const actualDelta = nextVal - prevVal;
-      a[key] = nextVal;
+      if (key === 'smarts') {
+        s.stats.smarts = nextVal;
+      } else {
+        a[key] = nextVal;
+      }
       if (key === 'fame') {
         a.peakFame = Math.max(a.peakFame || 0, nextVal);
       }

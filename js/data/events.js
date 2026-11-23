@@ -1573,6 +1573,58 @@ window.GAME_EVENTS = {
         { label: 'Laporkan secara rasmi melalui pihak pengurusan taman tanpa bersemuka', tone: 'neutral', outcome: 'Pihak pengurusan menyelesaikan isu itu dalam beberapa hari tanpa pertengkaran.' },
         { label: 'Baling semula bahan binaan itu ke halaman mereka dalam keadaan marah', tone: 'risky', outcome: 'Pertengkaran besar tercetus di depan rumah sehingga pihak berkuasa tempatan terpaksa campur tangan!' }
       ]
+    },
+    {
+      id: 'rnd_child_exam_cheat',
+      minAge: 7, maxAge: 12,
+      icon: '📝',
+      title: 'Ujian Mengejut & Nota Tiruan di Kelas',
+      text: 'Guru mengumumkan kuiz mengejut hari ini. Rakan sebelah menghulurkan kertas jawapan tiruan di bawah meja sementara guru sedang menulis di papan putih.',
+      choices: [
+        { label: 'Tolak kertas tiruan itu dan jawab sendiri berdasarkan apa yang dipelajari', tone: 'helpful', outcome: 'Walaupun sukar, anda berjaya menjawab dengan jujur dan semakin faham topik pelajaran.' },
+        { label: 'Tiru bulat-bulat jawapan rakan tanpa faham satu pun soalan', tone: 'risky', outcome: 'Anda langsung tidak belajar apa-apa dan guru mula mengesyaki jawapan anda yang pelik!' },
+        { label: 'Sembunyikan kertas soalan dan pura-pura sakit perut untuk ponteng kelas', tone: 'risky', outcome: 'Taktik anda terbongkar di bilik sakit dan anda ditegur keras oleh guru disiplin.' },
+        { label: 'Minta izin guru untuk ulang kaji 5 minit sebelum kuiz bermula', tone: 'neutral', outcome: 'Guru membenarkan semakan ringkas dan anda menjawab kuiz dengan tenang.' }
+      ]
+    },
+    {
+      id: 'rnd_teen_vandal_challenge',
+      minAge: 13, maxAge: 17,
+      icon: '🎨',
+      title: 'Cabaran Tular Conteng Dinding & Berita Palsu',
+      text: 'Sekumpulan remaja mencabar anda menyertai trend media sosial menyembur cat di hentian bas dan menyebarkan khabar angin palsu tentang sekolah demi tontonan.',
+      choices: [
+        { label: 'Tolak cabaran bodoh itu dan fokus menyiapkan projek kelas', tone: 'helpful', outcome: 'Anda mengelak masalah besar dan hasil projek anda dipuji guru serta rakan.' },
+        { label: 'Sertai menconteng hentian bas sambil merakam siaran langsung', tone: 'risky', outcome: 'Video anda tular dengan kecaman hebat netizen dan peronda polis tiba di lokasi!' },
+        { label: 'Sebarkan gosip palsu mengenai guru di media sosial demi perhatian', tone: 'risky', outcome: 'Fitnah anda terbongkar — reputasi anda merudum teruk dan pihak sekolah memanggil polis!' },
+        { label: 'Laporkan rancangan vandalisme itu secara tanpa nama kepada pengawal', tone: 'neutral', outcome: 'Hentian bas berjaya diselamatkan daripada kerosakan tanpa anda terlibat secara langsung.' }
+      ]
+    },
+    {
+      id: 'rnd_adult_scam_hoax',
+      minAge: 18, maxAge: 59,
+      icon: '📲',
+      title: 'Skim Cepat Kaya & Kontroversi Siaran Langsung',
+      text: 'Seorang pempengaruh kontroversi mengajak anda mempromosikan skim pelaburan meragukan serta membuat kenyataan provokatif secara langsung demi trafik pantas.',
+      choices: [
+        { label: 'Semak fakta secara teliti dan dedahkan skim itu sebagai penipuan', tone: 'helpful', outcome: 'Pendedahan berfakta anda menyelamatkan ramai orang dan menaikkan kredibiliti anda.' },
+        { label: 'Promosikan skim palsu itu secara membuta tuli demi komisen segera', tone: 'risky', outcome: 'Ramai mangsa kerugian, nama anda diboikot habis-habisan dan polis membuka kertas siasatan!', moneyUsd: 350 },
+        { label: 'Mengamuk dan menghina penonton secara langsung apabila dikritik', tone: 'risky', outcome: 'Klip baran anda tular ke seluruh negara — populariti menjunam dan anda dicemuh ramai!' },
+        { label: 'Tolak pelawaan tersebut secara sopan dan teruskan rutin kerja anda', tone: 'neutral', outcome: 'Anda memilih ketenangan dan menjauhkan diri daripada kontroversi murahan.' }
+      ]
+    },
+    {
+      id: 'rnd_senior_fake_remedy',
+      minAge: 60, maxAge: 115,
+      icon: '🧪',
+      title: 'Sebaran Petua Kesihatan Palsu di Kumpulan Komuniti',
+      text: 'Mesej berantai mengenai ubat mujarab tidak berdaftar tersebar luas dalam kumpulan sembang kejiranan dan ada yang mengajak anda menjualnya bersama.',
+      choices: [
+        { label: 'Rujuk doktor dahulu dan kongsikan fakta kesihatan sebenar kepada jiran', tone: 'helpful', outcome: 'Nasihat bijak anda mengelakkan jiran-jiran daripada membahayakan kesihatan mereka.' },
+        { label: 'Percaya bulat-bulat dan jual ubat haram itu kepada jiran tanpa lesen', tone: 'risky', outcome: 'Beberapa pembeli jatuh sakit, jiran marah besar dan penguat kuasa datang menyiasat!', moneyUsd: 120 },
+        { label: 'Sebarkan mesej palsu itu ke semua kumpulan sembang sambil memperlekeh doktor', tone: 'risky', outcome: 'Kenyataan melulu anda dikritik ramai ahli komuniti dan merosakkan nama baik anda.' },
+        { label: 'Padam mesej berantai itu dan tidak mengulas apa-apa', tone: 'neutral', outcome: 'Anda kekal tenang dan mengelak daripada terlibat dalam perdebatan kumpulan sembang.' }
+      ]
     }
   ]
 };
