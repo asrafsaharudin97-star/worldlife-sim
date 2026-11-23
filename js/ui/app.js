@@ -13,17 +13,166 @@ window.App = {
     if (Utils.loadMutePref) Utils.loadMutePref();
     this._bindGlobalEvents();
     this._initCreator();
+    this._bindEntryGate();
     this._bindFirebaseListeners();
 
-    GameState.load();
+    if (window.FirebaseService && FirebaseService.isLoggedIn()) {
+      GameState.setGuestMode(false);
+      GameState.load();
+      this.showStartScreen();
+    } else {
+      this.showEntryGate();
+    }
+  },
+
+  _bindEntryGate() {
+    const gateLoginBtn = document.getElementById('btn-gate-google-login');
+    if (gateLoginBtn) {
+      gateLoginBtn.addEventListener('click', async () => {
+        if (!window.FirebaseService) {
+          this.toast('Memuatkan Firebase... Sila cuba sebentar lagi.', 'error');
+          return;
+        }
+        const res = await FirebaseService.signInWithGoogle();
+        this.toast(res.msg, res.ok ? 'success' : 'error');
+        this._renderEntryGateError();
+        if (res.ok && !res.redirecting) {
+          GameState.setGuestMode(false);
+          this.updateGuestBanner();
+          this.showStartScreen();
+        }
+      });
+    }
+
+    const gateGuestBtn = document.getElementById('btn-gate-guest-mode');
+    if (gateGuestBtn) {
+      gateGuestBtn.addEventListener('click', () => {
+        this.showGuestWarningModal();
+      });
+    }
+
+    const guestBannerLogin = document.getElementById('btn-guest-banner-login');
+    if (guestBannerLogin) {
+      guestBannerLogin.addEventListener('click', async () => {
+        if (!window.FirebaseService) {
+          this.toast('Memuatkan Firebase... Sila cuba sebentar lagi.', 'error');
+          return;
+        }
+        const res = await FirebaseService.signInWithGoogle();
+        this.toast(res.msg, res.ok ? 'success' : 'error');
+        if (res.ok && !res.redirecting) {
+          GameState.setGuestMode(false);
+          this.updateGuestBanner();
+          this.renderStartAuthBar();
+        } else {
+          this.renderStartAuthBar();
+        }
+      });
+    }
+  },
+
+  _renderEntryGateError() {
+    const box = document.getElementById('entry-gate-error');
+    if (!box) return;
+    const fb = window.FirebaseService;
+    const authErr = fb && fb.lastAuthError ? fb.lastAuthError : null;
+    if (!authErr) {
+      box.innerHTML = '';
+      return;
+    }
+    const errHost = authErr.hostname || (window.location && window.location.hostname) || '';
+    box.innerHTML = `
+      <div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:12px;line-height:1.48;">
+        <strong>⚠️ Log Masuk Google Gagal</strong><br/>
+        Kod Ralat: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;">${Utils.escapeHtml(authErr.code)}</code><br/>
+        Domain Semasa: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;user-select:all;">${Utils.escapeHtml(errHost)}</code><br/>
+        <span style="display:block;margin-top:4px;color:#7f1d1d;">${Utils.escapeHtml(authErr.hint || authErr.msg)}</span>
+      </div>
+    `;
+  },
+
+  showEntryGate() {
+    const gate = document.getElementById('entry-gate-screen');
+    if (gate) gate.classList.remove('hidden');
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-header').classList.add('hidden');
+    document.getElementById('life-feed-container').classList.add('hidden');
+    document.getElementById('game-footer').classList.add('hidden');
+    this.updateGuestBanner();
+    this._renderEntryGateError();
+  },
+
+  showGuestWarningModal() {
+    Modals.open({
+      icon: '⚠️',
+      title: '⚠️ Amaran Mod Tetamu',
+      subtitle: 'Progres & fail simpanan tidak akan disimpan',
+      bodyHtml: `
+        <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;line-height:1.55;">
+          Dalam Mod Tetamu, fail simpanan dan progres kehidupan anda <strong>TIDAK akan disimpan</strong>. Semua data akan hilang apabila laman ditutup atau dimuat semula. Log masuk dengan Google jika anda mahu menyimpan progres anda di Cloud.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+          <button type="button" id="btn-guest-warn-login" class="primary-btn" style="width:100%;">
+            Kembali &amp; Log Masuk Google
+          </button>
+          <button type="button" id="btn-guest-warn-confirm" class="secondary-btn" style="width:100%;color:#b45309;border-color:#f59e0b;background:#fffbeb;font-weight:700;">
+            Faham, Teruskan Mod Tetamu
+          </button>
+        </div>
+      `
+    });
+
+    document.getElementById('btn-guest-warn-login').addEventListener('click', async () => {
+      Modals.close(true);
+      if (window.FirebaseService) {
+        const res = await FirebaseService.signInWithGoogle();
+        this.toast(res.msg, res.ok ? 'success' : 'error');
+        this._renderEntryGateError();
+        if (res.ok && !res.redirecting) {
+          GameState.setGuestMode(false);
+          this.updateGuestBanner();
+          this.showStartScreen();
+        }
+      }
+    });
+
+    document.getElementById('btn-guest-warn-confirm').addEventListener('click', () => {
+      Modals.close(true);
+      this.enterGuestMode();
+    });
+  },
+
+  enterGuestMode() {
+    GameState.setGuestMode(true);
+    this.updateGuestBanner();
     this.showStartScreen();
+    this.toast('👤 Mod Tetamu aktif — progres sesi ini tidak akan disimpan.', 'culture');
+  },
+
+  updateGuestBanner() {
+    const banner = document.getElementById('guest-mode-banner');
+    if (!banner) return;
+    const isGuest = Boolean(window.GameState && GameState.isGuest());
+    banner.classList.toggle('hidden', !isGuest);
+    const contBtn = document.getElementById('btn-continue-life');
+    if (contBtn) contBtn.classList.toggle('hidden', isGuest);
   },
 
   _bindFirebaseListeners() {
     const attach = () => {
       if (!window.FirebaseService || this._fbListenersBound) return;
       this._fbListenersBound = true;
-      FirebaseService.onAuthChange(() => {
+      FirebaseService.onAuthChange((user) => {
+        if (user) {
+          GameState.setGuestMode(false);
+          this.updateGuestBanner();
+          const gate = document.getElementById('entry-gate-screen');
+          if (gate && !gate.classList.contains('hidden')) {
+            GameState.load();
+            this.showStartScreen();
+          }
+        }
+        this._renderEntryGateError();
         this.renderStartAuthBar();
       });
       FirebaseService.onSyncStateChange(() => {
@@ -329,6 +478,8 @@ window.App = {
       GameState.setActiveSlotId(opts.targetSlotId);
     }
 
+    const gate = document.getElementById('entry-gate-screen');
+    if (gate) gate.classList.add('hidden');
     document.getElementById('start-screen').classList.remove('hidden');
     document.getElementById('game-header').classList.add('hidden');
     document.getElementById('life-feed-container').classList.add('hidden');
@@ -338,14 +489,18 @@ window.App = {
     if (countEl) countEl.textContent = String(Object.keys(window.COUNTRIES).length);
 
     this._initCreatorRandomCountry();
+    this.updateGuestBanner();
     this.renderStartAuthBar();
   },
 
   showGameScreen() {
+    const gate = document.getElementById('entry-gate-screen');
+    if (gate) gate.classList.add('hidden');
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('game-header').classList.remove('hidden');
     document.getElementById('life-feed-container').classList.remove('hidden');
     document.getElementById('game-footer').classList.remove('hidden');
+    this.updateGuestBanner();
 
     this._feedLimit = this.FEED_PAGE_SIZE;
     this._feedSig = '';

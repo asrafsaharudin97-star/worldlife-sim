@@ -1049,7 +1049,7 @@ window.GameState = {
 
   archiveCurrentLife() {
     const s = this.current;
-    if (!s) return;
+    if (!s || this.isGuestMode) return;
     if (window.Dynasty && Dynasty.recordMemberDeath) {
       Dynasty.recordMemberDeath(s);
     }
@@ -1076,6 +1076,7 @@ window.GameState = {
   },
 
   getHistory() {
+    if (this.isGuestMode) return [];
     if (window.SafeStorage) {
       const h = SafeStorage.getJSON(this.HISTORY_KEY, []);
       return Array.isArray(h) ? h : [];
@@ -1131,11 +1132,25 @@ window.GameState = {
     return removed;
   },
 
+  isGuestMode: false,
+
+  setGuestMode(enabled) {
+    this.isGuestMode = Boolean(enabled);
+    if (this.isGuestMode) {
+      this.current = null;
+    }
+  },
+
+  isGuest() {
+    return Boolean(this.isGuestMode);
+  },
+
   SLOT_IDS: ['slot_1', 'slot_2', 'slot_3', 'slot_4', 'slot_5'],
   ACTIVE_SLOT_KEY: 'worldlife_active_slot_v1',
   SLOT_KEY_PREFIX: 'worldlife_save_',
 
   getActiveSlotId() {
+    if (this.isGuestMode) return 'slot_1';
     const raw = window.SafeStorage
       ? SafeStorage.getRaw(this.ACTIVE_SLOT_KEY)
       : (typeof localStorage !== 'undefined' ? localStorage.getItem(this.ACTIVE_SLOT_KEY) : null);
@@ -1144,6 +1159,7 @@ window.GameState = {
 
   setActiveSlotId(slotId) {
     const valid = this.SLOT_IDS.includes(slotId) ? slotId : 'slot_1';
+    if (this.isGuestMode) return valid;
     try {
       if (window.localStorage) localStorage.setItem(this.ACTIVE_SLOT_KEY, valid);
     } catch (e) {}
@@ -1210,6 +1226,7 @@ window.GameState = {
   },
 
   getLocalSlot(slotId) {
+    if (this.isGuestMode) return null;
     if (!this.SLOT_IDS.includes(slotId)) return null;
     try {
       const key = this._slotStorageKey(slotId);
@@ -1223,6 +1240,11 @@ window.GameState = {
   },
 
   getLocalSlots() {
+    if (this.isGuestMode) {
+      const empty = {};
+      this.SLOT_IDS.forEach(id => { empty[id] = null; });
+      return empty;
+    }
     this._migrateLegacySaveIfNeeded();
     const map = {};
     this.SLOT_IDS.forEach(id => {
@@ -1232,11 +1254,13 @@ window.GameState = {
   },
 
   hasAnyLocalSlot() {
+    if (this.isGuestMode) return false;
     const slots = this.getLocalSlots();
     return this.SLOT_IDS.some(id => Boolean(slots[id]));
   },
 
   saveLocalSlot(slotId, stateObj = null) {
+    if (this.isGuestMode) return true;
     const s = stateObj || this.current;
     if (!s || !this.SLOT_IDS.includes(slotId)) return false;
     this.trimJournal(s);
@@ -1286,6 +1310,7 @@ window.GameState = {
   },
 
   async syncActiveSlotToCloud(reason = 'manual') {
+    if (this.isGuestMode) return { ok: false, guest: true, msg: 'Mod Tetamu — progres tidak disimpan.' };
     if (!this.current) return { ok: false, msg: 'Tiada watak aktif.' };
     const slotId = this.getActiveSlotId();
     this.saveLocalSlot(slotId, this.current);
@@ -1382,6 +1407,8 @@ window.GameState = {
     }
     if (!this.current) return false;
     this.trimJournal(this.current);
+    // Mod Tetamu: simpan dalam memori sesi semasa sahaja (JANGAN tulis ke localStorage)
+    if (this.isGuestMode) return true;
     const activeSlot = this.getActiveSlotId();
     const okSlot = this.saveLocalSlot(activeSlot, this.current);
     if (window.SafeStorage) {
@@ -1397,6 +1424,7 @@ window.GameState = {
   },
 
   load() {
+    if (this.isGuestMode) return this.current || null;
     this._migrateLegacySaveIfNeeded();
     const activeSlot = this.resolveDefaultActiveSlot();
     const slotData = this.getLocalSlot(activeSlot);
