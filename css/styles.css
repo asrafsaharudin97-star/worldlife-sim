@@ -726,7 +726,7 @@ html, body {
 
 .modal-sheet {
   width: 100%;
-  max-height: 90vh;
+  max-height: 85vh;
   background: #fff;
   border-radius: 22px 22px 0 0;
   display: flex;
@@ -740,7 +740,7 @@ html, body {
   .modal-sheet {
     border-radius: 22px;
     max-width: 470px;
-    max-height: 90vh;
+    max-height: 85vh;
   }
 }
 
@@ -757,6 +757,8 @@ html, body {
   background: linear-gradient(135deg, var(--country-secondary) 0%, var(--country-primary) 100%);
   color: #fff;
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
 }
 .modal-title-group {
   display: flex;
@@ -806,6 +808,13 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.modal-body > * {
+  flex-shrink: 0;
+}
+.modal-body > .career-modal-layout,
+.modal-body > .assets-modal-layout {
+  flex-shrink: 1;
 }
 .modal-body:has(.career-modal-layout) {
   overflow: hidden;
