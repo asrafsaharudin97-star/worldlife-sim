@@ -1471,6 +1471,70 @@ window.Relationships = {
     }
 
     // --- Putus / Bercerai ---
+    if (action === 'ask_money') {
+      const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
+      const isPartner = rel.id === s.partnerId;
+      const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
+      if (!isParent && !isPartner && !isSibling) {
+        return { ok: false, msg: 'Anda tidak boleh meminta duit daripada kenalan ini.' };
+      }
+      const cl = rel.closeness ?? 50;
+      const isYoung = s.age < 18;
+      let chance = isParent
+        ? Math.max(0.25, Math.min(0.90, 0.28 + cl / 125))
+        : Math.max(0.15, Math.min(0.78, 0.18 + cl / 145));
+
+      if (Utils.chance(chance)) {
+        let usd = 0;
+        let partial = false;
+        if (isParent) {
+          if (isYoung) {
+            usd = Utils.randInt(5, 15 + Math.min(30, s.age * 2));
+          } else {
+            usd = Utils.randInt(120, Math.round(350 + cl * 5));
+          }
+        } else {
+          // Pasangan atau Adik-Beradik: boleh beri jumlah penuh atau lebih kecil
+          partial = Utils.chance(0.42);
+          if (isYoung) {
+            usd = partial ? Utils.randInt(3, 10) : Utils.randInt(8, 25);
+          } else {
+            usd = partial ? Utils.randInt(25, 110) : Utils.randInt(80, Math.round(220 + cl * 3));
+          }
+        }
+        const amount = Math.max(1, Utils.usdToLocal(usd, s.countryId));
+        s.money += amount;
+        rel._askMoneyRefusals = 0;
+        const formatted = Utils.formatMoney(amount, s.countryId);
+        const msg = partial
+          ? `${rel.name} tidak mampu beri banyak, tetapi tetap menghulurkan ${formatted} untuk membantu anda.`
+          : `${rel.name} bermurah hati memberikan anda ${formatted}.`;
+        GameState.addJournalEntry(`💸 Minta Duit (${rel.name}): ${msg}`, 'culture');
+        GameState.save();
+        return { ok: true, msg };
+      }
+
+      // Ditolak
+      rel._askMoneyRefusals = (rel._askMoneyRefusals || 0) + 1;
+      const dropRel = cl < 55 || rel._askMoneyRefusals >= 2;
+      if (dropRel) {
+        rel.closeness = Utils.clamp(cl - Utils.randInt(3, 6), 0, 100);
+      }
+      const rejectLines = isParent
+        ? [
+            `${rel.name} menolak dengan tegas dan menasihati anda supaya belajar berdikari.`,
+            `${rel.name} berkata perbelanjaan keluarga agak ketat bulan ini dan tidak dapat memberi wang.`
+          ]
+        : [
+            `${rel.name} menolak permintaan anda kerana kewangannya sendiri sedang sempit.`,
+            `${rel.name} menggeleng kepala dan meminta maaf kerana tidak dapat meminjamkan duit buat masa ini.`
+          ];
+      const msg = Utils.pick(rejectLines);
+      GameState.addJournalEntry(`💸 Minta Duit (${rel.name}): ${msg}`, 'warning');
+      GameState.save();
+      return { ok: false, msg };
+    }
+
     if (action === 'breakup') {
       const wasMarried = s.married;
       if (wasMarried && window.LegalInheritanceEngine && !(opts && opts.forceSimple)) {
@@ -1503,6 +1567,136 @@ window.Relationships = {
     }
 
     return { ok: false, msg: 'Tindakan tidak dikenali.' };
+  },
+
+
+  _endPartnerFromCheating(s, partner, opts = {}) {
+    const wasMarried = Boolean(s.married);
+    s.partnerId = null;
+    s.married = false;
+    partner.category = 'ex';
+    partner.role = wasMarried ? 'Bekas Pasangan (Cerai)' : 'Bekas Pasangan';
+    partner.closeness = 5;
+    partner.trust = 5;
+    if (wasMarried && s.money > 0) {
+      s.money -= Math.round(s.money * 0.20);
+    }
+    if (opts.lessDrama) {
+      GameState.adjustStats({ happiness: wasMarried ? -12 : -8 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 4 });
+    } else {
+      GameState.adjustStats({ happiness: wasMarried ? -24 : -18 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: -10, stress: 12 });
+    }
+    GameState.recordCrisis('heartbreak');
+  },
+
+  attemptCheat() {
+    const s = GameState.current;
+    if (!s || !s.partnerId) return { ok: false, msg: 'Anda tidak mempunyai pasangan buat masa ini.' };
+    if (s.yearlyActions.cheatedThisYear) return { ok: false, msg: 'Anda sudah bermain kayu tiga tahun ini.' };
+    const partner = s.relationships.find(r => r.id === s.partnerId && r.alive);
+    if (!partner) return { ok: false, msg: 'Pasangan tidak ditemui.' };
+
+    s.yearlyActions.cheatedThisYear = true;
+    const karmaDrop = -Utils.randInt(12, 18);
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: karmaDrop });
+
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    const cl = partner.closeness ?? 60;
+    const caughtChance = Math.max(0.28, Math.min(0.75, 0.52 - (smarts - 50) / 300 + (cl - 50) / 400));
+
+    if (!Utils.chance(caughtChance)) {
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
+      GameState.addJournalEntry(
+        `💔 Anda menjalin hubungan sulit di belakang ${partner.name}. Buat masa ini, rahsia anda masih tersimpan rapi.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: true, caught: false, msg: 'Anda berjaya menyembunyikan kecurangan anda buat masa ini.' };
+    }
+
+    // Kantoi! Pilih sama ada terus putus/cerai atau konfrontasi 3 pilihan
+    const instantChance = cl < 65 ? 0.48 : 0.32;
+    if (Utils.chance(instantChance)) {
+      const wasMarried = Boolean(s.married);
+      this._endPartnerFromCheating(s, partner, { lessDrama: false });
+      const msg = wasMarried
+        ? `KANTOI! ${partner.name} menangkap anda curang dan terus memfailkan penceraian serta mendedahkan skandal anda!`
+        : `KANTOI! ${partner.name} menangkap anda bermesra dengan orang lain dan terus memutuskan hubungan!`;
+      GameState.addJournalEntry(`💔 ${msg}`, 'warning');
+      GameState.save();
+      return { ok: false, caught: true, instantBreakup: true, msg };
+    }
+
+    GameState.save();
+    return {
+      ok: false,
+      caught: true,
+      confrontation: {
+        partnerId: partner.id,
+        partnerName: partner.name,
+        wasMarried: Boolean(s.married)
+      }
+    };
+  },
+
+  resolveCheatConfrontation(partnerId, choice) {
+    const s = GameState.current;
+    const partner = s && s.relationships.find(r => r.id === partnerId && r.alive);
+    if (!partner) return { ok: false, msg: 'Pasangan tidak ditemui.' };
+    const wasMarried = Boolean(s.married);
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    const cl = partner.closeness ?? 60;
+
+    if (choice === 'lie') {
+      const chance = Math.max(0.15, Math.min(0.62, 0.18 + smarts / 240 + cl / 450));
+      if (Utils.chance(chance)) {
+        partner.closeness = Utils.clamp(cl - 28, 5, 100);
+        partner.trust = Utils.clamp((partner.trust ?? 65) - 35, 5, 100);
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -6, stress: 14 });
+        const msg = `${partner.name} kelihatan masih sangsi, tetapi akhirnya termakan alasan anda. Hubungan terselamat namun sangat renggang.`;
+        GameState.addJournalEntry(`🤥 Konfrontasi Curang: ${msg}`, 'warning');
+        GameState.save();
+        return { ok: true, brokeUp: false, msg };
+      }
+      this._endPartnerFromCheating(s, partner, { lessDrama: false });
+      const msg = wasMarried
+        ? `Penipuan anda terbongkar di depan mata! ${partner.name} berang dan menamatkan perkahwinan serta-merta.`
+        : `Penipuan anda tidak menjadi! ${partner.name} terus memutuskan hubungan dengan anda.`;
+      GameState.addJournalEntry(`💔 Konfrontasi Curang: ${msg}`, 'warning');
+      GameState.save();
+      return { ok: false, brokeUp: true, msg };
+    }
+
+    if (choice === 'apologize') {
+      const forgiveChance = Math.max(0.12, Math.min(0.38, 0.14 + cl / 350));
+      if (Utils.chance(forgiveChance)) {
+        partner.closeness = Utils.clamp(cl - 35, 5, 100);
+        partner.trust = Utils.clamp((partner.trust ?? 65) - 42, 5, 100);
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 2, stress: 8 });
+        const msg = `Dengan linangan air mata, ${partner.name} memilih untuk memberi peluang kedua — namun kepercayaan telah retak teruk.`;
+        GameState.addJournalEntry(`😔 Konfrontasi Curang: ${msg}`, 'warning');
+        GameState.save();
+        return { ok: true, brokeUp: false, msg };
+      }
+      this._endPartnerFromCheating(s, partner, { lessDrama: false });
+      const msg = wasMarried
+        ? `${partner.name} tidak sanggup memaafkan pengkhianatan anda dan memilih untuk bercerai.`
+        : `${partner.name} menolak permohonan maaf anda dan menamatkan hubungan.`;
+      GameState.addJournalEntry(`💔 Konfrontasi Curang: ${msg}`, 'warning');
+      GameState.save();
+      return { ok: false, brokeUp: true, msg };
+    }
+
+    // breakup: Mengaku & Putus Terus
+    this._endPartnerFromCheating(s, partner, { lessDrama: true });
+    const msg = wasMarried
+      ? `Anda mengaku salah dan bersetuju bercerai secara baik dengan ${partner.name} tanpa memanjangkan drama.`
+      : `Anda mengaku salah dan mengakhiri hubungan dengan ${partner.name} secara terus terang.`;
+    GameState.addJournalEntry(`🚪 Konfrontasi Curang: ${msg}`, 'warning');
+    GameState.save();
+    return { ok: true, brokeUp: true, msg };
   },
 
   computeConceptionChance(mother) {

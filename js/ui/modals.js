@@ -482,6 +482,17 @@ window.Modals = {
         </button>
       `;
     }
+    if (s.partnerId && partnerList.length > 0) {
+      html += `
+        <button class="action-item" id="btn-cheat-partner" ${s.yearlyActions.cheatedThisYear ? 'disabled' : ''}>
+          <span class="ai-icon">💔</span>
+          <span class="ai-content">
+            <span class="ai-title">Curang dengan Orang Lain</span>
+            <span class="ai-desc">${s.yearlyActions.cheatedThisYear ? 'Sudah bermain kayu tiga tahun ini' : 'Menjalin hubungan sulit di belakang pasangan'}</span>
+          </span>
+        </button>
+      `;
+    }
     if (s.age >= 21) {
       const adoptCost = Utils.usdToLocal(900, s.countryId);
       html += `
@@ -560,6 +571,20 @@ window.Modals = {
       bodyHtml: html
     });
 
+    const cheatBtn = document.getElementById('btn-cheat-partner');
+    if (cheatBtn) {
+      cheatBtn.addEventListener('click', () => {
+        const res = Relationships.attemptCheat();
+        if (res.confrontation) {
+          this.showCheatConfrontationModal(res.confrontation);
+          return;
+        }
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showRelationships();
+      });
+    }
+
     const rujukBtn = document.getElementById('btn-rujuk-spouse');
     if (rujukBtn) {
       rujukBtn.addEventListener('click', () => {
@@ -629,6 +654,10 @@ window.Modals = {
     if (!rel) return;
 
     const isPartner = rel.id === s.partnerId;
+    const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
+    const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
+    const canAskMoney = isParent || isPartner || isSibling;
+    const askedMoneyThisYear = Boolean(s.yearlyActions[`rel_${rel.id}_ask_money`]);
     const isFriend = rel.category === 'friend';
     const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
     if (isChild && window.Relationships && Relationships.ensureChildEducationFields) {
@@ -767,6 +796,15 @@ window.Modals = {
           </span>
           <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(45, s.countryId), s.countryId)}</span>
         </button>
+        ${canAskMoney ? `
+          <button class="action-item rel-act-btn" data-act="ask_money" ${askedMoneyThisYear ? 'disabled' : ''}>
+            <span class="ai-icon">💸</span>
+            <span class="ai-content">
+              <span class="ai-title">Minta Duit</span>
+              <span class="ai-desc">${askedMoneyThisYear ? 'Sudah meminta bantuan wang tahun ini' : 'Cuba minta bantuan wang tunai'}</span>
+            </span>
+          </button>
+        ` : ''}
 
         ${isFriend && s.age >= 18 ? `
           <button class="action-item rel-act-btn" data-act="ask_referral">
@@ -924,6 +962,42 @@ window.Modals = {
     });
 
     document.getElementById('rel-back-btn').addEventListener('click', () => this.showRelationships());
+  },
+
+  showCheatConfrontationModal(info) {
+    const titleText = info.wasMarried ? 'Konfrontasi Curang!' : 'Kantoi Curang!';
+    const descText = `${info.partnerName} menemui bukti anda curang dengan orang lain dan kini bersemuka dengan anda dalam keadaan marah. Apa tindakan anda?`;
+
+    this.open({
+      icon: '💔',
+      title: titleText,
+      subtitle: `Bersemuka dengan ${Utils.escapeHtml(info.partnerName)}`,
+      locked: true,
+      bodyHtml: `
+        <div class="event-text">${Utils.escapeHtml(descText)}</div>
+        <div class="action-list">
+          <button class="choice-btn cheat-choice-btn" data-choice="lie" style="white-space:normal;text-align:left;">
+            <span class="choice-title">🤥 Tipu &amp; Berdalih</span>
+          </button>
+          <button class="choice-btn cheat-choice-btn" data-choice="apologize" style="white-space:normal;text-align:left;">
+            <span class="choice-title">😔 Mengaku &amp; Minta Maaf</span>
+          </button>
+          <button class="choice-btn cheat-choice-btn" data-choice="breakup" style="white-space:normal;text-align:left;">
+            <span class="choice-title">🚪 Mengaku &amp; Putus Terus</span>
+          </button>
+        </div>
+      `
+    });
+
+    document.querySelectorAll('#modal-body .cheat-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = Relationships.resolveCheatConfrontation(info.partnerId, btn.dataset.choice);
+        this.close(true);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showRelationships();
+      });
+    });
   },
 
   // --------------------------------------------------------------------------
