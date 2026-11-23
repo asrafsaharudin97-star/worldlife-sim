@@ -316,23 +316,79 @@ window.LegacyModals = {
       });
     });
 
+    const showVerdict = (verdictModal) => {
+      Modals.open({
+        icon: verdictModal.icon,
+        title: verdictModal.title,
+        subtitle: verdictModal.subtitle,
+        bodyHtml: `
+          <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;white-space:pre-line;line-height:1.55;">
+            ${Utils.escapeHtml(verdictModal.text)}
+          </div>
+          <button type="button" id="btn-verdict-ok" class="primary-btn" style="width:100%;margin-top:10px;">Faham</button>
+        `
+      });
+      const okBtn = document.getElementById('btn-verdict-ok');
+      if (okBtn) okBtn.addEventListener('click', () => Modals.close(true));
+    };
+
     const runDark = (darkId, targetLabel = null) => {
       const res = Sim.performDarkActivity(darkId, targetLabel);
       App.renderAll();
-      if (res.verdictModal) {
+
+      if (res.escapePrompt) {
+        const ep = res.escapePrompt;
         Modals.open({
-          icon: res.verdictModal.icon,
-          title: res.verdictModal.title,
-          subtitle: res.verdictModal.subtitle,
+          icon: '🚨',
+          title: 'Anda Dikesan!',
+          subtitle: `${ep.countryFlag} ${ep.countryName}`,
+          locked: true,
           bodyHtml: `
-            <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;white-space:pre-line;line-height:1.55;">
-              ${Utils.escapeHtml(res.verdictModal.text)}
+            <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;line-height:1.55;">
+              Tindakan anda semasa <strong>${Utils.escapeHtml(ep.crimeLabel)}</strong> telah dikesan! Pilih tindakan pantas anda sebelum ditahan.
             </div>
-            <button type="button" id="btn-verdict-ok" class="primary-btn" style="width:100%;margin-top:10px;">Faham</button>
+            <div class="action-list" style="margin-top:10px;">
+              <button type="button" class="action-item dark-escape-btn" data-choice="run">
+                <span class="ai-icon">🏃</span>
+                <span class="ai-content">
+                  <span class="ai-title">Pecut Lari</span>
+                  <span class="ai-desc">Cuba melarikan diri secepat mungkin dari lokasi kejadian</span>
+                </span>
+              </button>
+              <button type="button" class="action-item dark-escape-btn" data-choice="bluff">
+                <span class="ai-icon">🗣️</span>
+                <span class="ai-content">
+                  <span class="ai-title">Berdalih</span>
+                  <span class="ai-desc">Cuba pujuk dan beri alasan meyakinkan untuk dilepaskan</span>
+                </span>
+              </button>
+              <button type="button" class="action-item dark-escape-btn" data-choice="surrender">
+                <span class="ai-icon">✋</span>
+                <span class="ai-content">
+                  <span class="ai-title">Serah Diri</span>
+                  <span class="ai-desc">Mengaku salah dan beri kerjasama penuh tanpa melawan</span>
+                </span>
+              </button>
+            </div>
           `
         });
-        const okBtn = document.getElementById('btn-verdict-ok');
-        if (okBtn) okBtn.addEventListener('click', () => Modals.close(true));
+        document.querySelectorAll('.dark-escape-btn').forEach(eb => {
+          eb.addEventListener('click', () => {
+            const escRes = Sim.resolveDarkEscape(ep.actId, eb.dataset.choice, ep.targetLabel);
+            App.renderAll();
+            if (escRes.verdictModal) {
+              showVerdict(escRes.verdictModal);
+            } else {
+              Modals.close(true);
+              App.toast(escRes.msg, escRes.ok ? 'culture' : 'error');
+            }
+          });
+        });
+        return;
+      }
+
+      if (res.verdictModal) {
+        showVerdict(res.verdictModal);
         return;
       }
       App.toast(res.msg, res.ok ? 'culture' : 'error');

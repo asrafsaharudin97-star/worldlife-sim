@@ -2397,21 +2397,17 @@ window.Sim = {
     s.yearlyActions.darkCount = (s.yearlyActions.darkCount || 0) + 1;
     s.yearlyActions.darkDoneIds.push(actId);
 
+    // Peluang lolos asas mengikut tahap: Ringan ~70%, Sederhana ~55%, Berat ~40%, Bunuh ~30%
+    const baseUncaughtMap = { minor: 0.70, medium: 0.55, major: 0.40, murder: 0.30 };
+    const baseUncaught = baseUncaughtMap[def.severity] ?? 0.55;
     const currentHeat = (s.alignment && s.alignment.notoriety) || 0;
-    const smartsBonus = Math.max(0, ((s.stats && s.stats.smarts) || 50) - 50) * 0.002;
-    const strictBonus = (window.PrisonFugitive && PrisonFugitive.getCountryLawTier(c) === 'strict') ? 0.08 : 0;
-    const catchChance = Math.min(0.92, Math.max(0.15, def.baseCatch + strictBonus + (currentHeat * 0.003) - smartsBonus));
-    const isCaught = typeof opts.forceCaught === 'boolean' ? opts.forceCaught : Utils.chance(catchChance);
-    const crimeLabel = targetLabel ? `${def.title} (${targetLabel})` : def.title;
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    const smartsAdj = (smarts - 50) * 0.0025;
+    const heatPenalty = currentHeat * 0.003;
+    const uncaughtChance = Math.min(0.88, Math.max(0.10, baseUncaught + smartsAdj - heatPenalty));
 
-    if (window.KarmaEndings) {
-      KarmaEndings.adjustAlignment({
-        karma: def.karma,
-        notoriety: isCaught ? Math.round(def.heat * 1.3) : def.heat,
-        fame: isCaught ? def.fame : Math.round(def.fame * 0.4),
-        stress: isCaught ? def.stress + 8 : def.stress
-      });
-    }
+    const isCaught = typeof opts.forceCaught === 'boolean' ? opts.forceCaught : !Utils.chance(uncaughtChance);
+    const crimeLabel = targetLabel ? `${def.title} (${targetLabel})` : def.title;
 
     if (!isCaught) {
       let loot = 0;
@@ -2422,6 +2418,14 @@ window.Sim = {
       s.crimesCommitted = (s.crimesCommitted || 0) + 1;
       s.criminalRep = Math.min(100, (s.criminalRep || 0) + def.rep);
       GameState.adjustStats({ happiness: def.severity === 'murder' ? -6 : 5 });
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({
+          karma: def.karma,
+          notoriety: Math.max(3, Math.round(def.heat * 0.65)),
+          fame: Math.round(def.fame * 0.3),
+          stress: def.stress
+        });
+      }
       const lootNote = loot > 0 ? ` dan memperoleh ${Utils.formatMoney(loot, s.countryId)}` : '';
       GameState.addJournalEntry(
         `🕶️ Anda melakukan "${crimeLabel}"${lootNote} tanpa dikesan pihak berkuasa.`,
@@ -2431,22 +2435,112 @@ window.Sim = {
       return { ok: true, caught: false, msg: `Berjaya lolos daripada "${def.title}"${lootNote}.` };
     }
 
-    // KANTOI / DITANGKAP — Tentukan tahanan bawah umur (Sekolah Juvana) vs dewasa (Penjara)
-    const isJuvenile = s.age < 18;
-    const fineLocal = Utils.usdToLocal(Utils.randInt(def.fineUsd[0], def.fineUsd[1]), s.countryId);
+    // Dikesan / Kantoi -> tunjukkan modal pilihan melarikan diri (3 butang) sebelum hukuman
+    GameState.save();
+    return {
+      ok: false,
+      caught: true,
+      escapePrompt: {
+        actId: def.id,
+        title: def.title,
+        crimeLabel,
+        targetLabel,
+        countryName: c.name,
+        countryFlag: c.flag
+      }
+    };
+  },
 
-    // Kanak-kanak sangat muda (7–9) kesalahan ringan kali pertama: amaran / gantung sekolah / denda ibu bapa
-    if (s.age <= 9 && def.severity === 'minor' && (s.minorOffenses || 0) === 0) {
+  resolveDarkEscape(actId, choice, targetLabel = null) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    const def = this.DARK_ACTIVITIES_POOL.find(a => a.id === actId);
+    if (!def) return { ok: false, msg: 'Aktiviti tidak ditemui.' };
+
+    const crimeLabel = targetLabel ? `${def.title} (${targetLabel})` : def.title;
+    const health = (s.stats && s.stats.health) || 60;
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    const fame = (s.alignment && s.alignment.fame) || 0;
+    const fineLocal = Utils.usdToLocal(Utils.randInt(def.fineUsd[0], def.fineUsd[1]), s.countryId);
+    const isJuvenile = s.age < 18;
+
+    let extraPenaltyYears = 0;
+    let lighterPenalty = false;
+
+    if (choice === 'run') {
+      const runChance = Math.min(0.82, Math.max(0.18, 0.28 + (health / 220) + (smarts / 320) - (def.severity === 'murder' ? 0.14 : 0)));
+      if (Utils.chance(runChance)) {
+        if (window.KarmaEndings) {
+          KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: 20, stress: def.stress + 8 });
+        }
+        GameState.addJournalEntry(
+          `🏃 Anda memecut lari daripada lokasi "${crimeLabel}" dan berjaya melepaskan diri daripada tangkapan!`,
+          'warning'
+        );
+        GameState.save();
+        return {
+          ok: true,
+          escaped: true,
+          msg: 'Berjaya memecut lari daripada tangkapan!',
+          verdictModal: {
+            icon: '🏃',
+            title: 'Berjaya Meloloskan Diri!',
+            subtitle: `${c.flag} ${c.name}`,
+            text: `Anda memecut lari sekuat hati dan berjaya meloloskan diri daripada kejadian "${crimeLabel}". Namun pihak berkuasa kini meningkatkan pemantauan terhadap anda.`
+          }
+        };
+      }
+      extraPenaltyYears = def.severity === 'minor' ? 1 : 2;
+    } else if (choice === 'bluff') {
+      const bluffChance = Math.min(0.78, Math.max(0.12, 0.22 + (smarts / 220) + (fame / 300) - (def.severity === 'murder' ? 0.25 : def.severity === 'major' ? 0.10 : 0)));
+      if (Utils.chance(bluffChance)) {
+        if (window.KarmaEndings) {
+          KarmaEndings.adjustAlignment({ karma: Math.round(def.karma * 0.7), notoriety: Math.round(def.heat * 0.5), stress: def.stress + 3 });
+        }
+        GameState.addJournalEntry(
+          `🗣️ Anda berdalih dengan tenang selepas dikesan dalam "${crimeLabel}" dan hanya menerima amaran keras.`,
+          'warning'
+        );
+        GameState.save();
+        return {
+          ok: true,
+          escaped: true,
+          msg: 'Berjaya berdalih! Anda hanya diberikan amaran.',
+          verdictModal: {
+            icon: '🗣️',
+            title: 'Terlepas Dengan Amaran',
+            subtitle: `${c.flag} ${c.name}`,
+            text: `Helah dan alasan anda berjaya meyakinkan pihak yang menahan anda berhubung "${crimeLabel}". Anda dilepaskan dengan amaran keras kali ini.`
+          }
+        };
+      }
+    } else if (choice === 'surrender') {
+      lighterPenalty = true;
+    }
+
+    // Gagal lari / gagal berdalih / serah diri -> jatuhkan hukuman
+    if (window.KarmaEndings) {
+      KarmaEndings.adjustAlignment({
+        karma: def.karma,
+        notoriety: Math.round(def.heat * (choice === 'run' ? 1.5 : 1.1)),
+        fame: def.fame,
+        stress: def.stress + 8
+      });
+    }
+
+    // Serah diri kesalahan ringan kali pertama umur 7–12: amaran / denda ibu bapa (bukan Sekolah Juvana)
+    if ((choice === 'surrender' && s.age <= 12 && def.severity === 'minor' && (s.minorOffenses || 0) === 0)
+      || (s.age <= 9 && def.severity === 'minor' && (s.minorOffenses || 0) === 0)) {
       s.minorOffenses = (s.minorOffenses || 0) + 1;
-      GameState.adjustStats({ happiness: -12 });
-      const verdictText = `Pihak sekolah dan ibu bapa mengesan perbuatan "${crimeLabel}". Anda dikenakan amaran keras serta gantung sekolah sementara, dan ibu bapa terpaksa membayar ganti rugi ${Utils.formatMoney(fineLocal, s.countryId)}.`;
-      GameState.addJournalEntry(`⚠️ ${verdictText}`, 'warning');
+      GameState.adjustStats({ happiness: -10 });
+      const verdictText = `Anda menyerah diri dan mengaku salah atas "${crimeLabel}". Pihak berkuasa memberi amaran keras serta mengenakan ganti rugi ${Utils.formatMoney(fineLocal, s.countryId)} kepada ibu bapa tanpa menghantar anda ke Sekolah Juvana.`;
+      GameState.addJournalEntry(`✋ ${verdictText}`, 'warning');
       GameState.save();
       return {
         ok: false,
         caught: true,
-        msg: 'Kantoi! Dikenakan amaran keras & gantung sekolah.',
-        verdictModal: { icon: '⚠️', title: 'Ditangkap & Diberi Amaran', subtitle: `${c.flag} ${c.name}`, text: verdictText }
+        msg: 'Diberi amaran & denda ibu bapa.',
+        verdictModal: { icon: '⚠️', title: 'Amaran & Denda Ibu Bapa', subtitle: `${c.flag} ${c.name}`, text: verdictText }
       };
     }
 
@@ -2454,6 +2548,14 @@ window.Sim = {
     const sent = window.PrisonFugitive
       ? PrisonFugitive.getCountrySentence(c, def.severity, isJuvenile)
       : { countryName: c.name, tierLabel: 'Undang-Undang Tempatan', detentionType: isJuvenile ? 'juvenile' : 'prison', years: isJuvenile ? 2 : 5, fineOnly: false, isLife: false, isDeathPenalty: false, transferAt18: false, verdictSummary: `Mahkamah ${c.name} menjatuhkan hukuman tahanan.` };
+
+    if (!sent.fineOnly && sent.years > 0) {
+      if (extraPenaltyYears > 0) {
+        sent.years += extraPenaltyYears;
+      } else if (lighterPenalty && sent.years > 1) {
+        sent.years = Math.max(1, sent.years - (sent.years >= 10 ? 2 : 1));
+      }
+    }
 
     if (sent.fineOnly || sent.years <= 0) {
       s.money = Math.max(0, s.money - fineLocal);
@@ -2481,8 +2583,13 @@ window.Sim = {
     });
 
     const facilityText = sent.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
-    const verdictText = `Anda didapati bersalah atas pertuduhan "${crimeLabel}".\n\n${sent.verdictSummary}${sent.transferAt18 ? '\n\n⚠️ Memandangkan hukuman ini melepasi umur 18 tahun di bawah undang-undang ketat, anda akan dipindahkan ke penjara dewasa sebaik mencecah 18 tahun.' : ''}`;
-    GameState.addJournalEntry(`⚖️ ${sent.verdictSummary} (Kes: ${crimeLabel})`, 'warning');
+    const note = extraPenaltyYears > 0
+      ? `\n\nCubaan melarikan diri gagal dan hukuman ditambah kepada ${sent.years} tahun.`
+      : lighterPenalty
+        ? `\n\nKerjasama anda menyerah diri meringankan tempoh hukuman kepada ${sent.years} tahun.`
+        : '';
+    const verdictText = `Anda ditahan atas kesalahan "${crimeLabel}".\n\nMahkamah ${c.name} menjatuhkan hukuman ${sent.years} tahun ${facilityText} di bawah ${sent.tierLabel}.${note}`;
+    GameState.addJournalEntry(`⚖️ Mahkamah ${c.name} menjatuhkan hukuman ${sent.years} tahun ${facilityText} (Kes: ${crimeLabel}).`, 'warning');
     GameState.save();
 
     return {
