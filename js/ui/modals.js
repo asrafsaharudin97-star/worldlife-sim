@@ -656,9 +656,9 @@ window.Modals = {
     const isPartner = rel.id === s.partnerId;
     const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
     const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
-    const canAskMoney = isParent || isPartner || isSibling || isFriend;
+    const canAskMoney = s.age >= 6 && (isParent || isPartner || isSibling || isFriend);
     const askedMoneyThisYear = Boolean(s.yearlyActions[`rel_${rel.id}_ask_money`]);
-    const canStealMoney = isParent || isPartner || isSibling || isFriend;
+    const canStealMoney = s.age >= 7 && (isParent || isPartner || isSibling || isFriend);
     const stoleMoneyThisYear = Array.isArray(s.stoleMoneyIdsThisYear) && s.stoleMoneyIdsThisYear.includes(rel.id);
     const isFriend = rel.category === 'friend';
     const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
@@ -828,7 +828,7 @@ window.Modals = {
           </button>
         ` : ''}
 
-        ${isFriend ? `
+        ${isFriend && s.age >= 6 ? `
           <button class="action-item rel-act-btn" data-act="cut_ties">
             <span class="ai-icon">💔</span>
             <span class="ai-content">

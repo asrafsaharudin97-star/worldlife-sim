@@ -1472,6 +1472,7 @@ window.Relationships = {
 
     // --- Putus / Bercerai ---
     if (action === 'ask_money') {
+      if (s.age < 6) return { ok: false, msg: 'Anda masih terlalu kecil untuk meminta duit.' };
       const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
       const isPartner = rel.id === s.partnerId;
       const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
@@ -1542,6 +1543,7 @@ window.Relationships = {
     }
 
     if (action === 'steal_money') {
+      if (s.age < 7) return { ok: false, msg: 'Anda masih terlalu kecil untuk melakukan tindakan ini.' };
       const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
       const isPartner = rel.id === s.partnerId;
       const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
