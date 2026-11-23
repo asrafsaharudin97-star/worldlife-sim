@@ -1631,6 +1631,11 @@ window.Modals = {
   // --------------------------------------------------------------------------
   showActivities(activeSubTab = 'deck') {
     const s = GameState.current;
+    // Semasa ditahan, semua aktiviti dunia luar disembunyikan sepenuhnya
+    if (s && s.prison && s.prison.inPrison && s.prison.yearsLeft > 0 && window.PrisonModals) {
+      PrisonModals.showDetentionActivities();
+      return;
+    }
     const c = Utils.getCountry(s.countryId);
 
     const tabsHtml = `

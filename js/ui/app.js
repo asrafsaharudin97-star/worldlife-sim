@@ -312,6 +312,11 @@ window.App = {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
         if (!GameState.current || !GameState.current.alive) return;
+        const pr = GameState.current.prison;
+        if (pr && pr.inPrison && pr.yearsLeft > 0 && tab !== 'relationships' && window.PrisonModals) {
+          PrisonModals.showDetentionActivities();
+          return;
+        }
         if (tab === 'occupation') Modals.showOccupation();
         else if (tab === 'assets') Modals.showAssets();
         else if (tab === 'relationships') Modals.showRelationships();

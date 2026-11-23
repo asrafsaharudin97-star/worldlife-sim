@@ -19,6 +19,81 @@ window.PrisonModals = {
   },
 
   // --------------------------------------------------------------------------
+  // 0. PANEL AKTIVITI TAHANAN (menggantikan Dek Aktiviti semasa ditahan)
+  // --------------------------------------------------------------------------
+  showDetentionActivities() {
+    this._cleanupMiniGame();
+    const s = GameState.current;
+    PrisonFugitive.ensureFields(s);
+    const p = s.prison;
+    if (!p.inPrison || p.yearsLeft <= 0) {
+      if (p.inPrison) PrisonFugitive.releaseFromDetention(s, '🔓 Tempoh tahanan anda telah tamat. Anda kini bebas!');
+      Modals.close(true);
+      App.renderAll();
+      Modals.showActivities('deck');
+      return;
+    }
+    const isJuv = p.detentionType === 'juvenile';
+    const place = isJuv ? 'Sekolah Juvana' : 'Penjara';
+    const ya = s.yearlyActions || {};
+    const appealReady = (s.year - (p.lastAppealYear || -99)) >= 2;
+    const acts = [
+      { id: 'good_behavior', icon: '😇', title: 'Berkelakuan Baik', desc: 'Patuhi setiap peraturan dan tunjukkan perubahan sikap.', done: ya.prison_good_behavior },
+      { id: 'gym', icon: '🏋️', title: 'Bersenam di Halaman', desc: 'Keluar ke halaman dan gerakkan badan.', done: ya.prison_gym },
+      { id: 'library', icon: '📚', title: 'Belajar / Baca Buku di Perpustakaan', desc: 'Habiskan masa dengan buku dan nota.', done: ya.prison_library },
+      { id: 'socialize', icon: '🤝', title: isJuv ? 'Bergaul dengan Rakan Sebilik' : 'Bergaul dengan Banduan / Rakan Sel', desc: 'Berbual dan kenali penghuni lain.', done: ya.prison_socialize },
+      { id: 'cell_fight', icon: '🥊', title: 'Cetuskan Pergaduhan di Sel', desc: 'Tunjukkan siapa yang berkuasa di sini.', done: ya.prison_cell_fight },
+      { id: 'appeal', icon: '⚖️', title: 'Upah Peguam Rayuan', desc: 'Failkan rayuan ke mahkamah dengan bantuan peguam.', done: !appealReady },
+      { id: 'quick_escape', icon: '🏃', title: `Cuba Lolos dari ${place}`, desc: 'Rancang jalan keluar dan ambil peluang.', done: ya.prison_quick_escape }
+    ];
+
+    Modals.open({
+      icon: '🔒',
+      title: `Aktiviti ${place}`,
+      subtitle: `🔒 ${isJuv ? 'Sekolah Juvana' : 'Dalam Penjara'} — Baki ${p.yearsLeft} tahun`,
+      bodyHtml: `
+        <div class="prison-hero">
+          <div class="ph-row">
+            <div>
+              <div class="ph-sec">🔒 ${isJuv ? 'SEKOLAH JUVANA' : 'DALAM PENJARA'}</div>
+              <div class="ph-crime">${Utils.escapeHtml(p.crimeName || 'Kesalahan Jenayah')}</div>
+            </div>
+            <div class="ph-years">${p.yearsLeft}<span>thn lagi</span></div>
+          </div>
+          <div style="font-size:12px;opacity:0.85;margin-top:6px;">Dunia luar tidak dapat dicapai selagi anda berada dalam tahanan.</div>
+        </div>
+        <div class="section-heading">🔒 Aktiviti ${place}</div>
+        <div class="action-list">
+          ${acts.map(a => `
+            <button class="action-item det-act" data-act="${a.id}" ${a.done ? 'disabled' : ''}>
+              <span class="ai-icon">${a.icon}</span>
+              <span class="ai-content">
+                <span class="ai-title">${a.title}</span>
+                <span class="ai-desc">${a.desc}</span>
+              </span>
+            </button>`).join('')}
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.det-act').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = PrisonFugitive.doPrisonActivity(btn.dataset.act);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        const pr = GameState.current.prison;
+        if (pr.inPrison && pr.yearsLeft <= 0) PrisonFugitive.releaseFromDetention(GameState.current, '🔓 Tempoh tahanan anda telah tamat. Anda kini bebas!');
+        App.renderAll();
+        if (!GameState.current.prison.inPrison) {
+          Modals.close(true);
+          Modals.showActivities('deck');
+        } else {
+          this.showDetentionActivities();
+        }
+      });
+    });
+  },
+
+  // --------------------------------------------------------------------------
   // 1. HAB PENJARA & KEHIDUPAN BANDUAN
   // --------------------------------------------------------------------------
   showPrisonHub() {

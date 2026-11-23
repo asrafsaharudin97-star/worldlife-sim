@@ -520,8 +520,12 @@ window.PrisonFugitive = {
       p.behavior = Utils.clamp((p.behavior || 60) + Utils.randInt(10, 16), 0, 100);
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 5, stress: -6 });
       GameState.adjustStats({ happiness: 5 });
-      if (p.yearsLeft > 1 && Utils.chance(0.38 + (p.behavior / 300))) {
-        p.yearsLeft = Math.max(1, p.yearsLeft - 1);
+      if (p.yearsLeft >= 1 && !p.isDeathPenalty && Utils.chance(0.38 + (p.behavior / 300))) {
+        p.yearsLeft = Math.max(0, p.yearsLeft - 1);
+        if (p.yearsLeft <= 0) {
+          this.releaseFromDetention(s, `😇 Kelakuan baik anda diiktiraf — anda dibebaskan awal dari ${isJuv ? 'Sekolah Juvana' : 'Penjara'}!`);
+          return { ok: true, msg: 'Kelakuan cemerlang! Anda dibebaskan awal!' };
+        }
         GameState.addJournalEntry(`😇 Berkelakuan Baik di ${isJuv ? 'Sekolah Juvana' : 'Penjara'}: Pihak pengurusan berpuas hati dan mengurangkan tempoh tahanan anda sebanyak 1 tahun (baki ${p.yearsLeft} thn)!`, 'milestone');
         GameState.save();
         return { ok: true, msg: `Kelakuan cemerlang! Hukuman dikurangkan 1 tahun (baki ${p.yearsLeft} thn).` };
@@ -580,7 +584,68 @@ window.PrisonFugitive = {
       }
     }
 
+    if (action === 'socialize') {
+      if (Utils.chance(0.7)) {
+        p.respect = Utils.clamp((p.respect || 0) + Utils.randInt(8, 14), 0, 100);
+        GameState.adjustStats({ happiness: 6 });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -4 });
+        GameState.addJournalEntry(`🤝 Anda berbual dan berkongsi cerita dengan ${isJuv ? 'rakan sebilik' : 'rakan sel'} — hubungan dalam tahanan semakin kukuh.`);
+        GameState.save();
+        return { ok: true, msg: 'Anda mendapat kenalan baharu di dalam tahanan.' };
+      }
+      p.behavior = Utils.clamp((p.behavior || 60) - 8, 0, 100);
+      GameState.adjustStats({ health: -6, happiness: -5 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
+      GameState.addJournalEntry('👊 Perbualan bertukar tegang dan anda terlibat dalam pergelutan kecil dengan banduan lain.', 'warning');
+      GameState.save();
+      return { ok: false, msg: 'Perbualan bertukar menjadi pergelutan!' };
+    }
+
+    if (action === 'cell_fight') {
+      p.behavior = Utils.clamp((p.behavior || 60) - 18, 0, 100);
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -10, stress: 8 });
+      if (Utils.chance(0.4)) {
+        p.respect = Utils.clamp((p.respect || 0) + 15, 0, 100);
+        GameState.adjustStats({ health: -5 });
+        GameState.addJournalEntry('🥊 Anda menang pergaduhan di sel — banduan lain kini menghormati dan menggeruni anda.', 'warning');
+        GameState.save();
+        return { ok: true, msg: 'Anda menang pergaduhan itu.' };
+      }
+      GameState.adjustStats({ health: -15, happiness: -10 });
+      if (Utils.chance(0.5)) {
+        const add = Utils.randInt(1, 2);
+        p.yearsLeft += add;
+        p.originalSentence = (p.originalSentence || 0) + add;
+        GameState.addJournalEntry(`🚨 Pergaduhan di sel dihentikan warden. Anda cedera dan hukuman ditambah ${add} tahun!`, 'warning');
+        GameState.save();
+        return { ok: false, msg: `Cedera dan hukuman ditambah ${add} tahun!` };
+      }
+      GameState.addJournalEntry('🩹 Anda kalah dalam pergaduhan di sel dan cedera teruk.', 'warning');
+      GameState.save();
+      return { ok: false, msg: 'Anda kalah dan cedera teruk.' };
+    }
+
+    if (action === 'quick_escape') {
+      const st = s.stats || {};
+      const chance = Math.max(0.08, Math.min(0.4, 0.12 + ((st.health || 50) - 50) / 400 + ((st.smarts || 50) - 50) / 400 + (p.respect || 0) / 800));
+      const won = Utils.chance(chance);
+      const res = this.resolveEscapeResult(won);
+      if (!won && window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
+      return res;
+    }
+
     return { ok: false, msg: 'Aktiviti tidak dikenali.' };
+  },
+
+  // Bersihkan keadaan tahanan dan pulihkan akses dunia luar
+  releaseFromDetention(s, journalMsg) {
+    if (!s || !s.prison) return;
+    s.prison.inPrison = false;
+    s.prison.yearsLeft = 0;
+    if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
+    GameState.adjustStats({ happiness: 18 });
+    if (journalMsg) GameState.addJournalEntry(journalMsg, 'milestone');
+    GameState.save();
   },
 
   // Peristiwa tahunan rawak di dalam penjara
@@ -669,6 +734,7 @@ window.PrisonFugitive = {
     if (won) {
       p.inPrison = false;
       p.yearsLeft = 0;
+      if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
       s.fugitive.isFugitive = true;
       s.fugitive.hiddenPast = false;
       s.fugitive.recaptureRisk = Utils.randInt(26, 35);
