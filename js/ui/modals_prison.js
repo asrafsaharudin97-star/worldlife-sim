@@ -39,22 +39,26 @@ window.PrisonModals = {
     const bonuses = window.Dynasty ? Dynasty.getBloodlineBonuses() : {};
     const appealCost = Utils.usdToLocal(Math.round(6500 * Math.max(0.45, c.salaryMultiplier || 0.7) * (1 - (bonuses.legalCostDiscount || 0))), s.countryId);
 
+    const isJuv = p.detentionType === 'juvenile';
+    const hubTitle = isJuv ? 'Sekolah Juvana' : 'Hab Penjara';
+
     Modals.open({
-      icon: '⛓️',
-      title: 'Hab Penjara',
-      subtitle: `${sec.icon} ${sec.name} • Baki ${p.yearsLeft} tahun`,
+      icon: isJuv ? '🔒' : '⛓️',
+      title: hubTitle,
+      subtitle: `${isJuv ? 'Pusat Pemulihan Juvana' : `${sec.icon} ${sec.name}`} • Baki ${p.yearsLeft} tahun`,
       bodyHtml: `
         <div class="prison-hero">
           <div class="ph-row">
             <div>
-              <div class="ph-sec" style="color:${sec.badgeColor};">${sec.icon} ${sec.name.toUpperCase()}</div>
+              <div class="ph-sec" style="color:${sec.badgeColor};">${isJuv ? '🔒 SEKOLAH JUVANA' : `${sec.icon} ${sec.name.toUpperCase()}`}</div>
               <div class="ph-crime">${Utils.escapeHtml(p.crimeName || 'Kesalahan Jenayah')}</div>
+              ${p.lawTierLabel ? `<div style="font-size:11px;opacity:0.85;margin-top:2px;">⚖️ ${Utils.escapeHtml(p.lawTierLabel)}</div>` : ''}
             </div>
             <div class="ph-years">${p.yearsLeft}<span>thn lagi</span></div>
           </div>
           <div class="ph-bars">
             <div class="ph-bar-item">
-              <div class="ph-bar-lbl"><span>👊 Hormat Banduan</span><strong>${p.respect}%</strong></div>
+              <div class="ph-bar-lbl"><span>👊 Hormat</span><strong>${p.respect}%</strong></div>
               <div class="mini-track" style="background:rgba(255,255,255,0.2);"><div class="mini-fill" style="width:${p.respect}%;background:#f59e0b;"></div></div>
             </div>
             <div class="ph-bar-item">
@@ -67,49 +71,48 @@ window.PrisonModals = {
 
         <div class="prison-special-row">
           <button class="primary-btn" id="btn-prison-escape" style="background:linear-gradient(135deg,#dc2626,#991b1b);">
-            🏃 Lari Dari Penjara
+            🏃 Cuba Melarikan Diri
           </button>
           <button class="primary-btn" id="btn-prison-riot" style="background:linear-gradient(135deg,#ea580c,#c2410c);" ${s.yearlyActions.prisonRiot ? 'disabled' : ''}>
             🔥 Cetuskan Rusuhan
           </button>
         </div>
 
-        <div class="section-heading">🏢 Aktiviti Banduan Tahunan</div>
+        <div class="section-heading">🏢 Aktiviti ${isJuv ? 'Sekolah Juvana' : 'Penjara'} Tahunan</div>
         <div class="action-list">
-          <button class="action-item pris-act" data-act="gym" ${s.yearlyActions.prison_gym ? 'disabled' : ''}>
-            <span class="ai-icon">🏋️</span>
+          <button class="action-item pris-act" data-act="good_behavior" ${s.yearlyActions.prison_good_behavior ? 'disabled' : ''}>
+            <span class="ai-icon">😇</span>
             <span class="ai-content">
-              <span class="ai-title">Gim Penjara</span>
-              <span class="ai-desc">Bersenam di kawasan gim bersama banduan lain</span>
+              <span class="ai-title">Berkelakuan Baik</span>
+              <span class="ai-desc">Patuhi peraturan tahanan untuk peluang parol atau pengurangan hukuman</span>
             </span>
           </button>
           <button class="action-item pris-act" data-act="library" ${s.yearlyActions.prison_library ? 'disabled' : ''}>
             <span class="ai-icon">📚</span>
             <span class="ai-content">
-              <span class="ai-title">Perpustakaan Penjara</span>
-              <span class="ai-desc">Membaca buku dan bahan ilmiah di perpustakaan penjara</span>
+              <span class="ai-title">Belajar / Baca Buku</span>
+              <span class="ai-desc">Membaca buku dan bahan ilmiah di perpustakaan tahanan</span>
+            </span>
+          </button>
+          <button class="action-item pris-act" data-act="gym" ${s.yearlyActions.prison_gym ? 'disabled' : ''}>
+            <span class="ai-icon">🏋️</span>
+            <span class="ai-content">
+              <span class="ai-title">Bersenam di Halaman</span>
+              <span class="ai-desc">Bersenam di kawasan halaman untuk mengekalkan kecergasan fizikal</span>
             </span>
           </button>
           <button class="action-item pris-act" data-act="work" ${s.yearlyActions.prison_work ? 'disabled' : ''}>
             <span class="ai-icon">🧹</span>
             <span class="ai-content">
-              <span class="ai-title">Kerja Penjara (Dapur / Bengkel)</span>
-              <span class="ai-desc">Membantu tugasan harian di dapur atau bengkel penjara</span>
+              <span class="ai-title">Kerja Harian (Dapur / Bengkel)</span>
+              <span class="ai-desc">Membantu tugasan harian di dapur atau bengkel</span>
             </span>
-          </button>
-          <button class="action-item pris-act" data-act="gang" ${s.yearlyActions.prison_gang ? 'disabled' : ''}>
-            <span class="ai-icon">👊</span>
-            <span class="ai-content">
-              <span class="ai-title">${p.gangName ? `Misi Geng (${Utils.escapeHtml(p.gangName)})` : 'Sertai Geng Penjara'}</span>
-              <span class="ai-desc">Terlibat dalam aktiviti kumpulan di dalam penjara</span>
-            </span>
-            <span class="ai-right cost">${p.gangName ? 'Misi' : 'Sertai'}</span>
           </button>
           <button class="action-item pris-act" data-act="appeal" ${!appealReady ? 'disabled' : ''}>
             <span class="ai-icon">⚖️</span>
             <span class="ai-content">
-              <span class="ai-title">Mohon Rayuan Mahkamah</span>
-              <span class="ai-desc">Upah peguam untuk cuba batalkan sabitan (sekali setiap 2 tahun)</span>
+              <span class="ai-title">Upah Peguam Rayuan</span>
+              <span class="ai-desc">Upah peguam untuk memfailkan rayuan mahkamah (sekali setiap 2 tahun)</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(appealCost, s.countryId)}</span>
           </button>
@@ -117,7 +120,7 @@ window.PrisonModals = {
             <span class="ai-icon">🔓</span>
             <span class="ai-content">
               <span class="ai-title">Mohon Pembebasan Parol</span>
-              <span class="ai-desc">${paroleReady ? `Layak! Peluang bergantung pada Rekod Kelakuan (${p.behavior}%)` : `Dibuka selepas 50% hukuman (${p.yearsServed}/${reqParole} thn)`}</span>
+              <span class="ai-desc">${paroleReady ? `Layak memohon parol (${p.yearsServed}/${reqParole} thn)` : `Dibuka selepas 50% hukuman (${p.yearsServed}/${reqParole} thn)`}</span>
             </span>
             <span class="ai-right">${paroleReady ? 'Mohon' : '🔒 Kunci'}</span>
           </button>

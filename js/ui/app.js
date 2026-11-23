@@ -636,8 +636,11 @@ window.App = {
     }
     if (prisonBar) {
       if (s.prison && s.prison.inPrison) {
+        const isJuv = s.prison.detentionType === 'juvenile';
         prisonBar.classList.remove('hidden');
-        prisonBar.textContent = `⛓️ DI PENJARA (Baki ${s.prison.yearsLeft} thn) — Klik untuk buka Hab Penjara`;
+        prisonBar.textContent = isJuv
+          ? `🔒 Sekolah Juvana — Baki ${s.prison.yearsLeft} tahun (Klik untuk aktiviti tahanan)`
+          : `🔒 Penjara — Baki ${s.prison.yearsLeft} tahun (Klik untuk buka Hab Penjara)`;
       } else {
         prisonBar.classList.add('hidden');
       }

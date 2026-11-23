@@ -229,6 +229,31 @@ window.LegacyModals = {
       ? '<div class="info-banner">Tiada aktiviti untuk umur ini — klik +UMUR untuk melangkah ke tahun seterusnya!</div>'
       : `<div class="info-banner">Tiada kad dalam kategori <strong>${Utils.escapeHtml(filterDef.label)}</strong> pada dek semasa. Cuba pilih tab <strong>Semua</strong> atau klik <strong>🎲 Cari Idea Lain</strong>!</div>`;
 
+    const darkSectionHtml = (s.age >= 7 && window.Sim && Sim.getYearlyDarkActivities) ? (() => {
+      const darkList = Sim.getYearlyDarkActivities(s);
+      const doneDark = Array.isArray(s.yearlyActions.darkDoneIds) ? s.yearlyActions.darkDoneIds : [];
+      const darkUsed = s.yearlyActions.darkCount || 0;
+      const inPrison = Boolean(s.prison && s.prison.inPrison);
+      if (darkList.length === 0) return '';
+      return `
+        <div class="section-heading" style="margin-top:14px;">🕶️ Aktiviti Gelap &amp; Kontroversi (${darkUsed}/3)</div>
+        <div class="action-list">
+          ${darkList.map(act => {
+            const isDone = doneDark.includes(act.id) || darkUsed >= 3 || inPrison;
+            return `
+              <button type="button" class="action-item dark-deck-btn ${doneDark.includes(act.id) ? 'act-done-card' : ''}" data-dark-id="${act.id}" ${isDone ? 'disabled' : ''}>
+                <span class="ai-icon">${act.icon}</span>
+                <span class="ai-content">
+                  <span class="ai-title">${Utils.escapeHtml(act.title)}</span>
+                  <span class="ai-desc">${Utils.escapeHtml(act.desc)}</span>
+                </span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `;
+    })() : '';
+
     return `
       <div class="act-engine-header">
         <div class="aeh-top">
@@ -252,6 +277,7 @@ window.LegacyModals = {
       </div>
 
       <div class="action-list">${cardsHtml || emptyMsg}</div>
+      ${darkSectionHtml}
     `;
   },
 
@@ -287,6 +313,64 @@ window.LegacyModals = {
         const msg = res.msg || '';
         App.toast(msg.slice(0, 96) + (msg.length > 96 ? '...' : ''), res.tier === 'win' ? 'success' : res.tier === 'fail' ? 'error' : 'culture');
         if (typeof onRefresh === 'function') onRefresh();
+      });
+    });
+
+    const runDark = (darkId, targetLabel = null) => {
+      const res = Sim.performDarkActivity(darkId, targetLabel);
+      App.renderAll();
+      if (res.verdictModal) {
+        Modals.open({
+          icon: res.verdictModal.icon,
+          title: res.verdictModal.title,
+          subtitle: res.verdictModal.subtitle,
+          bodyHtml: `
+            <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;white-space:pre-line;line-height:1.55;">
+              ${Utils.escapeHtml(res.verdictModal.text)}
+            </div>
+            <button type="button" id="btn-verdict-ok" class="primary-btn" style="width:100%;margin-top:10px;">Faham</button>
+          `
+        });
+        const okBtn = document.getElementById('btn-verdict-ok');
+        if (okBtn) okBtn.addEventListener('click', () => Modals.close(true));
+        return;
+      }
+      App.toast(res.msg, res.ok ? 'culture' : 'error');
+      if (typeof onRefresh === 'function') onRefresh();
+    };
+
+    document.querySelectorAll('.dark-deck-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const darkId = btn.dataset.darkId;
+        const def = Sim.DARK_ACTIVITIES_POOL.find(a => a.id === darkId);
+        if (def && def.requiresTarget) {
+          const targets = ['Orang Awam Rawak', 'Pesaing / Musuh', 'Kenalan'];
+          Modals.open({
+            icon: '⚠️',
+            title: def.title,
+            subtitle: 'Pilih sasaran tindakan anda',
+            bodyHtml: `
+              <div class="action-list">
+                ${targets.map(t => `
+                  <button type="button" class="action-item dark-target-btn" data-target="${Utils.escapeHtml(t)}">
+                    <span class="ai-icon">🎯</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(t)}</span>
+                    </span>
+                  </button>
+                `).join('')}
+              </div>
+              <button type="button" id="btn-dark-target-cancel" class="secondary-btn" style="width:100%;margin-top:8px;">Batal</button>
+            `
+          });
+          document.querySelectorAll('.dark-target-btn').forEach(tb => {
+            tb.addEventListener('click', () => runDark(darkId, tb.dataset.target));
+          });
+          const cancelBtn = document.getElementById('btn-dark-target-cancel');
+          if (cancelBtn) cancelBtn.addEventListener('click', () => { if (typeof onRefresh === 'function') onRefresh(); });
+          return;
+        }
+        runDark(darkId);
       });
     });
   },

@@ -671,18 +671,46 @@ window.Sim = {
     if (!Array.isArray(s.stressIllnesses)) s.stressIllnesses = [];
     s._lethalStressCause = null;
 
-    // 1. Hukuman Penjara
+    // 1. Hukuman Penjara / Sekolah Juvana
     if (s.prison && s.prison.inPrison) {
+      const isJuv = s.prison.detentionType === 'juvenile';
       s.prison.yearsServed = (s.prison.yearsServed || 0) + 1;
       s.prison.yearsLeft = Math.max(0, (s.prison.yearsLeft || 1) - 1);
+
+      // Jika di Sekolah Juvana dan mencecah umur 18 tahun dengan baki hukuman berat
+      if (isJuv && s.age >= 18 && s.prison.yearsLeft > 0) {
+        if (s.prison.transferAt18) {
+          s.prison.detentionType = 'prison';
+          s.prison.transferAt18 = false;
+          GameState.addJournalEntry(
+            `⚖️ PEMINDAHAN KE PENJARA DEWASA: Setelah mencecah umur 18 tahun, anda dipindahkan daripada Sekolah Juvana ke Penjara dewasa untuk menyambung baki hukuman ${s.prison.yearsLeft} tahun.`,
+            'warning'
+          );
+        } else {
+          // Negara ringan/sederhana: hadkan baki juvana supaya bebas pada umur 18–21
+          const maxLeft = Math.max(0, 21 - s.age);
+          if (s.prison.yearsLeft > maxLeft) s.prison.yearsLeft = maxLeft;
+        }
+      }
+
       if (s.prison.yearsLeft <= 0) {
+        const releasedFrom = s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
         s.prison.inPrison = false;
+        s.prison.isDeathPenalty = false;
+        s.prison.isLife = false;
         s.alignment.notoriety = Math.max(0, s.alignment.notoriety - 20);
         GameState.adjustStats({ happiness: 14 });
-        GameState.addJournalEntry('🔓 Anda tamat menjalani hukuman penjara dan melangkah keluar sebagai insan bebas! Masa untuk memulakan bab baru.', 'milestone');
+        GameState.addJournalEntry(
+          `🔓 Anda tamat menjalani tempoh tahanan di ${releasedFrom} dan dibebaskan hari ini! Masa untuk memulakan lembaran baharu.`,
+          'milestone'
+        );
       } else {
+        const placeName = s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
         GameState.adjustStats({ happiness: -4, health: -2 });
-        GameState.addJournalEntry(`⛓️ Menjalani hukuman di penjara (${s.prison.yearsLeft} tahun lagi). Klik bar PENJARA untuk Gim, Perpustakaan, Rayuan, Parol, Lari atau Rusuhan.`, 'warning');
+        GameState.addJournalEntry(
+          `🔒 Menjalani tahanan di ${placeName} (baki ${s.prison.yearsLeft} tahun). Klik bar ${placeName.toUpperCase()} untuk aktiviti tahanan atau rayuan.`,
+          'warning'
+        );
       }
       return;
     }
@@ -2294,6 +2322,181 @@ window.Sim = {
     );
     GameState.save();
     return { ok: true, msg: `Kesihatan meningkat +${heal}%!` };
+  },
+
+  DARK_ACTIVITIES_POOL: [
+    // Tier 1 — Kanak-Kanak (Umur 7–12)
+    { id: 'dark_k_steal_allowance', icon: '✏️', title: 'Curi Duit Belanja / Alat Tulis Rakan', desc: 'Mengambil duit belanja atau alat tulis rakan sekelas ketika dia tiada di meja.', minAge: 7, maxAge: 12, severity: 'minor', baseCatch: 0.30, lootUsd: [5, 25], fineUsd: [30, 80], karma: -6, heat: 4, fame: -3, rep: 5, stress: 4 },
+    { id: 'dark_k_steal_candy', icon: '🍬', title: 'Curi Gula-Gula / Mainan di Kedai Runcit', desc: 'Menyorokkan gula-gula atau mainan kecil dari rak kedai runcit kejiranan.', minAge: 7, maxAge: 12, severity: 'minor', baseCatch: 0.34, lootUsd: [8, 30], fineUsd: [50, 140], karma: -7, heat: 6, fame: -4, rep: 6, stress: 5 },
+    { id: 'dark_k_bully', icon: '😠', title: 'Buli & Ugut Budak Lebih Kecil', desc: 'Menakut-nakutkan pelajar lebih muda di kawasan sekolah untuk merampas barang mereka.', minAge: 7, maxAge: 12, severity: 'minor', baseCatch: 0.32, lootUsd: [5, 20], fineUsd: [40, 120], karma: -9, heat: 5, fame: -6, rep: 7, stress: 4 },
+    { id: 'dark_k_vandal_school', icon: '🖍️', title: 'Conteng Dinding / Rosakkan Harta Sekolah', desc: 'Menconteng dinding tandas atau merosakkan kerusi meja sekolah secara sembunyi.', minAge: 7, maxAge: 12, severity: 'minor', baseCatch: 0.35, lootUsd: [0, 0], fineUsd: [80, 220], karma: -8, heat: 6, fame: -5, rep: 6, stress: 5 },
+    { id: 'dark_k_smash_car', icon: '🪨', title: 'Baling Batu / Pecahkan Cermin Kereta Jiran', desc: 'Membaling batu ke arah kenderaan jiran di tepi jalan lalu melarikan diri.', minAge: 7, maxAge: 12, severity: 'medium', baseCatch: 0.40, lootUsd: [0, 0], fineUsd: [200, 550], karma: -11, heat: 10, fame: -7, rep: 9, stress: 7 },
+
+    // Tier 2 — Remaja (Umur 13–17)
+    { id: 'dark_t_shoplift', icon: '🛍️', title: 'Seluk Saku / Curi Barang Kedai', desc: 'Menyasarkan barangan kedai atau dompet pengunjung di pusat beli-belah.', minAge: 13, maxAge: 17, severity: 'minor', baseCatch: 0.28, lootUsd: [80, 350], fineUsd: [200, 600], karma: -8, heat: 8, fame: -5, rep: 10, stress: 6 },
+    { id: 'dark_t_vandal', icon: '🎨', title: 'Vandalisme & Sabotaj Harta Awam', desc: 'Merobohkan papan tanda dan menconteng kemudahan awam pada lewat malam.', minAge: 13, maxAge: 17, severity: 'minor', baseCatch: 0.30, lootUsd: [0, 0], fineUsd: [300, 900], karma: -9, heat: 9, fame: -6, rep: 10, stress: 6 },
+    { id: 'dark_t_cyberbully', icon: '📱', title: 'Sebar Fitnah & Buli Siber', desc: 'Membuka akaun palsu untuk menyebarkan gosip palsu dan mengaibkan rakan sebaya.', minAge: 13, maxAge: 17, severity: 'minor', baseCatch: 0.25, lootUsd: [0, 0], fineUsd: [250, 750], karma: -12, heat: 7, fame: -10, rep: 9, stress: 6 },
+    { id: 'dark_t_steal_bike', icon: '🚲', title: 'Curi Basikal / Motosikal', desc: 'Memotong kunci basikal atau motosikal di kawasan parkir sunyi untuk dijual semula.', minAge: 13, maxAge: 17, severity: 'medium', baseCatch: 0.36, lootUsd: [350, 1400], fineUsd: [600, 1800], karma: -13, heat: 14, fame: -8, rep: 15, stress: 8 },
+    { id: 'dark_t_brawl', icon: '👊', title: 'Gaduh Berkumpulan / Pukul Orang', desc: 'Terlibat dalam pergaduhan jalanan bersama kumpulan remaja lain di luar sekolah.', minAge: 13, maxAge: 17, severity: 'major', baseCatch: 0.42, lootUsd: [0, 0], fineUsd: [700, 2000], karma: -16, heat: 18, fame: -12, rep: 18, stress: 11 },
+    { id: 'dark_t_murder', icon: '⚠️', title: 'Jenayah Ekstrem: Bunuh Orang', desc: 'Tindakan paling ekstrem yang boleh membawa kepada siasatan berat pihak berkuasa.', minAge: 14, maxAge: 17, severity: 'murder', baseCatch: 0.64, lootUsd: [0, 0], fineUsd: [2000, 6000], karma: -45, heat: 42, fame: -25, rep: 32, stress: 22 },
+
+    // Tier 3 — Dewasa (Umur 18+)
+    { id: 'dark_a_streetrace', icon: '🏎️', title: 'Lumba Haram Jalanan', desc: 'Menyertai perlumbaan haram bertaruh wang tunai di lebuh raya pada waktu malam.', minAge: 18, maxAge: 99, severity: 'minor', baseCatch: 0.30, lootUsd: [900, 3200], fineUsd: [1200, 3500], karma: -10, heat: 12, fame: -6, rep: 13, stress: 7 },
+    { id: 'dark_a_scam', icon: '💻', title: 'Skim Penipuan Dalam Talian', desc: 'Mengendalikan tawaran pelaburan palsu secara digital terhadap mangsa rawak.', minAge: 18, maxAge: 99, severity: 'medium', baseCatch: 0.34, lootUsd: [2500, 8500], fineUsd: [3000, 9000], karma: -16, heat: 15, fame: -12, rep: 19, stress: 9 },
+    { id: 'dark_a_burglary', icon: '🚗', title: 'Pecah Masuk / Curi Kenderaan', desc: 'Memecah masuk premis atau melarikan kenderaan bernilai tinggi secara senyap.', minAge: 18, maxAge: 99, severity: 'major', baseCatch: 0.38, lootUsd: [2800, 9000], fineUsd: [3200, 8500], karma: -16, heat: 18, fame: -10, rep: 20, stress: 10 },
+    { id: 'dark_a_extortion', icon: '💼', title: 'Peras Ugut & Ugutan Awam', desc: 'Memaksa mangsa atau pemilik premis menyerahkan wang secara ugutan.', minAge: 18, maxAge: 99, severity: 'major', baseCatch: 0.40, lootUsd: [3000, 9500], fineUsd: [3500, 9500], karma: -18, heat: 20, fame: -14, rep: 22, stress: 11 },
+    { id: 'dark_a_heist', icon: '🚢', title: 'Rompakan Bersenjata / Seludup Kontraband', desc: 'Operasi berskala besar melibatkan rompakan atau penyeludupan barangan larangan.', minAge: 18, maxAge: 99, severity: 'major', baseCatch: 0.46, lootUsd: [6000, 18000], fineUsd: [7000, 18000], karma: -22, heat: 26, fame: -18, rep: 28, stress: 14 },
+    { id: 'dark_a_murder', icon: '⚠️', title: 'Jenayah Paling Ekstrem: Bunuh Orang', desc: 'Tindakan paling ekstrem — pilih sasaran anda dengan penuh sedar akan akibatnya.', minAge: 18, maxAge: 99, severity: 'murder', requiresTarget: true, baseCatch: 0.66, lootUsd: [0, 0], fineUsd: [5000, 15000], karma: -50, heat: 48, fame: -30, rep: 35, stress: 25 }
+  ],
+
+  getYearlyDarkActivities(s) {
+    if (!s || s.age < 7) return [];
+    const eligible = this.DARK_ACTIVITIES_POOL.filter(a => s.age >= a.minAge && s.age <= a.maxAge);
+    if (s.darkDeckYear === s.year && Array.isArray(s.darkDeckIds) && s.darkDeckIds.length >= 3) {
+      const resolved = s.darkDeckIds.map(id => eligible.find(a => a.id === id)).filter(Boolean);
+      if (resolved.length >= 3) return resolved;
+    }
+
+    const desiredCount = Math.min(eligible.length, Utils.randInt(3, 5));
+    const prev = Array.isArray(s.darkDeckIds) ? s.darkDeckIds : [];
+    const fresh = eligible.filter(a => !prev.includes(a.id));
+    const pool = fresh.length >= desiredCount ? [...fresh] : [...eligible];
+    pool.sort(() => Math.random() - 0.5);
+    const picked = pool.slice(0, desiredCount);
+
+    // Pastikan pilihan ekstrem (Bunuh Orang) juga berpeluang muncul jelas untuk 14+
+    const murderOpt = eligible.find(a => a.severity === 'murder');
+    if (murderOpt && !picked.some(a => a.id === murderOpt.id) && picked.length < 5) {
+      picked.push(murderOpt);
+    }
+
+    s.darkDeckIds = picked.map(a => a.id);
+    s.darkDeckYear = s.year;
+    return picked;
+  },
+
+  performDarkActivity(actId, targetLabel = null, opts = {}) {
+    const s = GameState.current;
+    const c = Utils.getCountry(s.countryId);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Anda sedang berada dalam tahanan!' };
+    }
+    const def = this.DARK_ACTIVITIES_POOL.find(a => a.id === actId);
+    if (!def) return { ok: false, msg: 'Aktiviti tidak ditemui.' };
+    if (s.age < def.minAge) return { ok: false, msg: `Aktiviti ini tidak tersedia untuk umur ${s.age} tahun.` };
+
+    if (!Array.isArray(s.yearlyActions.darkDoneIds)) s.yearlyActions.darkDoneIds = [];
+    if (s.yearlyActions.darkDoneIds.includes(actId)) {
+      return { ok: false, msg: 'Aktiviti ini sudah dilakukan tahun ini.' };
+    }
+    const maxPerYear = 3;
+    if ((s.yearlyActions.darkCount || 0) >= maxPerYear) {
+      return { ok: false, msg: 'Had aktiviti gelap tahun ini telah tamat. Tunggu tahun hadapan.' };
+    }
+
+    s.yearlyActions.darkCount = (s.yearlyActions.darkCount || 0) + 1;
+    s.yearlyActions.darkDoneIds.push(actId);
+
+    const currentHeat = (s.alignment && s.alignment.notoriety) || 0;
+    const smartsBonus = Math.max(0, ((s.stats && s.stats.smarts) || 50) - 50) * 0.002;
+    const strictBonus = (window.PrisonFugitive && PrisonFugitive.getCountryLawTier(c) === 'strict') ? 0.08 : 0;
+    const catchChance = Math.min(0.92, Math.max(0.15, def.baseCatch + strictBonus + (currentHeat * 0.003) - smartsBonus));
+    const isCaught = typeof opts.forceCaught === 'boolean' ? opts.forceCaught : Utils.chance(catchChance);
+    const crimeLabel = targetLabel ? `${def.title} (${targetLabel})` : def.title;
+
+    if (window.KarmaEndings) {
+      KarmaEndings.adjustAlignment({
+        karma: def.karma,
+        notoriety: isCaught ? Math.round(def.heat * 1.3) : def.heat,
+        fame: isCaught ? def.fame : Math.round(def.fame * 0.4),
+        stress: isCaught ? def.stress + 8 : def.stress
+      });
+    }
+
+    if (!isCaught) {
+      let loot = 0;
+      if (def.lootUsd && def.lootUsd[1] > 0) {
+        loot = Utils.usdToLocal(Utils.randInt(def.lootUsd[0], def.lootUsd[1]), s.countryId);
+        s.money += loot;
+      }
+      s.crimesCommitted = (s.crimesCommitted || 0) + 1;
+      s.criminalRep = Math.min(100, (s.criminalRep || 0) + def.rep);
+      GameState.adjustStats({ happiness: def.severity === 'murder' ? -6 : 5 });
+      const lootNote = loot > 0 ? ` dan memperoleh ${Utils.formatMoney(loot, s.countryId)}` : '';
+      GameState.addJournalEntry(
+        `🕶️ Anda melakukan "${crimeLabel}"${lootNote} tanpa dikesan pihak berkuasa.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: true, caught: false, msg: `Berjaya lolos daripada "${def.title}"${lootNote}.` };
+    }
+
+    // KANTOI / DITANGKAP — Tentukan tahanan bawah umur (Sekolah Juvana) vs dewasa (Penjara)
+    const isJuvenile = s.age < 18;
+    const fineLocal = Utils.usdToLocal(Utils.randInt(def.fineUsd[0], def.fineUsd[1]), s.countryId);
+
+    // Kanak-kanak sangat muda (7–9) kesalahan ringan kali pertama: amaran / gantung sekolah / denda ibu bapa
+    if (s.age <= 9 && def.severity === 'minor' && (s.minorOffenses || 0) === 0) {
+      s.minorOffenses = (s.minorOffenses || 0) + 1;
+      GameState.adjustStats({ happiness: -12 });
+      const verdictText = `Pihak sekolah dan ibu bapa mengesan perbuatan "${crimeLabel}". Anda dikenakan amaran keras serta gantung sekolah sementara, dan ibu bapa terpaksa membayar ganti rugi ${Utils.formatMoney(fineLocal, s.countryId)}.`;
+      GameState.addJournalEntry(`⚠️ ${verdictText}`, 'warning');
+      GameState.save();
+      return {
+        ok: false,
+        caught: true,
+        msg: 'Kantoi! Dikenakan amaran keras & gantung sekolah.',
+        verdictModal: { icon: '⚠️', title: 'Ditangkap & Diberi Amaran', subtitle: `${c.flag} ${c.name}`, text: verdictText }
+      };
+    }
+
+    s.minorOffenses = (s.minorOffenses || 0) + 1;
+    const sent = window.PrisonFugitive
+      ? PrisonFugitive.getCountrySentence(c, def.severity, isJuvenile)
+      : { countryName: c.name, tierLabel: 'Undang-Undang Tempatan', detentionType: isJuvenile ? 'juvenile' : 'prison', years: isJuvenile ? 2 : 5, fineOnly: false, isLife: false, isDeathPenalty: false, transferAt18: false, verdictSummary: `Mahkamah ${c.name} menjatuhkan hukuman tahanan.` };
+
+    if (sent.fineOnly || sent.years <= 0) {
+      s.money = Math.max(0, s.money - fineLocal);
+      s.criminalRecord = (s.criminalRecord || 0) + 1;
+      GameState.adjustStats({ happiness: -14 });
+      const verdictText = `${sent.verdictSummary} Anda dikenakan denda ${Utils.formatMoney(fineLocal, s.countryId)} atas kesalahan "${crimeLabel}".`;
+      GameState.addJournalEntry(`⚖️ ${verdictText}`, 'warning');
+      GameState.save();
+      return {
+        ok: false,
+        caught: true,
+        sentence: sent,
+        msg: `Didenda ${Utils.formatMoney(fineLocal, s.countryId)} di Mahkamah ${c.name}.`,
+        verdictModal: { icon: '⚖️', title: `Keputusan Mahkamah ${c.name}`, subtitle: sent.tierLabel, text: verdictText }
+      };
+    }
+
+    const secLevel = PrisonFugitive.getSecurityTierForYears(sent.years);
+    PrisonFugitive.enterPrisonState(s, crimeLabel, sent.years, secLevel, {
+      detentionType: sent.detentionType,
+      transferAt18: sent.transferAt18,
+      isLife: sent.isLife,
+      isDeathPenalty: sent.isDeathPenalty,
+      lawTierLabel: sent.tierLabel
+    });
+
+    const facilityText = sent.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
+    const verdictText = `Anda didapati bersalah atas pertuduhan "${crimeLabel}".\n\n${sent.verdictSummary}${sent.transferAt18 ? '\n\n⚠️ Memandangkan hukuman ini melepasi umur 18 tahun di bawah undang-undang ketat, anda akan dipindahkan ke penjara dewasa sebaik mencecah 18 tahun.' : ''}`;
+    GameState.addJournalEntry(`⚖️ ${sent.verdictSummary} (Kes: ${crimeLabel})`, 'warning');
+    GameState.save();
+
+    return {
+      ok: false,
+      caught: true,
+      sentence: sent,
+      msg: `Dijatuhi hukuman ${sent.years} tahun di ${facilityText}!`,
+      verdictModal: {
+        icon: '⚖️',
+        title: `Keputusan Mahkamah ${c.name}`,
+        subtitle: `${c.flag} ${sent.tierLabel}`,
+        text: verdictText
+      }
+    };
   },
 
   CRIME_POOL: [

@@ -134,12 +134,16 @@ window.PrisonFugitive = {
     if (!s.prison || typeof s.prison !== 'object') {
       s.prison = {
         inPrison: false, yearsLeft: 0, originalSentence: 0, yearsServed: 0, totalServed: 0,
-        crimeName: null, securityLevel: 'minimum', respect: 25, behavior: 65, gangName: null, lastAppealYear: -99
+        crimeName: null, securityLevel: 'minimum', detentionType: 'prison', transferAt18: false,
+        isLife: false, isDeathPenalty: false, lawTierLabel: null,
+        respect: 25, behavior: 65, gangName: null, lastAppealYear: -99
       };
     } else {
       if (typeof s.prison.originalSentence !== 'number') s.prison.originalSentence = s.prison.yearsLeft || 0;
       if (typeof s.prison.yearsServed !== 'number') s.prison.yearsServed = 0;
       if (!s.prison.securityLevel) s.prison.securityLevel = 'minimum';
+      if (!s.prison.detentionType) s.prison.detentionType = (s.age < 18 ? 'juvenile' : 'prison');
+      if (typeof s.prison.transferAt18 !== 'boolean') s.prison.transferAt18 = false;
       if (typeof s.prison.respect !== 'number') s.prison.respect = 25;
       if (typeof s.prison.behavior !== 'number') s.prison.behavior = 65;
       if (typeof s.prison.lastAppealYear !== 'number') s.prison.lastAppealYear = -99;
@@ -152,6 +156,108 @@ window.PrisonFugitive = {
         fakeIdentityTier: null, aliasName: null, trueName: null, avatarOverride: null
       };
     }
+  },
+
+  STRICT_LAW_COUNTRIES: ['MY','SG','ID','SA','JP','CN','US','KR','TH','VN','AE','QA','KW','BN','IR','IQ','EG','PK','BD','PH','TW','RU','TR','NG','IN','KP'],
+  REHAB_LAW_COUNTRIES: ['NO','SE','FI','DK','IS','NL','PT','CH'],
+  MODERATE_LAW_COUNTRIES: ['GB','UK','CA','AU','NZ','DE','FR','IT','ES','BR','BE','AT','IE','PL','CZ','GR','MX','AR','CL','CO','ZA'],
+
+  getCountryLawTier(country) {
+    const cid = typeof country === 'string' ? country : (country && country.id);
+    if (this.STRICT_LAW_COUNTRIES.includes(cid)) return 'strict';
+    if (this.REHAB_LAW_COUNTRIES.includes(cid)) return 'rehabilitative';
+    if (this.MODERATE_LAW_COUNTRIES.includes(cid)) return 'moderate';
+    const cObj = typeof country === 'object' && country ? country : (window.Utils ? Utils.getCountry(cid) : null);
+    if (cObj && cObj.continent === 'Europe' && (cObj.safetyIndex || 70) >= 80) return 'rehabilitative';
+    if (cObj && (cObj.safetyIndex || 70) >= 65) return 'moderate';
+    return 'strict';
+  },
+
+  getCountrySentence(country, crimeSeverity = 'minor', isJuvenile = false) {
+    const cObj = typeof country === 'object' && country ? country : (window.Utils ? Utils.getCountry(country) : { id: 'MY', name: 'Negara Ini' });
+    const tier = this.getCountryLawTier(cObj);
+    const tierLabel = tier === 'strict'
+      ? 'Undang-Undang Ketat / Berat'
+      : tier === 'rehabilitative'
+        ? 'Undang-Undang Rehabilitatif / Ringan'
+        : 'Undang-Undang Sederhana';
+    const detentionType = isJuvenile ? 'juvenile' : 'prison';
+
+    let years = 0;
+    let fineOnly = false;
+    let isLife = false;
+    let isDeathPenalty = false;
+    let transferAt18 = false;
+
+    if (tier === 'strict') {
+      if (crimeSeverity === 'minor') {
+        if (isJuvenile) { fineOnly = Utils.chance(0.55); years = fineOnly ? 0 : 1; }
+        else { fineOnly = Utils.chance(0.35); years = fineOnly ? 0 : Utils.randInt(1, 2); }
+      } else if (crimeSeverity === 'medium' || crimeSeverity === 'major') {
+        years = isJuvenile ? Utils.randInt(1, 4) : Utils.randInt(3, 10);
+      } else if (crimeSeverity === 'murder') {
+        if (isJuvenile) {
+          years = Utils.randInt(5, 12);
+          transferAt18 = true;
+        } else {
+          const roll = Math.random();
+          if (roll < 0.25) { isDeathPenalty = true; years = 30; }
+          else if (roll < 0.55) { isLife = true; years = 40; }
+          else { years = Utils.randInt(20, 30); }
+        }
+      }
+    } else if (tier === 'rehabilitative') {
+      if (crimeSeverity === 'minor') {
+        fineOnly = true;
+        years = 0;
+      } else if (crimeSeverity === 'medium' || crimeSeverity === 'major') {
+        years = isJuvenile ? Utils.randInt(1, 2) : Utils.randInt(1, 5);
+      } else if (crimeSeverity === 'murder') {
+        years = isJuvenile ? Utils.randInt(2, 5) : Utils.randInt(10, 21);
+      }
+    } else {
+      // moderate
+      if (crimeSeverity === 'minor') {
+        fineOnly = Utils.chance(0.50);
+        years = fineOnly ? 0 : 1;
+      } else if (crimeSeverity === 'medium' || crimeSeverity === 'major') {
+        years = isJuvenile ? Utils.randInt(1, 3) : Utils.randInt(2, 8);
+      } else if (crimeSeverity === 'murder') {
+        if (isJuvenile) {
+          years = Utils.randInt(3, 8);
+        } else if (Utils.chance(0.28)) {
+          isLife = true;
+          years = 35;
+        } else {
+          years = Utils.randInt(15, 25);
+        }
+      }
+    }
+
+    const facilityName = isJuvenile ? 'Sekolah Juvana' : 'penjara';
+    let verdictSummary = '';
+    if (fineOnly) {
+      verdictSummary = `Mahkamah ${cObj.name} menjatuhkan hukuman denda dan khidmat masyarakat di bawah ${tierLabel}.`;
+    } else if (isDeathPenalty) {
+      verdictSummary = `Mahkamah ${cObj.name} menjatuhkan Hukuman Mati (boleh memfailkan rayuan peguam) di bawah ${tierLabel}.`;
+    } else if (isLife) {
+      verdictSummary = `Mahkamah ${cObj.name} menjatuhkan hukuman Penjara Seumur Hidup (${years} tahun) di bawah ${tierLabel}.`;
+    } else {
+      verdictSummary = `Mahkamah ${cObj.name} menjatuhkan hukuman ${years} tahun ${facilityName} di bawah ${tierLabel}.`;
+    }
+
+    return {
+      countryName: cObj.name,
+      tier,
+      tierLabel,
+      detentionType,
+      years,
+      fineOnly,
+      isLife,
+      isDeathPenalty,
+      transferAt18,
+      verdictSummary
+    };
   },
 
   getSecurityTierForYears(years) {
@@ -288,18 +394,31 @@ window.PrisonFugitive = {
     };
   },
 
-  enterPrisonState(s, crimeName, years, securityLevel = 'minimum') {
+  enterPrisonState(s, crimeName, years, securityLevel = 'minimum', opts = {}) {
     this.ensureFields(s);
+    const detentionType = opts.detentionType || (s.age < 18 ? 'juvenile' : 'prison');
+    const isJuv = detentionType === 'juvenile';
     if (window.CharacterStatus) CharacterStatus.syncCharacterModeTransitions(s, 'enter_prison');
-    if (window.AssetsEngine && (years >= 5 || securityLevel === 'maximum')) {
+    if (!isJuv && window.AssetsEngine && (years >= 5 || securityLevel === 'maximum')) {
       AssetsEngine.handleCrimeAssetFreeze(s);
     }
     s.criminalRecord = (s.criminalRecord || 0) + 1;
-    s.job = null;
+    if (!isJuv) {
+      s.job = null;
+      if (s.education && (s.education.stage === 'university' || s.education.isStudying)) {
+        s.education.isStudying = false;
+        s.education.stage = 'done';
+      }
+    }
     s.fugitive.isFugitive = false;
     s.fugitive.recaptureRisk = 0;
 
     s.prison.inPrison = true;
+    s.prison.detentionType = detentionType;
+    s.prison.transferAt18 = Boolean(opts.transferAt18);
+    s.prison.isLife = Boolean(opts.isLife);
+    s.prison.isDeathPenalty = Boolean(opts.isDeathPenalty);
+    s.prison.lawTierLabel = opts.lawTierLabel || null;
     s.prison.yearsLeft = Math.max(1, years);
     s.prison.originalSentence = Math.max(1, years);
     s.prison.yearsServed = 0;
@@ -311,29 +430,31 @@ window.PrisonFugitive = {
     s.prison.gangName = null;
 
     GameState.adjustStats({ happiness: -22, health: -5 });
+    const placeName = isJuv ? 'Sekolah Juvana' : `Penjara ${this.SECURITY_LABELS[securityLevel].name}`;
     if (window.KarmaEndings) {
       KarmaEndings.adjustAlignment({ stress: 18, notoriety: 10 });
-      KarmaEndings.addHighlight('⛓️', `Dipenjarakan ${years} tahun (${crimeName} — ${this.SECURITY_LABELS[securityLevel].name})`);
+      KarmaEndings.addHighlight(isJuv ? '🔒' : '⛓️', `Ditahan ${years} tahun di ${placeName} (${crimeName})`);
     }
     if (window.Dynasty) {
       const repHit = securityLevel === 'maximum' ? -22 : securityLevel === 'medium' ? -15 : -10;
       Dynasty.adjustReputation(repHit);
       const d = Dynasty.getData();
       if (d.familyReputation <= 25 && d.legacyStatus !== 'Tarnished') {
-        Dynasty._tarnishLegacy(`Sabitan jenayah berat & hukuman penjara (${crimeName})`, 0);
+        Dynasty._tarnishLegacy(`Sabitan jenayah berat & tahanan (${crimeName})`, 0);
       }
     }
     GameState.save();
   },
 
   // --------------------------------------------------------------------------
-  // 2. AKTIVITI PENJARA & KEHIDUPAN BANDUAN
+  // 2. AKTIVITI PENJARA / SEKOLAH JUVANA
   // --------------------------------------------------------------------------
   doPrisonActivity(action) {
     const s = GameState.current;
     this.ensureFields(s);
-    if (!s.prison.inPrison) return { ok: false, msg: 'Anda tidak berada di dalam penjara.' };
+    if (!s.prison.inPrison) return { ok: false, msg: 'Anda tidak berada dalam tahanan.' };
     const p = s.prison;
+    const isJuv = p.detentionType === 'juvenile';
 
     if (action === 'appeal') {
       if ((s.year - (p.lastAppealYear || -99)) < 2) {
@@ -347,10 +468,18 @@ window.PrisonFugitive = {
       p.lastAppealYear = s.year;
       const winChance = Math.min(0.55, 0.24 + (p.behavior / 350) + (s.stats.smarts / 500));
       if (Utils.chance(winChance)) {
+        if (p.isDeathPenalty) {
+          p.isDeathPenalty = false;
+          p.yearsLeft = Math.max(15, Math.round(p.yearsLeft * 0.7));
+          GameState.adjustStats({ happiness: 18 });
+          GameState.addJournalEntry(`⚖️ RAYUAN BERJAYA! Hukuman mati diringankan kepada penjara ${p.yearsLeft} tahun.`, 'milestone');
+          GameState.save();
+          return { ok: true, msg: `Rayuan berjaya! Hukuman mati diringankan kepada ${p.yearsLeft} tahun.` };
+        }
         p.inPrison = false;
         p.yearsLeft = 0;
         GameState.adjustStats({ happiness: 24 });
-        if (window.KarmaEndings) KarmaEndings.addHighlight('⚖️', 'Berjaya memenangi rayuan dan dibebaskan dari penjara');
+        if (window.KarmaEndings) KarmaEndings.addHighlight('⚖️', 'Berjaya memenangi rayuan dan dibebaskan daripada tahanan');
         GameState.addJournalEntry('⚖️ RAYUAN BERJAYA! Mahkamah Rayuan membatalkan sabitan anda dan anda dibebaskan hari ini!', 'milestone');
         GameState.save();
         return { ok: true, msg: 'Rayuan DILULUSKAN! Anda dibebaskan serta-merta!' };
@@ -378,20 +507,35 @@ window.PrisonFugitive = {
         return { ok: true, msg: 'Parol DILULUSKAN! Anda kini bebas!' };
       }
       GameState.adjustStats({ happiness: -6 });
-      GameState.addJournalEntry('⛓️ Permohonan parol ditolak — tingkatkan Rekod Kelakuan anda di perpustakaan atau kerja penjara.', 'warning');
+      GameState.addJournalEntry('⛓️ Permohonan parol ditolak — tingkatkan Rekod Kelakuan anda.', 'warning');
       GameState.save();
       return { ok: false, msg: 'Parol ditolak tahun ini.' };
     }
 
     const actKey = 'prison_' + action;
-    if (s.yearlyActions[actKey]) return { ok: false, msg: 'Anda sudah melakukan aktiviti penjara ini tahun ini.' };
+    if (s.yearlyActions[actKey]) return { ok: false, msg: 'Anda sudah melakukan aktiviti tahanan ini tahun ini.' };
     s.yearlyActions[actKey] = true;
+
+    if (action === 'good_behavior') {
+      p.behavior = Utils.clamp((p.behavior || 60) + Utils.randInt(10, 16), 0, 100);
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 5, stress: -6 });
+      GameState.adjustStats({ happiness: 5 });
+      if (p.yearsLeft > 1 && Utils.chance(0.38 + (p.behavior / 300))) {
+        p.yearsLeft = Math.max(1, p.yearsLeft - 1);
+        GameState.addJournalEntry(`😇 Berkelakuan Baik di ${isJuv ? 'Sekolah Juvana' : 'Penjara'}: Pihak pengurusan berpuas hati dan mengurangkan tempoh tahanan anda sebanyak 1 tahun (baki ${p.yearsLeft} thn)!`, 'milestone');
+        GameState.save();
+        return { ok: true, msg: `Kelakuan cemerlang! Hukuman dikurangkan 1 tahun (baki ${p.yearsLeft} thn).` };
+      }
+      GameState.addJournalEntry(`😇 Anda mematuhi semua peraturan di ${isJuv ? 'Sekolah Juvana' : 'Penjara'} dan menunjukkan perubahan sikap yang positif.`);
+      GameState.save();
+      return { ok: true, msg: 'Rekod kelakuan baik meningkat!' };
+    }
 
     if (action === 'gym') {
       p.respect = Utils.clamp(p.respect + Utils.randInt(7, 13), 0, 100);
       GameState.adjustStats({ health: 8, looks: 3, happiness: 5 });
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -6 });
-      GameState.addJournalEntry('🏋️ Anda mengangkat besi di Gim Penjara! Fizikal bertambah sasa dan Hormat Banduan meningkat.');
+      GameState.addJournalEntry(`🏋️ Anda bersenam di halaman ${isJuv ? 'Sekolah Juvana' : 'Penjara'}! Kesihatan dan kecergasan meningkat.`);
       GameState.save();
       return { ok: true, msg: `Kesihatan +8% & Hormat Banduan kini ${p.respect}%!` };
     }
