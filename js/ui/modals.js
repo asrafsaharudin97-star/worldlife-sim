@@ -656,11 +656,11 @@ window.Modals = {
     const isPartner = rel.id === s.partnerId;
     const isParent = ['Ibu', 'Ayah', 'Mother', 'Father'].includes(rel.role);
     const isSibling = /Abang|Kakak|Adik|Sibling/i.test(rel.role || '');
+    const isFriend = rel.category === 'friend';
     const canAskMoney = s.age >= 6 && (isParent || isPartner || isSibling || isFriend);
     const askedMoneyThisYear = Boolean(s.yearlyActions[`rel_${rel.id}_ask_money`]);
     const canStealMoney = s.age >= 7 && (isParent || isPartner || isSibling || isFriend);
     const stoleMoneyThisYear = Array.isArray(s.stoleMoneyIdsThisYear) && s.stoleMoneyIdsThisYear.includes(rel.id);
-    const isFriend = rel.category === 'friend';
     const isChild = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(rel.role);
     if (isChild && window.Relationships && Relationships.ensureChildEducationFields) {
       Relationships.ensureChildEducationFields(s, rel);
@@ -2552,16 +2552,22 @@ window.Modals = {
         if (!sid) return;
         btn.disabled = true;
 
-        // 1. Jika sedang bermain di slot lain, simpan slot semasa dahulu tanpa menyekat UI jika rangkaian perlahan
+        // 1. Jika sedang bermain di slot lain, simpan & segerakkan slot semasa dahulu secara selamat sebelum menukar activeSlotId
         const prevSlotId = GameState.getActiveSlotId();
         if (GameState.current && prevSlotId !== sid) {
-          try { GameState.save(); } catch (_) {}
-          try {
-            await Promise.race([
-              GameState.syncActiveSlotToCloud('switch_slot'),
-              new Promise(resolve => setTimeout(resolve, 2000))
-            ]);
-          } catch (_) {}
+          try { GameState.save(); } catch (err) { console.warn('[Slots] Gagal simpan lokal sebelum tukar slot:', err); }
+          const syncRes = await App.runWithCloudProgress('save', async () => {
+            try {
+              return await GameState.syncActiveSlotToCloud('switch_slot');
+            } catch (err) {
+              console.warn('[Slots] Gagal segerak cloud sebelum tukar slot:', err);
+              return { ok: false };
+            }
+          });
+          if (syncRes && syncRes.busy) {
+            btn.disabled = false;
+            return;
+          }
         }
 
         // 2. Kosongkan watak aktif dalam memori sebelum menukar activeSlotId supaya slot baharu tidak ditimpa
