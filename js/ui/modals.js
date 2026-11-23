@@ -980,7 +980,7 @@ window.Modals = {
     this.open({
       icon: '💔',
       title: titleText,
-      subtitle: `Bersemuka dengan ${Utils.escapeHtml(info.partnerName)}`,
+      subtitle: `Bersemuka dengan ${info.partnerName}`,
       locked: true,
       bodyHtml: `
         <div class="event-text">${Utils.escapeHtml(descText)}</div>
@@ -2617,7 +2617,7 @@ window.Modals = {
       : history.map(h => `
           <div class="info-banner">
             <strong>${h.ribbon.icon} ${Utils.escapeHtml(h.name)}</strong> — Umur ${h.age} thn • <strong>${h.ribbon.name}</strong><br/>
-            Negara: ${h.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' ')} • Harta Akhir: ${h.netWorthFormatted}
+            Negara: ${h.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' → ')} • Harta Akhir: ${h.netWorthFormatted}
           </div>
         `).join('');
 
@@ -2877,7 +2877,7 @@ window.Modals = {
           </div>
           <div class="summary-stat">
             <span class="lbl">Negara Didiami</span>
-            <span class="val">${s.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' ')} (${s.countriesLivedIn.length})</span>
+            <span class="val">${s.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' → ')} (${s.countriesLivedIn.length})</span>
           </div>
           <div class="summary-stat">
             <span class="lbl">Nilai Harta Akhir</span>

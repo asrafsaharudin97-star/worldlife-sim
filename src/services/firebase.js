@@ -113,14 +113,22 @@ const FirebaseService = {
     if (typeof cb === 'function') {
       this._authListeners.push(cb);
       try { cb(this.user, this.lastAuthError); } catch (e) {}
+      return () => {
+        this._authListeners = this._authListeners.filter(fn => fn !== cb);
+      };
     }
+    return () => {};
   },
 
   onSyncStateChange(cb) {
     if (typeof cb === 'function') {
       this._syncListeners.push(cb);
       try { cb(this.syncState, this.lastSyncAt); } catch (e) {}
+      return () => {
+        this._syncListeners = this._syncListeners.filter(fn => fn !== cb);
+      };
     }
+    return () => {};
   },
 
   async signInWithGoogle() {

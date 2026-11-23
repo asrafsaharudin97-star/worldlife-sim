@@ -163,6 +163,11 @@ window.App = {
       if (!window.FirebaseService || this._fbListenersBound) return;
       this._fbListenersBound = true;
       FirebaseService.onAuthChange((user) => {
+        const nextUid = user && user.uid ? user.uid : null;
+        if (this._lastAuthUid !== undefined && this._lastAuthUid !== nextUid) {
+          GameState.resetSessionState({ clearCurrent: true });
+        }
+        this._lastAuthUid = nextUid;
         if (user) {
           GameState.setGuestMode(false);
           this.updateGuestBanner();
@@ -222,6 +227,9 @@ window.App = {
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
           const res = await FirebaseService.signOutUser();
+          if (res.ok) {
+            GameState.resetSessionState({ clearCurrent: true });
+          }
           this.toast(res.msg, res.ok ? 'culture' : 'error');
           this.renderStartAuthBar();
         });
@@ -512,21 +520,29 @@ window.App = {
       overlay = document.createElement('div');
       overlay.id = 'global-cloud-progress-overlay';
       overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.58);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px;';
+      overlay.innerHTML = `
+        <div style="width:min(360px,92vw);background:#ffffff;border-radius:16px;padding:18px 20px;box-shadow:0 20px 48px rgba(15,23,42,0.28);border:1px solid #e2e8f0;">
+          <div id="gcp-title" style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:12px;"></div>
+          <div style="width:100%;height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:10px;">
+            <div id="gcp-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#3b82f6,#2563eb);border-radius:999px;transition:width 150ms ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;gap:8px;">
+            <span id="gcp-label" style="color:#475569;font-weight:500;"></span>
+            <strong id="gcp-pct" style="color:#2563eb;font-variant-numeric:tabular-nums;">0%</strong>
+          </div>
+        </div>
+      `;
       document.body.appendChild(overlay);
     }
     const pct = Math.min(100, Math.max(0, Math.round(p.percent)));
-    overlay.innerHTML = `
-      <div style="width:min(360px,92vw);background:#ffffff;border-radius:16px;padding:18px 20px;box-shadow:0 20px 48px rgba(15,23,42,0.28);border:1px solid #e2e8f0;">
-        <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:12px;">${Utils.escapeHtml(this._getCloudProgressTitle(p.action))}</div>
-        <div style="width:100%;height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:10px;">
-          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#3b82f6,#2563eb);border-radius:999px;transition:width 150ms ease;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;gap:8px;">
-          <span style="color:#475569;font-weight:500;">${Utils.escapeHtml(p.label)}</span>
-          <strong style="color:#2563eb;font-variant-numeric:tabular-nums;">${pct}%</strong>
-        </div>
-      </div>
-    `;
+    const titleEl = overlay.querySelector('#gcp-title');
+    const barEl = overlay.querySelector('#gcp-bar');
+    const labelEl = overlay.querySelector('#gcp-label');
+    const pctEl = overlay.querySelector('#gcp-pct');
+    if (titleEl) titleEl.textContent = this._getCloudProgressTitle(p.action);
+    if (barEl) barEl.style.width = `${pct}%`;
+    if (labelEl) labelEl.textContent = p.label;
+    if (pctEl) pctEl.textContent = `${pct}%`;
   },
 
   async runWithCloudProgress(action, taskFn) {

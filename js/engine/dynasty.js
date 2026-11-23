@@ -24,11 +24,27 @@ window.Dynasty = {
     };
   },
 
+  _getScopedKey(slotOverride = null) {
+    const scope = (window.GameState && GameState.getAccountScope) ? GameState.getAccountScope() : 'local';
+    const slotId = slotOverride || ((window.GameState && GameState.getActiveSlotId) ? GameState.getActiveSlotId() : 'slot_1');
+    return `${this.STORAGE_KEY}_${scope}_${slotId}`;
+  },
+
+  resetCache() {
+    this._cache = null;
+    this.pendingPrimeAchievement = null;
+  },
+
   getData() {
     if (this._cache) return this._cache;
+    if (window.GameState && GameState.isGuestMode) {
+      this._cache = this._defaultData();
+      return this._cache;
+    }
+    const key = this._getScopedKey();
     const parsed = window.SafeStorage
-      ? SafeStorage.getJSON(this.STORAGE_KEY, null)
-      : (() => { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY) || 'null'); } catch (e) { return null; } })();
+      ? SafeStorage.getJSON(key, null)
+      : (() => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } })();
     this._cache = (parsed && typeof parsed === 'object')
       ? Object.assign(this._defaultData(), parsed)
       : this._defaultData();
@@ -37,9 +53,11 @@ window.Dynasty = {
 
   save() {
     if (!this._cache) return false;
-    if (window.SafeStorage) return SafeStorage.setJSON(this.STORAGE_KEY, this._cache, () => this._cache);
+    if (window.GameState && GameState.isGuestMode) return true;
+    const key = this._getScopedKey();
+    if (window.SafeStorage) return SafeStorage.setJSON(key, this._cache, () => this._cache);
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this._cache));
+      localStorage.setItem(key, JSON.stringify(this._cache));
       return true;
     } catch (e) {
       return false;
@@ -48,6 +66,7 @@ window.Dynasty = {
 
   resetForFreshDynasty() {
     this._cache = this._defaultData();
+    this.pendingPrimeAchievement = null;
     this.save();
     return this._cache;
   },

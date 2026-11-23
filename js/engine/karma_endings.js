@@ -780,10 +780,27 @@ window.KarmaEndings = {
     return 'Hubungan keluarga anda agak renggang di penghujung usia — namun kisah anda tetap terpahat dalam ingatan mereka.';
   },
 
+  _memUnlocked: null,
+
+  _getScopedKey(slotOverride = null) {
+    const scope = (window.GameState && GameState.getAccountScope) ? GameState.getAccountScope() : 'local';
+    const slotId = slotOverride || ((window.GameState && GameState.getActiveSlotId) ? GameState.getActiveSlotId() : 'slot_1');
+    return `${this.UNLOCKED_KEY}_${scope}_${slotId}`;
+  },
+
+  resetCache() {
+    this._memUnlocked = null;
+  },
+
   getUnlocked() {
+    if (window.GameState && GameState.isGuestMode) {
+      if (!this._memUnlocked) this._memUnlocked = { endings: [], modes: [] };
+      return this._memUnlocked;
+    }
+    const key = this._getScopedKey();
     const parsed = window.SafeStorage
-      ? SafeStorage.getJSON(this.UNLOCKED_KEY, null)
-      : (() => { try { return JSON.parse(localStorage.getItem(this.UNLOCKED_KEY) || 'null'); } catch (e) { return null; } })();
+      ? SafeStorage.getJSON(key, null)
+      : (() => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } })();
     if (parsed && typeof parsed === 'object') {
       return {
         endings: Array.isArray(parsed.endings) ? parsed.endings : [],
@@ -803,12 +820,17 @@ window.KarmaEndings = {
   },
 
   _saveUnlocked(obj) {
+    if (window.GameState && GameState.isGuestMode) {
+      this._memUnlocked = obj;
+      return;
+    }
+    const key = this._getScopedKey();
     if (window.SafeStorage) {
-      SafeStorage.setJSON(this.UNLOCKED_KEY, obj);
+      SafeStorage.setJSON(key, obj);
       return;
     }
     try {
-      localStorage.setItem(this.UNLOCKED_KEY, JSON.stringify(obj));
+      localStorage.setItem(key, JSON.stringify(obj));
     } catch (e) {}
   }
 };

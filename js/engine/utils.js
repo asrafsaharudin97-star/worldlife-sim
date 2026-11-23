@@ -47,7 +47,8 @@ window.Utils = {
     let formatted;
 
     if (compact || abs >= 100000000) {
-      if (abs >= 1e9) formatted = (abs / 1e9).toFixed(2).replace(/\.00$/, '') + 'B';
+      if (abs >= 1e12) formatted = (abs / 1e12).toFixed(2).replace(/\.00$/, '') + 'T';
+      else if (abs >= 1e9) formatted = (abs / 1e9).toFixed(2).replace(/\.00$/, '') + 'B';
       else if (abs >= 1e6) formatted = (abs / 1e6).toFixed(2).replace(/\.00$/, '') + 'M';
       else if (abs >= 1e4 && c.usdRate > 100) formatted = (abs / 1e3).toFixed(0) + 'K';
       else formatted = abs.toLocaleString('en-US');
@@ -55,7 +56,10 @@ window.Utils = {
       formatted = abs.toLocaleString('en-US');
     }
 
-    return `${neg ? '-' : ''}${c.currency.symbol}${formatted}`;
+    const rawSymbol = String((c.currency && c.currency.symbol) || '');
+    const hasRtl = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(rawSymbol);
+    const safeSymbol = hasRtl ? `\u2068${rawSymbol}\u2069\u200E` : rawSymbol;
+    return `\u2066${neg ? '-' : ''}${safeSymbol}${formatted}\u2069`;
   },
 
   generateName(countryId, gender, heritageId = null) {

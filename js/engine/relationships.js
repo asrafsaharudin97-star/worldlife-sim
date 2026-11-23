@@ -1585,7 +1585,7 @@ window.Relationships = {
       if (isPartner) {
         if (Utils.chance(0.80)) {
           const wasMarried = Boolean(s.married);
-          this._endPartnerFromCheating(s, rel, { lessDrama: false });
+          this._endPartnerFromCheating(s, rel, { lessDrama: false, keepZeroStats: true });
           const msg = wasMarried
             ? `KANTOI! ${rel.name} menangkap anda mencuri wangnya, memfailkan penceraian serta-merta dan mengugut melaporkannya kepada polis!`
             : `KANTOI! ${rel.name} menangkap anda mencuri wangnya dan terus memutuskan hubungan serta-merta!`;
@@ -1665,8 +1665,8 @@ window.Relationships = {
     s.married = false;
     partner.category = 'ex';
     partner.role = wasMarried ? 'Bekas Pasangan (Cerai)' : 'Bekas Pasangan';
-    partner.closeness = 5;
-    partner.trust = 5;
+    partner.closeness = opts.keepZeroStats ? 0 : 5;
+    partner.trust = opts.keepZeroStats ? 0 : 5;
     if (wasMarried && s.money > 0) {
       s.money -= Math.round(s.money * 0.20);
     }

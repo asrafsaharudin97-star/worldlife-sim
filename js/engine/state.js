@@ -135,6 +135,7 @@ window.GameState = {
       criminalRecord: 0,
       hasDriverLicense: false,
       generation: 1,
+      pastLives: [],
 
       education: {
         stage: 'infant',
@@ -1049,44 +1050,30 @@ window.GameState = {
 
   archiveCurrentLife() {
     const s = this.current;
-    if (!s || this.isGuestMode) return;
+    if (!s) return;
     if (window.Dynasty && Dynasty.recordMemberDeath) {
       Dynasty.recordMemberDeath(s);
     }
     const ribbon = this.computeRibbon(s);
-    const history = this.getHistory();
-    history.unshift({
+    if (!Array.isArray(s.pastLives)) s.pastLives = [];
+    s.pastLives.unshift({
       id: s.id,
       name: s.name,
       age: s.age,
       birthCountryId: s.birthCountryId,
       finalCountryId: s.countryId,
-      countriesLivedIn: s.countriesLivedIn,
+      countriesLivedIn: Array.isArray(s.countriesLivedIn) ? [...s.countriesLivedIn] : [s.countryId],
       netWorthFormatted: Utils.formatMoney(this.getNetWorth(), s.countryId, true),
       ribbon,
       causeOfDeath: s.causeOfDeath
     });
-    const store = window.SafeStorage;
-    const trimmed = history.slice(0, this.MAX_HISTORY);
-    if (store) {
-      store.setJSON(this.HISTORY_KEY, trimmed, () => trimmed.slice(0, 8));
-    } else {
-      try { localStorage.setItem(this.HISTORY_KEY, JSON.stringify(trimmed)); } catch (e) {}
-    }
+    s.pastLives = s.pastLives.slice(0, this.MAX_HISTORY);
+    this.save();
   },
 
   getHistory() {
-    if (this.isGuestMode) return [];
-    if (window.SafeStorage) {
-      const h = SafeStorage.getJSON(this.HISTORY_KEY, []);
-      return Array.isArray(h) ? h : [];
-    }
-    try {
-      const raw = localStorage.getItem(this.HISTORY_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
+    if (!this.current || !Array.isArray(this.current.pastLives)) return [];
+    return this.current.pastLives;
   },
 
   // --------------------------------------------------------------------------
@@ -1134,10 +1121,42 @@ window.GameState = {
 
   isGuestMode: false,
 
-  setGuestMode(enabled) {
-    this.isGuestMode = Boolean(enabled);
-    if (this.isGuestMode) {
+  getAccountScope() {
+    if (this.isGuestMode) return 'guest';
+    if (window.FirebaseService && FirebaseService.isLoggedIn() && FirebaseService.user && FirebaseService.user.uid) {
+      return `uid_${FirebaseService.user.uid}`;
+    }
+    return 'local';
+  },
+
+  cleanupLegacyGlobalKeys() {
+    const legacyKeys = [this.HISTORY_KEY, this.SAVE_KEY, 'worldlife_dynasty_v1', 'worldlife_unlocked_v1'];
+    legacyKeys.forEach(k => {
+      if (!k) return;
+      if (window.SafeStorage) SafeStorage.remove(k);
+      else { try { if (window.localStorage) localStorage.removeItem(k); } catch (e) {} }
+    });
+  },
+
+  resetSessionState({ clearCurrent = true } = {}) {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    if (clearCurrent) {
       this.current = null;
+    }
+    if (window.Dynasty && Dynasty.resetCache) Dynasty.resetCache();
+    if (window.KarmaEndings && KarmaEndings.resetCache) KarmaEndings.resetCache();
+    this.cleanupLegacyGlobalKeys();
+  },
+
+  setGuestMode(enabled) {
+    const next = Boolean(enabled);
+    const changed = this.isGuestMode !== next;
+    this.isGuestMode = next;
+    if (this.isGuestMode || changed) {
+      this.resetSessionState({ clearCurrent: this.isGuestMode });
     }
   },
 
@@ -1149,11 +1168,16 @@ window.GameState = {
   ACTIVE_SLOT_KEY: 'worldlife_active_slot_v1',
   SLOT_KEY_PREFIX: 'worldlife_save_',
 
+  _activeSlotStorageKey() {
+    return `${this.ACTIVE_SLOT_KEY}_${this.getAccountScope()}`;
+  },
+
   getActiveSlotId() {
     if (this.isGuestMode) return 'slot_1';
+    const key = this._activeSlotStorageKey();
     const raw = window.SafeStorage
-      ? SafeStorage.getRaw(this.ACTIVE_SLOT_KEY)
-      : (typeof localStorage !== 'undefined' ? localStorage.getItem(this.ACTIVE_SLOT_KEY) : null);
+      ? SafeStorage.getRaw(key)
+      : (typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null);
     return this.SLOT_IDS.includes(raw) ? raw : 'slot_1';
   },
 
@@ -1161,13 +1185,13 @@ window.GameState = {
     const valid = this.SLOT_IDS.includes(slotId) ? slotId : 'slot_1';
     if (this.isGuestMode) return valid;
     try {
-      if (window.localStorage) localStorage.setItem(this.ACTIVE_SLOT_KEY, valid);
+      if (window.localStorage) localStorage.setItem(this._activeSlotStorageKey(), valid);
     } catch (e) {}
     return valid;
   },
 
   _slotStorageKey(slotId) {
-    return `${this.SLOT_KEY_PREFIX}${slotId}`;
+    return `${this.SLOT_KEY_PREFIX}${this.getAccountScope()}_${slotId}`;
   },
 
   buildSlotPayload(slotId, stateObj = null) {
@@ -1209,20 +1233,8 @@ window.GameState = {
   _migrateLegacySaveIfNeeded() {
     if (this._legacyMigrated) return;
     this._legacyMigrated = true;
-    const slot1 = this.getLocalSlot('slot_1');
-    if (slot1) return;
-    try {
-      const legacy = window.SafeStorage
-        ? SafeStorage.getJSON(this.SAVE_KEY, null)
-        : JSON.parse(localStorage.getItem(this.SAVE_KEY) || 'null');
-      if (legacy && typeof legacy === 'object' && legacy.name) {
-        const payload = this.buildSlotPayload('slot_1', legacy);
-        if (payload) {
-          if (window.SafeStorage) SafeStorage.setJSON(this._slotStorageKey('slot_1'), payload);
-          else localStorage.setItem(this._slotStorageKey('slot_1'), JSON.stringify(payload));
-        }
-      }
-    } catch (e) {}
+    // Hentikan migrasi automatik daripada key global lama bagi mengelakkan pencemaran data merentas akaun/slot
+    this.cleanupLegacyGlobalKeys();
   },
 
   getLocalSlot(slotId) {
@@ -1280,20 +1292,24 @@ window.GameState = {
 
   deleteLocalSlot(slotId) {
     if (!this.SLOT_IDS.includes(slotId)) return;
-    const key = this._slotStorageKey(slotId);
-    if (window.SafeStorage) SafeStorage.remove(key);
-    else { try { localStorage.removeItem(key); } catch (e) {} }
+    const keysToRemove = [this._slotStorageKey(slotId)];
+    if (window.Dynasty && Dynasty._getScopedKey) keysToRemove.push(Dynasty._getScopedKey(slotId));
+    if (window.KarmaEndings && KarmaEndings._getScopedKey) keysToRemove.push(KarmaEndings._getScopedKey(slotId));
+    keysToRemove.forEach(k => {
+      if (window.SafeStorage) SafeStorage.remove(k);
+      else { try { localStorage.removeItem(k); } catch (e) {} }
+    });
     if (this.getActiveSlotId() === slotId) {
-      this.current = null;
-      if (window.SafeStorage) SafeStorage.remove(this.SAVE_KEY);
-      else { try { localStorage.removeItem(this.SAVE_KEY); } catch (e) {} }
+      this.resetSessionState({ clearCurrent: true });
     }
   },
 
   loadSlotPayload(slotId, payload) {
     if (!payload || !payload.gameState) return null;
+    this.resetSessionState({ clearCurrent: true });
     this.setActiveSlotId(slotId);
     this.current = JSON.parse(JSON.stringify(payload.gameState));
+    if (!Array.isArray(this.current.pastLives)) this.current.pastLives = [];
     this.ensureUpgradedState();
     this.trimJournal(this.current);
     this.save();
@@ -1410,17 +1426,7 @@ window.GameState = {
     // Mod Tetamu: simpan dalam memori sesi semasa sahaja (JANGAN tulis ke localStorage)
     if (this.isGuestMode) return true;
     const activeSlot = this.getActiveSlotId();
-    const okSlot = this.saveLocalSlot(activeSlot, this.current);
-    if (window.SafeStorage) {
-      SafeStorage.setJSON(this.SAVE_KEY, this.current, () => this.current);
-      return okSlot;
-    }
-    try {
-      localStorage.setItem(this.SAVE_KEY, JSON.stringify(this.current));
-      return okSlot;
-    } catch (e) {
-      return okSlot;
-    }
+    return this.saveLocalSlot(activeSlot, this.current);
   },
 
   load() {
@@ -1430,21 +1436,11 @@ window.GameState = {
     const slotData = this.getLocalSlot(activeSlot);
     if (slotData && slotData.gameState) {
       this.current = slotData.gameState;
+      if (!Array.isArray(this.current.pastLives)) this.current.pastLives = [];
       this.ensureUpgradedState();
       this.trimJournal(this.current);
       return this.current;
     }
-    try {
-      const parsed = window.SafeStorage
-        ? SafeStorage.getJSON(this.SAVE_KEY, null)
-        : JSON.parse(localStorage.getItem(this.SAVE_KEY) || 'null');
-      if (parsed && typeof parsed === 'object') {
-        this.current = parsed;
-        this.ensureUpgradedState();
-        this.trimJournal(this.current);
-        return this.current;
-      }
-    } catch (e) {}
     return null;
   },
 
@@ -1461,16 +1457,14 @@ window.GameState = {
 
   buildExportBundle() {
     if (this.current) this.save();
-    const store = window.SafeStorage;
-    const read = (k, fb) => (store ? store.getJSON(k, fb) : fb);
     return {
       format: this.EXPORT_FORMAT,
       version: this.EXPORT_VERSION,
       exportedAt: new Date().toISOString(),
       current: this.current ? JSON.parse(JSON.stringify(this.current)) : null,
-      dynasty: window.Dynasty ? JSON.parse(JSON.stringify(Dynasty.getData())) : read('worldlife_dynasty_v1', null),
+      dynasty: window.Dynasty ? JSON.parse(JSON.stringify(Dynasty.getData())) : null,
       history: this.getHistory(),
-      unlocked: window.KarmaEndings ? KarmaEndings.getUnlocked() : read('worldlife_unlocked_v1', null),
+      unlocked: window.KarmaEndings ? KarmaEndings.getUnlocked() : null,
       settings: { muted: !!window._wlMuted }
     };
   },
@@ -1506,21 +1500,15 @@ window.GameState = {
   importBundle(bundle) {
     const v = this.validateImportBundle(bundle);
     if (!v.ok) return v;
-    const store = window.SafeStorage;
 
-    if (bundle.dynasty) {
-      if (window.Dynasty) {
-        Dynasty._cache = Object.assign(Dynasty._defaultData(), bundle.dynasty);
-        Dynasty.save();
-      } else if (store) {
-        store.setJSON('worldlife_dynasty_v1', bundle.dynasty);
-      }
+    this.resetSessionState({ clearCurrent: true });
+
+    if (bundle.dynasty && window.Dynasty) {
+      Dynasty._cache = Object.assign(Dynasty._defaultData(), bundle.dynasty);
+      Dynasty.save();
     }
-    if (Array.isArray(bundle.history) && store) {
-      store.setJSON(this.HISTORY_KEY, bundle.history.slice(0, this.MAX_HISTORY));
-    }
-    if (bundle.unlocked && window.KarmaEndings && KarmaEndings.UNLOCKED_KEY && store) {
-      store.setJSON(KarmaEndings.UNLOCKED_KEY, bundle.unlocked);
+    if (bundle.unlocked && window.KarmaEndings && KarmaEndings._saveUnlocked) {
+      KarmaEndings._saveUnlocked(bundle.unlocked);
     }
     if (bundle.settings && typeof bundle.settings.muted === 'boolean' && window.Utils && Utils.setMuted) {
       Utils.setMuted(bundle.settings.muted);
@@ -1528,6 +1516,11 @@ window.GameState = {
 
     if (bundle.current) {
       this.current = JSON.parse(JSON.stringify(bundle.current));
+      if (Array.isArray(bundle.history)) {
+        this.current.pastLives = bundle.history.slice(0, this.MAX_HISTORY);
+      } else if (!Array.isArray(this.current.pastLives)) {
+        this.current.pastLives = [];
+      }
       this.ensureUpgradedState();
       this.trimJournal(this.current);
       this.save();

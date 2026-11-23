@@ -337,7 +337,7 @@ window.ModeModals = {
           </div>
           <div class="summary-stat">
             <span class="lbl">Negara Didiami</span>
-            <span class="val">${s.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' ')} (${s.countriesLivedIn.length})</span>
+            <span class="val">${s.countriesLivedIn.map(id => Utils.getCountry(id).flag).join(' → ')} (${s.countriesLivedIn.length})</span>
           </div>
         </div>
 
