@@ -1517,7 +1517,7 @@ window.Sim = {
     return 'neutral';
   },
 
-  _applyRandomizedAgeUpOutcome(s, choice) {
+  _applyRandomizedAgeUpOutcome(s, choice, event) {
     if (!s) return '';
     if (!s.alignment || typeof s.alignment !== 'object') {
       s.alignment = { karma: 0, fame: 0, peakFame: 0, notoriety: 0, stress: 10 };
@@ -1529,13 +1529,18 @@ window.Sim = {
     if (typeof a.stress !== 'number') a.stress = 10;
 
     const tone = this._inferChoiceTone(choice);
-    const statKeys = ['karma', 'fame', 'notoriety', 'stress'];
+    // Haba Polis hanya boleh terkesan oleh pilihan berisiko/jenayah — BUKAN kematian semula jadi, kemalangan atau kematian NPC
+    const evText = `${(event && event.title) || ''} ${(event && event.text) || ''} ${(event && event.id) || ''}`.toLowerCase();
+    const isDeathEvent = /meninggal|kematian|arwah|pemergian|maut|jenazah|pengebumian|berkabung|death|died|funeral|bereave/.test(evText);
+    const statKeys = (tone === 'risky' && !isDeathEvent)
+      ? ['karma', 'fame', 'notoriety', 'stress']
+      : ['karma', 'fame', 'stress'];
     // Kocok susunan dan pilih 2–4 statistik untuk dikemas kini secara rawak
     for (let i = statKeys.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [statKeys[i], statKeys[j]] = [statKeys[j], statKeys[i]];
     }
-    const pickedKeys = statKeys.slice(0, Utils.randInt(2, 4));
+    const pickedKeys = statKeys.slice(0, Math.min(statKeys.length, Utils.randInt(2, 4)));
 
     const labelMap = {
       karma: 'Karma',
@@ -1633,7 +1638,7 @@ window.Sim = {
 
     // Untuk peristiwa rawak Age-Up, laksanakan kemas kini dinamik Karma, Populariti, Haba Polis & Stres
     if (event && event.isAgeUpRandom && !nextEvent) {
-      const statSummary = this._applyRandomizedAgeUpOutcome(s, choice);
+      const statSummary = this._applyRandomizedAgeUpOutcome(s, choice, event);
       if (statSummary) {
         outcome = outcome ? `${outcome} (${statSummary})` : statSummary;
       }

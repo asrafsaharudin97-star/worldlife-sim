@@ -969,33 +969,161 @@ window.GAME_EVENTS = {
   // PERISTIWA KEHIDUPAN SEJAGAT
   // --------------------------------------------------------------------------
   universal: [
-    {
-      id: 'uni_child_talent',
-      minAge: 5, maxAge: 11,
-      icon: '🎨',
-      title: 'Mencungkil Bakat Selepas Sekolah',
-      text: 'Guru anda melihat anda sangat aktif selepas kelas dan mencadangkan anda menyertai kelab kokurikulum.',
-      choices: [
+    (function buildChildTalentEvent() {
+      const sub = (catIcon, catTitle, intro, options) => ({
+        id: 'uni_child_talent_sub',
+        icon: catIcon,
+        title: catTitle,
+        text: intro,
+        choices: options.map(o => ({ label: o.label, outcome: o.outcome, customAction: () => { applyFx(o.effects); return {}; } }))
+      });
+
+      const categories = [
         {
-          label: 'Sertai Kelab Robotik & Pengaturcaraan',
-          hint: 'Pintar ++',
-          outcome: 'Anda membina robot kecil dan memukau seluruh sekolah!',
-          effects: { smarts: 11, happiness: 6 }
+          label: '🤖 Kelab Robotik & Akademik STEM',
+          event: sub('🤖', 'Kelab Robotik & Akademik STEM', 'Cikgu penasihat kelab menunjukkan lima aktiviti yang boleh anda pilih. Mana satu menarik minat anda?', [
+            { label: 'Robotik & Koding', outcome: 'Robot kecil anda berjaya mengikut garisan hitam di lantai — seluruh kelas bertepuk tangan!', effects: { smarts: 10, happiness: 4 } },
+            { label: 'Matematik Tambahan', outcome: 'Anda mula menyelesaikan teka-teki nombor lebih pantas daripada rakan sebaya.', effects: { smarts: 12, happiness: -2 } },
+            { label: 'Eksperimen Sains', outcome: 'Gunung berapi buatan anda meletus berbuih dan memenangi tempat pertama pameran sains!', effects: { smarts: 8, happiness: 6, popularity: 3 } },
+            { label: 'Kelab Catur', outcome: 'Anda belajar berfikir tiga langkah ke hadapan dan menewaskan juara kelab tahun lepas.', effects: { smarts: 9, happiness: 3 } },
+            { label: 'Kuiz & Pertandingan Sains', outcome: 'Pasukan anda mara ke peringkat daerah — nama anda diumumkan semasa perhimpunan!', effects: { smarts: 7, popularity: 5, happiness: 4 } }
+          ])
         },
         {
-          label: 'Sertai Kelab Sukan & Olahraga',
-          hint: 'Kesihatan ++, Penampilan +',
-          outcome: 'Berlari di padang menjadikan anda lebih cergas, pantas dan popular!',
-          effects: { health: 10, looks: 4, happiness: 8 }
+          label: '⚽ Kelab Sukan & Olahraga',
+          event: sub('⚽', 'Kelab Sukan & Olahraga', 'Jurulatih sekolah menyenaraikan lima sukan yang dibuka untuk pelajar baharu.', [
+            { label: 'Bola Sepak', outcome: 'Gol pertama anda dalam perlawanan persahabatan membuatkan rakan sepasukan menjulang anda!', effects: { health: 9, popularity: 6, happiness: 5 } },
+            { label: 'Badminton', outcome: 'Pukulan smash anda semakin tajam dan refleks anda jauh lebih pantas.', effects: { health: 8, smarts: 2, happiness: 5 } },
+            { label: 'Renang', outcome: 'Anda kini mampu berenang lima pusingan kolam tanpa berhenti — badan semakin tegap!', effects: { health: 12, looks: 4 } },
+            { label: 'Seni Mempertahankan Diri', outcome: 'Tali pinggang pertama anda diikat oleh jurulatih — anda lebih berdisiplin dan yakin diri.', effects: { health: 9, happiness: 4, popularity: 2 } },
+            { label: 'Olahraga & Larian', outcome: 'Anda memecahkan rekod larian 100 meter peringkat sekolah!', effects: { health: 10, looks: 3, popularity: 4 } }
+          ])
         },
         {
-          label: 'Sertai Kelas Muzik & Seni Lukis',
-          hint: 'Gembira ++',
-          outcome: 'Lukisan berwarna-warni anda digantung di koridor utama sekolah!',
-          effects: { happiness: 13, smarts: 4 }
+          label: '🎵 Kelas Muzik',
+          event: sub('🎵', 'Kelas Muzik', 'Bilik muzik sekolah penuh dengan alat muzik. Cikgu meminta anda memilih satu bidang untuk didalami.', [
+            { label: 'Gitar', outcome: 'Jari anda mula lancar memetik kord dan anda boleh mainkan lagu kegemaran sendiri!', effects: { happiness: 10, smarts: 3, popularity: 3 } },
+            { label: 'Piano', outcome: 'Persembahan piano anda di hari terbuka sekolah membuatkan ibu bapa terharu.', effects: { smarts: 7, happiness: 7 } },
+            { label: 'Vokal & Nyanyian', outcome: 'Suara anda dipilih untuk mengetuai koir sekolah!', effects: { happiness: 8, popularity: 7, looks: 2 } },
+            { label: 'Dram & Perkusi', outcome: 'Rentak dram anda menghidupkan suasana — tetapi jiran mula mengadu bising.', effects: { happiness: 11, health: 3 } },
+            { label: 'Produksi Muzik & DJ', outcome: 'Anda menggubah lagu pertama di komputer dan rakan-rakan memutarnya berulang kali.', effects: { smarts: 6, happiness: 7, popularity: 4 } }
+          ])
+        },
+        {
+          label: '🎨 Kelas Seni & Kreatif',
+          event: sub('🎨', 'Kelas Seni & Kreatif', 'Guru seni mempamerkan lima aktiviti kreatif yang boleh anda sertai.', [
+            { label: 'Lukisan & Cat Air', outcome: 'Lukisan berwarna-warni anda digantung di koridor utama sekolah!', effects: { happiness: 10, smarts: 4 } },
+            { label: 'Fotografi', outcome: 'Gambar matahari terbenam yang anda rakam terpilih untuk kulit majalah sekolah.', effects: { smarts: 4, happiness: 7, popularity: 4 } },
+            { label: 'Lakonan & Teater', outcome: 'Anda mendapat watak utama dalam pementasan akhir tahun — tepukan gemuruh!', effects: { popularity: 8, happiness: 7, looks: 2 } },
+            { label: 'Rekaan Grafik', outcome: 'Poster rekaan anda digunakan untuk hari sukan sekolah.', effects: { smarts: 7, happiness: 5 } },
+            { label: 'Tarian', outcome: 'Kumpulan tarian anda memukau penonton di pentas konsert sekolah!', effects: { health: 7, looks: 5, popularity: 5 } }
+          ])
+        },
+        {
+          label: '🗣️ Kelab Bahasa & Pidato',
+          event: sub('🗣️', 'Kelab Bahasa & Pidato', 'Kelab bahasa menawarkan lima aktiviti untuk mengasah kemahiran berkomunikasi.', [
+            { label: 'Debat', outcome: 'Hujah anda yang tajam membuatkan pihak lawan terdiam — pasukan anda menang!', effects: { smarts: 8, popularity: 5 } },
+            { label: 'Pidato & Syarahan', outcome: 'Anda berdiri yakin di pentas dan memenangi pertandingan pidato peringkat sekolah.', effects: { smarts: 6, popularity: 7 } },
+            { label: 'Bahasa Asing', outcome: 'Anda kini boleh berbual ringkas dalam bahasa baharu — cikgu sangat kagum!', effects: { smarts: 10, happiness: 3 } },
+            { label: 'Penulisan Kreatif', outcome: 'Cerpen anda diterbitkan dalam majalah tahunan sekolah.', effects: { smarts: 7, happiness: 6 } },
+            { label: 'Kelab Bercerita', outcome: 'Adik-adik tadika ketawa riang mendengar cerita yang anda sampaikan.', effects: { happiness: 8, popularity: 4, smarts: 3 } }
+          ])
         }
-      ]
-    },
+      ];
+
+      const discipline = (s, key) => {
+        const defs = {
+          hit_teacher: { name: 'memukul dan melawan cikgu', karma: -25, heat: 18, caughtChance: 0.8, severe: true },
+          vandal: { name: 'merosakkan harta sekolah', karma: -12, heat: 8, caughtChance: 0.45 },
+          truant: { name: 'ponteng kelas dan lepak di luar pagar', karma: -4, heat: 3, caughtChance: 0.4 },
+          bully: { name: 'membuli dan memeras duit pelajar lain', karma: -15, heat: 6, caughtChance: 0.5 },
+          sabotage: { name: 'mensabotaj bilik darjah dan makmal', karma: -14, heat: 9, caughtChance: 0.5 }
+        };
+        const d = defs[key];
+        const smarts = (s.stats && s.stats.smarts) || 50;
+        const caught = Utils.chance(Math.max(0.15, Math.min(0.9, d.caughtChance - (smarts - 50) / 400)));
+        const adjust = (vals) => { if (window.KarmaEndings) KarmaEndings.adjustAlignment(vals); };
+        let outcome = '';
+
+        if (key === 'truant') applyFx({ smarts: -6 });
+        if (key === 'bully' && !caught) {
+          const loot = Utils.randInt(3, 15);
+          s.money += Utils.usdToLocal(loot, s.countryId);
+        }
+
+        if (!caught) {
+          adjust({ karma: Math.round(d.karma * 0.6), notoriety: key === 'truant' ? 0 : Math.round(d.heat * 0.3), stress: key === 'truant' ? -8 : 2 });
+          const freeLines = {
+            hit_teacher: 'Anda menolak cikgu dan melarikan diri sebelum sesiapa sempat mengecam anda. Tiada siapa membuat laporan… buat masa ini.',
+            vandal: 'Meja dan dinding kelas habis diconteng dan dirosakkan, tetapi tiada saksi yang melihat anda.',
+            truant: 'Anda lepak di kedai berhampiran sepanjang petang tanpa dikesan pengawas. Seronok, tetapi pelajaran semakin ketinggalan.',
+            bully: 'Pelajar itu terlalu takut untuk mengadu. Anda pulang dengan duit poketnya.',
+            sabotage: 'Alat makmal rosak dan kelas terpaksa dibatalkan — tiada siapa tahu angkara anda.'
+          };
+          return { outcome: freeLines[key], toastType: 'error' };
+        }
+
+        // Kantoi
+        adjust({ karma: d.karma, notoriety: key === 'truant' ? 2 : d.heat, stress: 10 });
+        s.criminalRecord = s.criminalRecord || 0;
+        if (key === 'vandal' || key === 'bully') applyFx({ popularity: -8, happiness: -5 });
+
+        if (d.severe) {
+          const roll = Math.random();
+          if (roll < 0.35 && window.PrisonFugitive && typeof PrisonFugitive.enterPrisonState === 'function') {
+            s.criminalRecord += 1;
+            PrisonFugitive.enterPrisonState(s, 'Serangan terhadap guru', 1, 'low', { detentionType: 'juvenile' });
+            outcome = 'Cikgu membuat laporan polis. Anda didakwa kerana serangan dan dihantar ke Sekolah Juvana selama setahun.';
+          } else if (roll < 0.75) {
+            applyFx({ smarts: -8, happiness: -10, popularity: -6 });
+            outcome = 'Anda dibuang sekolah serta-merta. Ibu bapa dipanggil dan nama anda dicatat dalam rekod polis.';
+          } else {
+            applyFx({ smarts: -4, happiness: -8 });
+            outcome = 'Anda digantung sekolah selama dua minggu dan ibu bapa terpaksa menandatangani surat aku janji.';
+          }
+          return { outcome, toastType: 'error' };
+        }
+
+        const r = Math.random();
+        if (r < 0.4) {
+          outcome = `Anda kantoi ${d.name}. Guru disiplin memberi amaran keras dan memaklumkan kepada ibu bapa.`;
+          applyFx({ happiness: -4 });
+        } else if (r < 0.8) {
+          outcome = `Anda kantoi ${d.name} dan dikenakan tahanan selepas sekolah selama seminggu.`;
+          applyFx({ happiness: -7, smarts: -2 });
+        } else {
+          outcome = `Anda kantoi ${d.name} dan digantung sekolah. Ibu bapa sangat kecewa dengan anda.`;
+          applyFx({ happiness: -10, smarts: -5, popularity: -4 });
+        }
+        return { outcome, toastType: 'error' };
+      };
+
+      const disciplineEvent = {
+        id: 'uni_child_talent_discipline',
+        icon: '🔥',
+        title: 'Buat Hal & Langgar Disiplin',
+        text: 'Daripada menyertai kelab, anda dan beberapa rakan nakal merancang sesuatu selepas loceng berbunyi…',
+        choices: [
+          { label: 'Pukul / Lawan Cikgu', journalType: 'warning', customAction: (s) => discipline(s, 'hit_teacher') },
+          { label: 'Vandalisme & Rosakkan Harta Sekolah', journalType: 'warning', customAction: (s) => discipline(s, 'vandal') },
+          { label: 'Ponteng Kelas & Lepak Luar Pagar', journalType: 'warning', customAction: (s) => discipline(s, 'truant') },
+          { label: 'Buli & Peras Duit Pelajar Lain', journalType: 'warning', customAction: (s) => discipline(s, 'bully') },
+          { label: 'Sabotaj Bilik Darjah / Makmal', journalType: 'warning', customAction: (s) => discipline(s, 'sabotage') }
+        ]
+      };
+
+      return {
+        id: 'uni_child_talent',
+        minAge: 5, maxAge: 11,
+        icon: '🎨',
+        title: 'Mencungkil Bakat Selepas Sekolah',
+        text: 'Guru anda melihat anda sangat aktif selepas kelas dan mencadangkan anda menyertai kelab kokurikulum. Pilih satu bidang untuk melihat aktiviti yang ditawarkan.',
+        choices: [
+          ...categories.map(cat => ({ label: cat.label, customAction: () => ({ nextEvent: cat.event }) })),
+          { label: '🔥 Buat Hal & Langgar Disiplin', customAction: () => ({ nextEvent: disciplineEvent }) }
+        ]
+      };
+    })(),
     {
       id: 'uni_teen_peer',
       minAge: 13, maxAge: 17,
