@@ -2370,7 +2370,7 @@ window.Sim = {
         KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: Math.round(def.heat * 1.4), stress: def.stress + 8 });
       }
 
-      // Risiko hukuman penjara bagi jenayah berat atau Haba Polis tinggi
+      // Risiko hukuman penjara bagi jenayah berat (18+) atau pusat juvana bagi bawah umur berulang
       const shouldJail = s.age >= 18 && def.jailYears && (currentHeat >= 45 || Utils.chance(0.45));
       if (shouldJail && window.PrisonEngine && PrisonEngine.sendToPrison) {
         const yrs = Utils.randInt(def.jailYears[0], def.jailYears[1]);
@@ -2381,6 +2381,16 @@ window.Sim = {
         );
         GameState.save();
         return { ok: false, msg: `Kantoi! Dipenjara ${yrs} tahun & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
+      }
+
+      if (s.age < 18 && currentHeat >= 30 && Utils.chance(0.4)) {
+        GameState.adjustStats({ happiness: -10 });
+        GameState.addJournalEntry(
+          `🚓 TAHANAN JUVANA: Anda ditahan sementara di pusat pemulihan juvana ${c.name} akibat "${def.title}" dan keluarga anda terpaksa membayar denda ${Utils.formatMoney(fine, s.countryId)}.`,
+          'warning'
+        );
+        GameState.save();
+        return { ok: false, msg: `Ditahan juvana sementara & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
       }
 
       GameState.addJournalEntry(
@@ -2415,7 +2425,8 @@ window.Sim = {
     const crimes = s.crimesCommitted || 0;
     const rep = s.criminalRep || 0;
     const karma = (s.alignment && s.alignment.karma) || 0;
-    return crimes >= 3 || rep >= 40 || (karma <= -30 && crimes >= 1);
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+    return crimes >= 3 || rep >= 40 || (karma <= -30 && crimes >= 1) || (heat >= 45 && crimes >= 1);
   },
 
   applyToJoinMafia(s) {
