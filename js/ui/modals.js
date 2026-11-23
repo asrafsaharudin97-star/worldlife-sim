@@ -2294,12 +2294,23 @@ window.Modals = {
         </div>
       `;
     } else {
+      const authErr = fb && fb.lastAuthError ? fb.lastAuthError : null;
+      const errHost = (authErr && authErr.hostname) || (window.location && window.location.hostname) || '';
+      const errBoxHtml = authErr ? `
+        <div id="slots-auth-error-box" style="margin-top:8px;padding:9px 11px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:12px;line-height:1.48;">
+          <strong>⚠️ Log Masuk Google Gagal</strong><br/>
+          Kod Ralat: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;">${Utils.escapeHtml(authErr.code)}</code><br/>
+          Domain Semasa: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;user-select:all;">${Utils.escapeHtml(errHost)}</code><br/>
+          <span style="display:block;margin-top:4px;color:#7f1d1d;">${Utils.escapeHtml(authErr.hint || authErr.msg)}</span>
+        </div>
+      ` : '';
       authBarHtml = `
         <div class="info-banner" style="background:#f8fafc;">
           <div style="font-size:12px;color:#475569;margin-bottom:8px;">
             💾 <strong>Mod Tempatan:</strong> Simpanan anda kini disimpan dalam pelayar ini. Log masuk Google untuk menyegerakkan semua 5 slot ke Cloud.
           </div>
           <button type="button" id="slots-btn-login" class="primary-btn" style="width:100%;">🔐 Log Masuk dengan Google (Cloud Save)</button>
+          ${errBoxHtml}
         </div>
       `;
     }

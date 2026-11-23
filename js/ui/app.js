@@ -78,10 +78,21 @@ window.App = {
         });
       }
     } else {
+      const authErr = fb && fb.lastAuthError ? fb.lastAuthError : null;
+      const errHost = (authErr && authErr.hostname) || (window.location && window.location.hostname) || '';
+      const errBoxHtml = authErr ? `
+        <div id="auth-error-box" style="margin-top:8px;padding:9px 11px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:12px;line-height:1.48;">
+          <strong>⚠️ Log Masuk Google Gagal</strong><br/>
+          Kod Ralat: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;">${Utils.escapeHtml(authErr.code)}</code><br/>
+          Domain Semasa: <code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-weight:700;user-select:all;">${Utils.escapeHtml(errHost)}</code><br/>
+          <span style="display:block;margin-top:4px;color:#7f1d1d;">${Utils.escapeHtml(authErr.hint || authErr.msg)}</span>
+        </div>
+      ` : '';
       bar.innerHTML = `
         <button type="button" id="btn-start-google-login" class="secondary-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;font-weight:700;">
           🔐 Log Masuk dengan Google (Cloud Save)
         </button>
+        ${errBoxHtml}
       `;
       const loginBtn = document.getElementById('btn-start-google-login');
       if (loginBtn) {
@@ -93,7 +104,7 @@ window.App = {
           const res = await FirebaseService.signInWithGoogle();
           this.toast(res.msg, res.ok ? 'success' : 'error');
           this.renderStartAuthBar();
-          if (res.ok && window.Modals && Modals.showSaveSlotsModal) {
+          if (res.ok && !res.redirecting && window.Modals && Modals.showSaveSlotsModal) {
             Modals.showSaveSlotsModal();
           }
         });

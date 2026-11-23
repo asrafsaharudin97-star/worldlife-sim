@@ -8,6 +8,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
@@ -50,17 +52,53 @@ try {
 
 const SLOT_IDS = ['slot_1', 'slot_2', 'slot_3', 'slot_4', 'slot_5'];
 
+function buildAuthDiagnostic(err) {
+  const code = (err && err.code) ? String(err.code) : 'auth/unknown-error';
+  const hostname = (typeof window !== 'undefined' && window.location && window.location.hostname)
+    ? window.location.hostname
+    : 'unknown-host';
+  let hint = 'Sila cuba lagi sebentar lagi atau semak sambungan internet anda.';
+
+  if (code === 'auth/unauthorized-domain') {
+    hint = `Domain laman ini belum dibenarkan dalam Firebase. Sila salin domain "${hostname}" dan tambahkannya di Firebase Console → Authentication → Settings → Authorized domains.`;
+  } else if (code === 'auth/operation-not-allowed') {
+    hint = 'Log masuk Google belum diaktifkan dalam projek Firebase. Sila aktifkan Google Sign-In di Firebase Console → Authentication → Sign-in method.';
+  } else if (code === 'auth/popup-closed-by-user') {
+    hint = 'Tetingkap log masuk ditutup sebelum proses selesai. Klik semula butang Log Masuk untuk cuba lagi.';
+  } else if (code === 'auth/network-request-failed') {
+    hint = 'Sambungan internet terganggu atau disekat oleh pelayar/firewall.';
+  }
+
+  return {
+    code,
+    hostname,
+    hint,
+    msg: `Gagal log masuk Google (${code}) di domain ${hostname}.`
+  };
+}
+
 const FirebaseService = {
   SLOT_IDS,
   initialized,
   user: null,
   syncState: 'idle', // 'idle' | 'syncing' | 'synced' | 'error'
   lastSyncAt: null,
+  lastAuthError: null,
   _authListeners: [],
   _syncListeners: [],
 
   isLoggedIn() {
     return Boolean(this.user && this.user.uid);
+  },
+
+  clearAuthError() {
+    this.lastAuthError = null;
+  },
+
+  _notifyAuthListeners() {
+    this._authListeners.forEach(fn => {
+      try { fn(this.user, this.lastAuthError); } catch (e) {}
+    });
   },
 
   setSyncState(state) {
@@ -74,7 +112,7 @@ const FirebaseService = {
   onAuthChange(cb) {
     if (typeof cb === 'function') {
       this._authListeners.push(cb);
-      try { cb(this.user); } catch (e) {}
+      try { cb(this.user, this.lastAuthError); } catch (e) {}
     }
   },
 
@@ -86,20 +124,48 @@ const FirebaseService = {
   },
 
   async signInWithGoogle() {
+    this.lastAuthError = null;
     if (!auth || !provider) {
-      return { ok: false, msg: 'Perkhidmatan Firebase tidak tersedia buat masa ini.' };
+      const diag = buildAuthDiagnostic({ code: 'auth/sdk-not-initialized' });
+      this.lastAuthError = diag;
+      this._notifyAuthListeners();
+      return { ok: false, error: diag, msg: diag.msg };
     }
+
     try {
       const cred = await signInWithPopup(auth, provider);
       this.user = cred.user;
+      this.lastAuthError = null;
       this.setSyncState('synced');
-      return { ok: true, user: cred.user, msg: `Berjaya log masuk sebagai ${cred.user.displayName || cred.user.email}!` };
+      this._notifyAuthListeners();
+      return {
+        ok: true,
+        user: cred.user,
+        msg: `Berjaya log masuk sebagai ${cred.user.displayName || cred.user.email}!`
+      };
     } catch (err) {
-      const code = err && err.code ? err.code : '';
-      if (code === 'auth/popup-closed-by-user') {
-        return { ok: false, msg: 'Log masuk dibatalkan.' };
+      const code = (err && err.code) ? String(err.code) : '';
+      // Fallback automatik ke signInWithRedirect jika popup disekat pelayar / mudah alih
+      if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, provider);
+          return {
+            ok: true,
+            redirecting: true,
+            msg: 'Tetingkap popup disekat — mengalihkan ke halaman log masuk Google...'
+          };
+        } catch (redirErr) {
+          const diag = buildAuthDiagnostic(redirErr);
+          this.lastAuthError = diag;
+          this._notifyAuthListeners();
+          return { ok: false, error: diag, msg: diag.msg };
+        }
       }
-      return { ok: false, msg: `Gagal log masuk Google (${code || 'ralat rangkaian'}).` };
+
+      const diag = buildAuthDiagnostic(err);
+      this.lastAuthError = diag;
+      this._notifyAuthListeners();
+      return { ok: false, error: diag, msg: diag.msg };
     }
   },
 
@@ -108,7 +174,9 @@ const FirebaseService = {
     try {
       await signOut(auth);
       this.user = null;
+      this.lastAuthError = null;
       this.setSyncState('idle');
+      this._notifyAuthListeners();
       return { ok: true, msg: 'Anda telah log keluar daripada akaun Google.' };
     } catch (err) {
       return { ok: false, msg: 'Gagal log keluar. Sila cuba lagi.' };
@@ -152,7 +220,6 @@ const FirebaseService = {
     }
     this.setSyncState('syncing');
     try {
-      // Pastikan payload bersih daripada nilai undefined sebelum dihantar ke Firestore
       const cleanPayload = JSON.parse(JSON.stringify({
         ...payload,
         slotId,
@@ -186,12 +253,30 @@ const FirebaseService = {
 };
 
 if (auth) {
+  // Proses hasil signInWithRedirect apabila halaman dimuatkan semula
+  getRedirectResult(auth)
+    .then((cred) => {
+      if (cred && cred.user) {
+        FirebaseService.user = cred.user;
+        FirebaseService.lastAuthError = null;
+        FirebaseService.setSyncState('synced');
+        FirebaseService._notifyAuthListeners();
+        if (window.App && App.toast) {
+          App.toast(`Berjaya log masuk sebagai ${cred.user.displayName || cred.user.email}!`, 'success');
+        }
+      }
+    })
+    .catch((err) => {
+      const diag = buildAuthDiagnostic(err);
+      FirebaseService.lastAuthError = diag;
+      FirebaseService._notifyAuthListeners();
+    });
+
   onAuthStateChanged(auth, (user) => {
     FirebaseService.user = user || null;
+    if (user) FirebaseService.lastAuthError = null;
     FirebaseService.setSyncState(user ? 'synced' : 'idle');
-    FirebaseService._authListeners.forEach(fn => {
-      try { fn(FirebaseService.user); } catch (e) {}
-    });
+    FirebaseService._notifyAuthListeners();
   });
 }
 
