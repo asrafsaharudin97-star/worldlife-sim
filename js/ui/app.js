@@ -476,10 +476,11 @@ window.App = {
 
   showStartScreen(opts = {}) {
     const wasInGame = !document.getElementById('game-header').classList.contains('hidden');
-    if (wasInGame && GameState.current) {
+    if (wasInGame && GameState.current && !(opts && opts.skipSave)) {
       GameState.syncActiveSlotToCloud('main_menu');
     }
     if (opts && opts.targetSlotId) {
+      GameState.current = null;
       GameState.setActiveSlotId(opts.targetSlotId);
     }
 

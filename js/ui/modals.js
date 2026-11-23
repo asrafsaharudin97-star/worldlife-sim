@@ -2530,14 +2530,34 @@ window.Modals = {
       });
     });
 
-    document.querySelectorAll('.slot-new-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
+    document.querySelectorAll('#modal-body .slot-new-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const sid = btn.dataset.slot;
-        if (GameState.current && GameState.getActiveSlotId() !== sid) {
-          await GameState.syncActiveSlotToCloud('switch_slot');
+        if (!sid) return;
+        btn.disabled = true;
+
+        // 1. Jika sedang bermain di slot lain, simpan slot semasa dahulu tanpa menyekat UI jika rangkaian perlahan
+        const prevSlotId = GameState.getActiveSlotId();
+        if (GameState.current && prevSlotId !== sid) {
+          try { GameState.save(); } catch (_) {}
+          try {
+            await Promise.race([
+              GameState.syncActiveSlotToCloud('switch_slot'),
+              new Promise(resolve => setTimeout(resolve, 2000))
+            ]);
+          } catch (_) {}
         }
+
+        // 2. Kosongkan watak aktif dalam memori sebelum menukar activeSlotId supaya slot baharu tidak ditimpa
+        GameState.current = null;
+        GameState.setActiveSlotId(sid);
+
+        // 3. Tutup modal serta-merta dan buka skrin Cipta Watak Baru untuk slot ini
         this.close(true);
-        App.showStartScreen({ targetSlotId: sid });
+        App.showStartScreen({ targetSlotId: sid, skipSave: true });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         App.toast(`📂 Sedia mencipta watak baru di Slot ${sid.replace('slot_', '')}!`, 'culture');
       });
     });
