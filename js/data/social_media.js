@@ -206,12 +206,23 @@ window.SocialMedia = {
     { id: 'toxic_ex', label: 'Bekas Pasangan Toksik', isRedFlag: true, desc: 'Membawa drama bekas pasangan yang suka mengugut.' }
   ],
 
-  generateDatingCandidates() {
+  DATING_AGE_RANGES: [
+    { id: 'all', label: 'Semua Umur (18+ Tahun)', min: 18, max: 75 },
+    { id: '18_24', label: '18 – 24 Tahun', min: 18, max: 24 },
+    { id: '25_34', label: '25 – 34 Tahun', min: 25, max: 34 },
+    { id: '35_49', label: '35 – 49 Tahun', min: 35, max: 49 },
+    { id: '50_64', label: '50 – 64 Tahun', min: 50, max: 64 },
+    { id: '65_plus', label: '65+ Tahun', min: 65, max: 80 }
+  ],
+
+  generateDatingCandidates(rangeId) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     const c = Utils.getCountry(s.countryId);
     const targetGender = s.gender === 'male' ? 'female' : 'male';
-    const minAge = 16;
+    const selectedId = rangeId || s._datingAgeRange || 'all';
+    const rangeObj = this.DATING_AGE_RANGES.find(r => r.id === selectedId) || this.DATING_AGE_RANGES[0];
+    s._datingAgeRange = rangeObj.id;
 
     const wealthTiers = ['Sederhana', 'Stabil', 'Berada', 'Mewah'];
     const list = [];
@@ -220,7 +231,7 @@ window.SocialMedia = {
       const heritage = Utils.pick(c.heritages).id;
       const name = Utils.generateName(s.countryId, targetGender, heritage);
       const job = Utils.pick(c.jobs).title;
-      const age = Utils.clamp(s.age + Utils.randInt(-4, 6), minAge, 72);
+      const age = Utils.randInt(Math.max(18, rangeObj.min), rangeObj.max);
       const looks = Utils.randInt(45, 96);
       const wealth = Utils.pick(wealthTiers);
 

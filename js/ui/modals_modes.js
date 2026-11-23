@@ -113,11 +113,19 @@ window.ModeModals = {
       } else if (s.partnerId) {
         body += `<div class="info-banner highlight">Anda sudah mempunyai pasangan aktif! Uruskan hubungan anda di tab <strong>❤️ Hubungan</strong>.</div>`;
       } else {
-        const pool = (s._datingPool && s._datingPool.length > 0) ? s._datingPool : SocialMedia.generateDatingCandidates();
+        const selectedAgeRange = s._datingAgeRange || 'all';
+        const ageRanges = SocialMedia.DATING_AGE_RANGES || [{ id: 'all', label: 'Semua Umur (18+ Tahun)' }];
+        const pool = (s._datingPool && s._datingPool.length > 0) ? s._datingPool : SocialMedia.generateDatingCandidates(selectedAgeRange);
         body += `
           <div class="info-banner highlight">
             <strong>💘 Sesi Date — Kenali Calon Pasangan</strong><br/>
             Pilih calon yang menarik minat anda untuk memulakan Sesi Date! Awas: sesetengah profil mungkin menyembunyikan <em>Red Flag</em> atau Jodoh Sejati.
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <label for="dating-age-range" style="font-size:13px;font-weight:600;white-space:nowrap;">🎂 Umur Pasangan:</label>
+            <select id="dating-age-range" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;font-size:13px;background:#fff;color:#0f172a;">
+              ${ageRanges.map(r => `<option value="${r.id}" ${r.id === selectedAgeRange ? 'selected' : ''}>${Utils.escapeHtml(r.label)}</option>`).join('')}
+            </select>
           </div>
           <div class="action-list">
             ${pool.map(cand => {
@@ -202,10 +210,19 @@ window.ModeModals = {
       });
     });
 
+    const ageRangeSelect = document.getElementById('dating-age-range');
+    if (ageRangeSelect) {
+      ageRangeSelect.addEventListener('change', () => {
+        SocialMedia.generateDatingCandidates(ageRangeSelect.value);
+        this.showSocialHub('dating');
+      });
+    }
+
     const refBtn = document.getElementById('btn-refresh-dating');
     if (refBtn) {
       refBtn.addEventListener('click', () => {
-        SocialMedia.generateDatingCandidates();
+        const rangeId = ageRangeSelect ? ageRangeSelect.value : (s._datingAgeRange || 'all');
+        SocialMedia.generateDatingCandidates(rangeId);
         this.showSocialHub('dating');
       });
     }
