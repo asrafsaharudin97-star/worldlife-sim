@@ -647,6 +647,7 @@ window.SpecialModesEngine = {
       } else if (risk.tier === 'high' && s.stats.health <= 5 && Utils.chance(0.15)) {
         s.alive = false;
         s.causeOfDeath = `Terbunuh dalam operasi berbahaya (${act.title})`;
+        if (window.GameState && GameState.archiveCurrentLife) GameState.archiveCurrentLife();
         diedFromMission = true;
         failNotes.push('Kecederaan kritikal membawa maut!');
       }

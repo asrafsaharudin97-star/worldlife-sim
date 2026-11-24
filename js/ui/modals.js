@@ -1547,7 +1547,7 @@ window.Modals = {
     const report = LegalInheritanceEngine.calculateEstateStatement(s);
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
     const curMode = (s.legal.wasiat && s.legal.wasiat.mode) || 'equal';
-    const children = (s.relationships || []).filter(r => r.type === 'child' && r.alive);
+    const children = (s.relationships || []).filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
 
     this.open({
       icon: '📜',
@@ -2594,7 +2594,11 @@ window.Modals = {
         this.close(true);
         App.showGameScreen();
         App.renderAll();
-        App.toast(`▶ Menyambung Slot ${sid.replace('slot_', '')}: ${item.characterName}`, 'success');
+        if (GameState.current && !GameState.current.alive) {
+          setTimeout(() => this.showDeathSummary(), 200);
+        } else {
+          App.toast(`▶ Menyambung Slot ${sid.replace('slot_', '')}: ${item.characterName}`, 'success');
+        }
       });
     });
 

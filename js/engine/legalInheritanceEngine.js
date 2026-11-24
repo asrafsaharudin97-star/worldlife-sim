@@ -84,7 +84,7 @@ window.LegalInheritanceEngine = {
     }
 
     const settlementLocal = Math.round(Math.max(0, s.money) * splitPct);
-    const children = (s.relationships || []).filter(r => r.type === 'child' && r.alive && r.age < 18);
+    const children = (s.relationships || []).filter(r => this._isChildRel(r) && r.alive && r.age < 18);
     const baseAlimony = hasPrenup ? 0 : Math.round(((s.job && s.job.salary) || 0) * (children.length > 0 ? 0.15 : 0.08));
     const alimonyYears = baseAlimony > 0 ? Math.min(8, Math.max(2, yearsMarried)) : 0;
 
@@ -198,40 +198,56 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `Wasiat sivil ditetapkan: ${labels[mode]}.` };
   },
 
+  _isChildRel(r) {
+    return Boolean(r && (r.type === 'child' || ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role)));
+  },
+
+  _isParentRel(r) {
+    return Boolean(r && (r.type === 'parent' || ['Ibu', 'Ayah', 'Bapa', 'Ibu Angkat', 'Ayah Angkat', 'Mother', 'Father'].includes(r.role)));
+  },
+
   // --------------------------------------------------------------------------
   // 7. PENYATA & PEMBAHAGIAN HARTA PUSAKA (UNDANG-UNDANG SIVIL & WASIAT)
   // --------------------------------------------------------------------------
   calculateEstateStatement(s) {
     this.ensureLegalFields(s);
+    const countryId = s.countryId || 'MY';
+    const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(countryId) : { name: countryId };
     const cash = Math.max(0, Math.round(s.money || 0));
     const assetSum = window.AssetsEngine ? AssetsEngine.getAssetCashflowSummary(s) : { totalAssetValue: 0, totalDebt: 0 };
     const grossEstate = cash + Math.round(assetSum.totalAssetValue || 0);
     const totalDebt = Math.round(assetSum.totalDebt || 0) + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0);
     const netBeforeTax = Math.max(0, grossEstate - totalDebt);
 
-    const netUsd = Utils.localToUsd ? Utils.localToUsd(netBeforeTax, s.countryId) : netBeforeTax;
-    const taxRate = this.getCountryEstateTaxRate(s.countryId, netUsd);
+    const netUsd = Utils.localToUsd ? Utils.localToUsd(netBeforeTax, countryId) : netBeforeTax;
+    const taxRate = this.getCountryEstateTaxRate(countryId, netUsd);
     const estateTax = Math.round(netBeforeTax * taxRate);
     const distributable = Math.max(0, netBeforeTax - estateTax);
 
     const spouse = s.married && s.partnerId
       ? (s.relationships || []).find(r => r.id === s.partnerId && r.alive)
       : null;
-    const children = (s.relationships || []).filter(r => r.type === 'child' && r.alive);
-    const parents = (s.relationships || []).filter(r => r.type === 'parent' && r.alive);
+    const children = (s.relationships || []).filter(r => this._isChildRel(r) && r.alive);
+    const parents = (s.relationships || []).filter(r => this._isParentRel(r) && r.alive);
 
     const mode = (s.legal.wasiat && s.legal.wasiat.mode) || 'equal';
+    const wasiatLabels = {
+      equal: 'Pembahagian Sama Rata (Sivil)',
+      spouse_all: '100% Kepada Pasangan',
+      single_child: '100% Kepada Anak Pilihan',
+      charity: '100% Yayasan Kebajikan'
+    };
     const shares = [];
 
     if (distributable > 0) {
       if (mode === 'charity') {
-        shares.push({ id: 'charity', name: 'Yayasan Kebajikan Awam', role: 'Derma Wasiat', pct: 100, amount: distributable });
+        shares.push({ id: 'charity', isEntity: true, name: 'Yayasan Kebajikan Awam', role: 'Derma Wasiat', fractionLabel: 'Wasiat Kebajikan', pct: 100, amount: distributable });
       } else if (mode === 'spouse_all' && spouse) {
-        shares.push({ id: spouse.id, name: spouse.name, role: spouse.role || 'Pasangan', pct: 100, amount: distributable });
+        shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Wasiat Penuh Pasangan', pct: 100, amount: distributable });
       } else if (mode === 'single_child' && s.legal.wasiat.soleBeneficiaryId) {
-        const chosen = children.find(c => c.id === s.legal.wasiat.soleBeneficiaryId);
+        const chosen = children.find(ch => ch.id === s.legal.wasiat.soleBeneficiaryId);
         if (chosen) {
-          shares.push({ id: chosen.id, name: chosen.name, role: chosen.isAdopted ? 'Anak Angkat' : 'Anak', pct: 100, amount: distributable });
+          shares.push({ id: chosen.id, isEntity: false, name: chosen.name, role: chosen.isAdopted ? 'Anak Angkat' : (chosen.role || 'Anak'), fractionLabel: 'Pewaris Tunggal Wasiat', pct: 100, amount: distributable });
         }
       }
 
@@ -241,12 +257,14 @@ window.LegalInheritanceEngine = {
           const spouseAmt = Math.round(distributable * 0.5);
           const childPool = distributable - spouseAmt;
           const perChild = Math.round(childPool / children.length);
-          shares.push({ id: spouse.id, name: spouse.name, role: spouse.role || 'Pasangan', pct: 50, amount: spouseAmt });
+          shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Bahagian Pasangan (1/2)', pct: 50, amount: spouseAmt });
           children.forEach(ch => {
             shares.push({
               id: ch.id,
+              isEntity: false,
               name: ch.name,
-              role: ch.isAdopted ? 'Anak Angkat' : 'Anak',
+              role: ch.isAdopted ? 'Anak Angkat' : (ch.role || 'Anak'),
+              fractionLabel: `Bahagian Anak (1/${children.length * 2})`,
               pct: Math.round((50 / children.length) * 10) / 10,
               amount: perChild
             });
@@ -256,41 +274,63 @@ window.LegalInheritanceEngine = {
           children.forEach(ch => {
             shares.push({
               id: ch.id,
+              isEntity: false,
               name: ch.name,
-              role: ch.isAdopted ? 'Anak Angkat' : 'Anak',
+              role: ch.isAdopted ? 'Anak Angkat' : (ch.role || 'Anak'),
+              fractionLabel: `Bahagian Sama Rata (1/${children.length})`,
               pct: Math.round((100 / children.length) * 10) / 10,
               amount: perChild
             });
           });
         } else if (spouse) {
-          shares.push({ id: spouse.id, name: spouse.name, role: spouse.role || 'Pasangan', pct: 100, amount: distributable });
+          shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Waris Tunggal Pasangan', pct: 100, amount: distributable });
         } else if (parents.length > 0) {
           const perParent = Math.round(distributable / parents.length);
           parents.forEach(par => {
             shares.push({
               id: par.id,
+              isEntity: false,
               name: par.name,
               role: par.role || 'Ibu Bapa',
+              fractionLabel: `Bahagian Ibu Bapa (1/${parents.length})`,
               pct: Math.round((100 / parents.length) * 10) / 10,
               amount: perParent
             });
           });
         } else {
-          shares.push({ id: 'state', name: 'Tabung Amanah Awam', role: 'Tiada Waris', pct: 100, amount: distributable });
+          shares.push({ id: 'state', isEntity: true, name: 'Tabung Amanah Awam', role: 'Tiada Waris Kandung', fractionLabel: 'Pewaris Waris Jauh / Amanah', pct: 100, amount: distributable });
         }
       }
     }
 
+    const heirlooms = ((s.assets && s.assets.collectibles) || []).filter(col => col && col.isHeirloom);
+    const taxRatePct = Math.round(taxRate * 100);
+    const systemName = 'Undang-Undang Sivil & Wasiat';
+
     return {
-      systemName: 'Undang-Undang Sivil & Wasiat',
+      countryId,
+      countryName: c.name || countryId,
+      systemName,
+      systemLabel: systemName,
       grossEstate,
       totalDebt,
+      totalDebts: totalDebt,
       netBeforeTax,
-      taxRatePct: Math.round(taxRate * 100),
+      netEstate: netBeforeTax,
+      taxRatePct,
+      estateTaxRate: taxRatePct,
       estateTax,
+      estateTaxAmount: estateTax,
       distributable,
+      distributableEstate: distributable,
       wasiatMode: mode,
-      shares
+      wasiatLabel: wasiatLabels[mode] || wasiatLabels.equal,
+      heirlooms,
+      shares,
+      getHeirAmount(heirId) {
+        const found = shares.find(sh => sh.id === heirId);
+        return found ? found.amount : 0;
+      }
     };
   }
 };

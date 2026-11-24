@@ -181,6 +181,9 @@ window.App = {
             if (loaded && !inGate) {
               this.showGameScreen();
               this.renderAll();
+              if (!loaded.alive && window.Modals && Modals.showDeathSummary) {
+                setTimeout(() => Modals.showDeathSummary(), 250);
+              }
             } else {
               this.showStartScreen({ skipSave: true });
             }

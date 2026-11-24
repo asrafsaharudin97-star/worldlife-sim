@@ -469,12 +469,13 @@ window.GameState = {
         id: k.id,
         name: k.name,
         role: k.gender === 'male' ? 'Adik/Abang' : 'Adik/Kakak',
+        category: 'family',
         gender: k.gender,
         age: k.age,
-        countryId: k.countryId,
+        countryId: k.countryId || cId,
         closeness: Utils.randInt(65, 92),
         alive: true,
-        job: k.age >= 22 ? Utils.pick(Utils.getCountry(k.countryId).jobs).title : 'Pelajar'
+        job: k.age >= 22 ? Utils.pick(Utils.getCountry(k.countryId || cId).jobs).title : 'Pelajar'
       }));
 
     const otherParent = parent.relationships.find(r => r.id === parent.partnerId && r.alive);
@@ -483,9 +484,10 @@ window.GameState = {
         id: otherParent.id,
         name: otherParent.name,
         role: otherParent.gender === 'female' ? 'Ibu' : 'Ayah',
+        category: 'family',
         gender: otherParent.gender,
         age: otherParent.age,
-        countryId: otherParent.countryId,
+        countryId: otherParent.countryId || cId,
         closeness: Utils.randInt(75, 95),
         alive: true,
         job: otherParent.job
@@ -599,19 +601,29 @@ window.GameState = {
     this.current = state;
     this.ensureUpgradedState();
 
-    // Pindahkan Pusaka Keluarga bertanda (Heirlooms) secara terus kepada pewaris terpilih
-    const markedHeirlooms = ((parent.assets && parent.assets.collectibles) || []).filter(col => col && col.isHeirloom);
-    if (markedHeirlooms.length > 0) {
-      state.assets.collectibles = markedHeirlooms.map(col => ({
-        ...col,
-        ageInGenerations: (col.ageInGenerations || 1) + 1,
-        value: Math.round(Utils.convertMoney(col.value, parent.countryId, cId) * 1.15)
-      }));
-      if (window.Dynasty) Dynasty.adjustReputation(Math.min(10, markedHeirlooms.length * 3));
-      this.addJournalEntry(
-        `🏛️ Anda turut mewarisi ${markedHeirlooms.length} Pusaka Keluarga bertanda (${markedHeirlooms.map(h => h.name).join(', ')})!`,
-        'milestone'
-      );
+    // Pindahkan Hartanah, Kenderaan, Portfolio & Pusaka Keluarga bertanda kepada anak pewaris
+    if (window.AssetsEngine && AssetsEngine.transferInheritanceToHeir) {
+      const inh = AssetsEngine.transferInheritanceToHeir(parent, state);
+      if (inh && (inh.props > 0 || inh.vehs > 0 || inh.heirlooms > 0)) {
+        this.addJournalEntry(
+          `🏛️ Pewarisan Aset Dinasti: ${inh.props} Hartanah, ${inh.vehs} Kenderaan & ${inh.heirlooms} Pusaka Keluarga diwarisi ke Generasi ${state.generation}!`,
+          'milestone'
+        );
+      }
+    } else {
+      const markedHeirlooms = ((parent.assets && parent.assets.collectibles) || []).filter(col => col && col.isHeirloom);
+      if (markedHeirlooms.length > 0) {
+        state.assets.collectibles = markedHeirlooms.map(col => ({
+          ...col,
+          ageInGenerations: (col.ageInGenerations || 1) + 1,
+          value: Math.round(Utils.convertMoney(col.value, parent.countryId, cId) * 1.15)
+        }));
+        if (window.Dynasty) Dynasty.adjustReputation(Math.min(10, markedHeirlooms.length * 3));
+        this.addJournalEntry(
+          `🏛️ Anda turut mewarisi ${markedHeirlooms.length} Pusaka Keluarga bertanda (${markedHeirlooms.map(h => h.name).join(', ')})!`,
+          'milestone'
+        );
+      }
     }
 
     if (window.Dynasty) {
@@ -963,7 +975,9 @@ window.GameState = {
       : null);
     const nonEntityShares = report ? report.shares.filter(sh => !sh.isEntity) : [];
     const inheritedAmount = report
-      ? (nonEntityShares.length > 0 ? nonEntityShares[0].amount : 0)
+      ? (nonEntityShares.length > 0
+          ? nonEntityShares[0].amount
+          : (report.wasiatMode === 'charity' ? 0 : (report.distributable ?? report.distributableEstate ?? 0)))
       : Math.max(0, this.getNetWorth());
     const netWorth = inheritedAmount;
     const newGen = (parent.generation || 1) + 1;
@@ -1079,6 +1093,7 @@ window.GameState = {
       ActivitiesDeck.generateYearlyDeck(state);
     }
     this.save();
+    this.syncActiveSlotToCloud('legacy');
     return state;
   },
 
