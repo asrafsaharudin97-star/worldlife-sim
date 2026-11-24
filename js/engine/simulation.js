@@ -1143,6 +1143,10 @@ window.Sim = {
       };
     }
 
+    if (window.PrisonFugitive && PrisonFugitive.buildPoliceArrestEvent) {
+      return PrisonFugitive.buildPoliceArrestEvent(s, 'Rekod Haba Polis Tinggi', Utils.randInt(2, 5));
+    }
+
     const bribeLocal = Utils.usdToLocal(s.age < 18 ? 300 : 2500, s.countryId);
     const bribeFormatted = Utils.formatMoney(bribeLocal, s.countryId);
     return {

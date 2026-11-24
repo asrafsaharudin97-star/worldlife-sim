@@ -266,6 +266,106 @@ window.PrisonFugitive = {
     return 'minimum';
   },
 
+  getPoliceCorruption(country) {
+    if (country && typeof country.policeCorruption === 'number') {
+      return Utils.clamp(country.policeCorruption, 0, 100);
+    }
+    const safety = (country && country.safetyIndex) || 70;
+    return Utils.clamp(105 - safety, 10, 90);
+  },
+
+  buildPoliceArrestEvent(s, crimeName, baseYears = 3, forcedSecurity = null) {
+    this.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+    const corruption = this.getPoliceCorruption(c);
+    const econScale = Math.max(0.45, c.salaryMultiplier || 0.7);
+    const bribeCost = Utils.usdToLocal(Math.round(4500 * econScale), s.countryId);
+    const bribeWinChance = Math.max(0.10, Math.min(0.75, corruption / 100));
+    const health = (s.stats && s.stats.health) || 60;
+    const runWinChance = Math.max(0.12, Math.min(0.68, 0.14 + (health / 100) * 0.52));
+
+    return {
+      id: `police_arrest_${Date.now()}`,
+      icon: '🚨',
+      title: 'Ditangkap Polis!',
+      text: `Pihak polis mengepung anda atas pertuduhan "${crimeName}" di ${c.name} (Tahap Korupsi Polis: ${corruption}%). Apa tindakan anda?`,
+      choices: [
+        {
+          label: `💵 Rasuah Polis (${Utils.formatMoney(bribeCost, s.countryId)})`,
+          hint: `Peluang berjaya ~${Math.round(bribeWinChance * 100)}% (ikut tahap korupsi negara) • Gagal = tuduhan & hukuman bertambah`,
+          journalType: 'warning',
+          customAction: (st) => {
+            if (st.money < bribeCost) {
+              return {
+                outcome: `Wang tunai tidak mencukupi (${Utils.formatMoney(bribeCost, st.countryId)}) untuk merasuah polis — anda terus diberkas ke mahkamah!`,
+                toastType: 'error',
+                nextEvent: this.buildCourtTrialEvent(st, crimeName, baseYears, forcedSecurity)
+              };
+            }
+            st.money -= bribeCost;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -15, notoriety: 8 });
+            if (Utils.chance(bribeWinChance)) {
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -15 });
+              return {
+                outcome: `💵 Rasuah berjaya! Pegawai polis di ${c.name} menutup kes anda dan melepaskan anda di tempat kejadian.`,
+                toastType: 'culture'
+              };
+            }
+            const extraYears = baseYears + Utils.randInt(2, 4);
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 10 });
+            return {
+              outcome: '🚨 RASUAH GAGAL! Pegawai polis menambah pertuduhan cubaan merasuah penjawat awam — hukuman bertambah berat!',
+              toastType: 'error',
+              nextEvent: this.buildCourtTrialEvent(st, `${crimeName} + Cubaan Rasuah`, extraYears, 'maximum')
+            };
+          }
+        },
+        {
+          label: '🏃 Lari Dari Polis',
+          hint: `Peluang lolos ~${Math.round(runWinChance * 100)}% (ikut kesihatan ${health}%) • Gagal = hukuman +, Heat +, risiko mati ditembak!`,
+          journalType: 'warning',
+          customAction: (st) => {
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 15, stress: 12 });
+            if (Utils.chance(runWinChance)) {
+              return {
+                outcome: '🏃 Anda berjaya memecut dan meloloskan diri daripada kepungan polis! (Haba Polis +15%)',
+                toastType: 'culture'
+              };
+            }
+            if (Utils.chance(0.22)) {
+              GameState.addJournalEntry('🔫 MATI DITEMBAK POLIS! Anda cuba melarikan diri ketika serbuan dan terkena tembakan maut pihak berkuasa.', 'warning');
+              if (window.Sim && Sim.triggerDeath) {
+                Sim.triggerDeath('Mati Ditembak Polis Ketika Cuba Melarikan Diri');
+              } else {
+                st.alive = false;
+                st.causeOfDeath = 'Mati Ditembak Polis Ketika Cuba Melarikan Diri';
+              }
+              GameState.save();
+              return { outcome: '🔫 Anda terkena tembakan maut ketika cuba melarikan diri daripada polis!', toastType: 'error' };
+            }
+            const extraYears = baseYears + Utils.randInt(2, 4);
+            GameState.adjustStats({ health: -15 });
+            return {
+              outcome: '🚨 GAGAL LARI! Anda diberkas dengan kasar (Kesihatan -15%, Heat +15%) dan tuduhan menentang tangkapan ditambah!',
+              toastType: 'error',
+              nextEvent: this.buildCourtTrialEvent(st, `${crimeName} + Menentang Tangkapan`, extraYears, 'maximum')
+            };
+          }
+        },
+        {
+          label: '🙌 Serah Diri Secara Aman',
+          hint: 'Terus ke proses mahkamah tanpa sebarang tuduhan tambahan',
+          journalType: 'normal',
+          customAction: (st) => ({
+            outcome: 'Anda menyerah diri secara aman tanpa melawan dan dibawa terus ke proses mahkamah.',
+            toastType: 'culture',
+            nextEvent: this.buildCourtTrialEvent(st, crimeName, baseYears, forcedSecurity)
+          })
+        }
+      ]
+    };
+  },
+
   // --------------------------------------------------------------------------
   // 1. SISTEM PERBICARAAN MAHKAMAH & PEGUAM (5 PILIHAN PEMBELAAN)
   // --------------------------------------------------------------------------
@@ -285,25 +385,41 @@ window.PrisonFugitive = {
     const sharkCost = Utils.usdToLocal(Math.round(24000 * econScale * discount), s.countryId);
     const bribeCost = Utils.usdToLocal(Math.round(8000 * econScale), s.countryId);
 
-    // Kadar kejayaan rasuah bergantung kepada indeks keselamatan/rasuah negara
+    // Kadar kejayaan rasuah bergantung kepada tahap korupsi polis negara
+    const corruption = this.getPoliceCorruption(c);
     const safety = c.safetyIndex || 70;
-    const bribeWinChance = Math.max(0.14, Math.min(0.72, (105 - safety) / 100));
+    const bribeWinChance = Math.max(0.10, Math.min(0.75, corruption / 100));
 
-    const finishAcquittal = (st, label, fineLocal = 0) => {
+    const applyTrialDuration = (st) => {
+      const fame = (st.alignment && st.alignment.fame) || 0;
+      if (fame >= 75) {
+        return `⭐ Sebagai tokoh ternama (Populariti ${fame}%), proses undang-undang anda dipercepatkan dan selesai dalam tahun yang sama. `;
+      }
+      const remandYrs = Utils.randInt(1, 3);
+      st.age += remandYrs;
+      st.year += remandYrs;
+      return `⏳ Proses reman & perbicaraan mahkamah memakan masa ${remandYrs} tahun sebelum keputusan diumumkan. `;
+    };
+
+    const finishAcquittal = (st, label, fineLocal = 0, durationNote = '') => {
       if (fineLocal > 0) st.money -= fineLocal;
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -10, stress: -8 });
       if (window.Dynasty) Dynasty.adjustReputation(-3);
       GameState.adjustStats({ happiness: 12 });
       return {
-        outcome: `TIDAK BERSALAH! Melalui ${label}, anda dibebaskan daripada pertuduhan "${crimeName}"${fineLocal > 0 ? ` (bayaran denda/kompaun ${Utils.formatMoney(fineLocal, st.countryId)})` : ''}!`,
+        outcome: `${durationNote}TIDAK BERSALAH! Melalui ${label}, anda dibebaskan daripada pertuduhan "${crimeName}"${fineLocal > 0 ? ` (bayaran denda/kompaun ${Utils.formatMoney(fineLocal, st.countryId)})` : ''}!`,
         toastType: 'success'
       };
     };
 
-    const enterPrison = (st, years, level, reasonText) => {
+    const enterPrison = (st, years, level, reasonText, durationNote = '') => {
+      const isMafiaMember = Boolean(st.activeSpecialMode && st.activeSpecialMode.modeId === 'mafia');
       this.enterPrisonState(st, crimeName, years, level);
+      const sentenceMsg = isMafiaMember
+        ? 'PENJARA SEUMUR HIDUP (Hukuman Wajib Ahli Mafia)!'
+        : `Penjara ${this.SECURITY_LABELS[level].name} selama ${years} tahun!`;
       return {
-        outcome: `${reasonText} Anda dihantar ke Penjara ${this.SECURITY_LABELS[level].name} selama ${years} tahun!`,
+        outcome: `${durationNote}${reasonText} Anda dihantar ke ${sentenceMsg}`,
         toastType: 'error'
       };
     };
@@ -316,14 +432,15 @@ window.PrisonFugitive = {
       choices: [
         {
           label: '⚖️ Peguam Bantuan Guaman (Percuma)',
-          hint: 'Peluang bebas 15–22% • Peluang kecil hukuman diringankan',
+          hint: 'Kos 0 • Peluang bebas 15–22% (reman 1–3 thn kecuali populariti ≥75%)',
           journalType: 'warning',
           customAction: (st) => {
+            const durNote = applyTrialDuration(st);
             if (Utils.chance(0.18 + (st.stats.smarts / 1400))) {
-              return finishAcquittal(st, 'Peguam Bantuan Guaman');
+              return finishAcquittal(st, 'Peguam Bantuan Guaman', 0, durNote);
             }
             const yrs = Utils.chance(0.30) ? minY : Utils.randInt(minY, maxY);
-            return enterPrison(st, yrs, secLevel, 'BERSALAH! Pembelaan percuma gagal mematahkan pendakwaan.');
+            return enterPrison(st, yrs, secLevel, 'BERSALAH! Pembelaan percuma gagal mematahkan pendakwaan.', durNote);
           }
         },
         {
@@ -331,35 +448,37 @@ window.PrisonFugitive = {
           hint: `Peluang bebas 42–52%${bonuses.legalCostDiscount ? ' • Diskaun Gen 11 -25%!' : ''}`,
           journalType: 'dilemma',
           customAction: (st) => {
+            const durNote = applyTrialDuration(st);
             if (st.money < privCost) {
-              return enterPrison(st, Utils.randInt(minY, maxY), secLevel, 'Wang tidak mencukupi untuk Peguam Swasta — anda dibela peguam awam dan didapati BERSALAH.');
+              return enterPrison(st, Utils.randInt(minY, maxY), secLevel, 'Wang tidak mencukupi untuk Peguam Swasta — anda dibela peguam awam dan didapati BERSALAH.', durNote);
             }
             st.money -= privCost;
             if (Utils.chance(0.45 + (st.stats.smarts / 1000))) {
-              return finishAcquittal(st, 'Peguam Swasta');
+              return finishAcquittal(st, 'Peguam Swasta', 0, durNote);
             }
             const yrs = Math.max(1, Math.round(Utils.randInt(minY, maxY) * 0.8));
-            return enterPrison(st, yrs, secLevel, 'BERSALAH! Namun Peguam Swasta berjaya meringankan sedikit tempoh hukuman.');
+            return enterPrison(st, yrs, secLevel, 'BERSALAH! Namun Peguam Swasta berjaya meringankan sedikit tempoh hukuman.', durNote);
           }
         },
         {
           label: `🦈 Peguam Elit / "Peguam Jerung" (${Utils.formatMoney(sharkCost, s.countryId)})`,
-          hint: 'Peluang bebas 75–85% atau ditukar kepada denda sahaja!',
+          hint: 'Peluang bebas 75–85% (tidak 100%) atau ditukar kepada denda!',
           journalType: 'dilemma',
           customAction: (st) => {
+            const durNote = applyTrialDuration(st);
             if (st.money < sharkCost) {
-              return enterPrison(st, Utils.randInt(minY, maxY), secLevel, 'Dana tidak mencukupi untuk Peguam Jerung — anda didapati BERSALAH.');
+              return enterPrison(st, Utils.randInt(minY, maxY), secLevel, 'Dana tidak mencukupi untuk Peguam Jerung — anda didapati BERSALAH.', durNote);
             }
             st.money -= sharkCost;
             if (Utils.chance(0.76)) {
-              return finishAcquittal(st, 'Peguam Jerung Elit');
+              return finishAcquittal(st, 'Peguam Jerung Elit', 0, durNote);
             }
-            if (Utils.chance(0.55)) {
+            if (Utils.chance(0.45)) {
               const fine = Utils.usdToLocal(Math.round(3500 * econScale), st.countryId);
-              return finishAcquittal(st, 'rundingan Peguam Jerung (ditukar kepada denda/bon berkelakuan baik)', fine);
+              return finishAcquittal(st, 'rundingan Peguam Jerung (ditukar kepada denda/bon berkelakuan baik)', fine, durNote);
             }
             const yrs = Math.max(1, Math.round(minY * 0.65));
-            return enterPrison(st, yrs, secLevel === 'maximum' ? 'medium' : secLevel, 'BERSALAH, namun Peguam Jerung berjaya mengurangkan hukuman secara drastik.');
+            return enterPrison(st, yrs, secLevel === 'maximum' ? 'medium' : secLevel, 'BERSALAH, namun Peguam Jerung berjaya mengurangkan hukuman secara drastik.', durNote);
           }
         },
         {
