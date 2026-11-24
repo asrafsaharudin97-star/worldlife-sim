@@ -16,7 +16,9 @@ window.Sim = {
     const didCrimeLastYear = Boolean(
       s.yearlyActions && (
         (s.yearlyActions.crimeCount || 0) > 0 ||
-        (Array.isArray(s.yearlyActions.crimesDoneIds) && s.yearlyActions.crimesDoneIds.length > 0)
+        (s.yearlyActions.darkCount || 0) > 0 ||
+        (Array.isArray(s.yearlyActions.crimesDoneIds) && s.yearlyActions.crimesDoneIds.length > 0) ||
+        (Array.isArray(s.yearlyActions.darkDoneIds) && s.yearlyActions.darkDoneIds.length > 0)
       )
     );
     s.yearlyActions = {};
@@ -338,7 +340,7 @@ window.Sim = {
     }
 
     // 4B. Penjara, Pendapatan 5 Mod Khas, Laman Sosial & Penyelarasan Stres/Haba Polis
-    this._processModesAndAlignment(s, c);
+    this._processModesAndAlignment(s, c, didCrimeLastYear);
 
     // 4C. Rombak Dek Aktiviti Tahunan, Pasaran Kerja Dinamik, Papan Mod Dinamik & Kemas Kini Dinasti
     if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
@@ -703,7 +705,7 @@ window.Sim = {
     return null;
   },
 
-  _processModesAndAlignment(s, c) {
+  _processModesAndAlignment(s, c, didCrimeLastYear = false) {
     if (!Array.isArray(s.stressIllnesses)) s.stressIllnesses = [];
     s._lethalStressCause = null;
 
@@ -1953,8 +1955,6 @@ window.Sim = {
       const yrs = Utils.randInt(1, 3);
       if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
         PrisonFugitive.enterPrisonState(s, 'Ditahan Imigresen di Sempadan (Haba Polis Tinggi)', yrs, 'medium');
-      } else if (window.PrisonEngine && PrisonEngine.sendToPrison) {
-        PrisonEngine.sendToPrison(s, 'Ditahan di Sempadan (Haba Polis Tinggi)', yrs);
       }
       GameState.addJournalEntry(
         `🚨 DITAHAN DI SEMPADAN! Pihak imigresen mengesan Haba Polis anda (${travelHeat}%) ketika cuba keluar negara dan menyerahkan anda kepada polis (penjara ${yrs} tahun).`,

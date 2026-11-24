@@ -527,10 +527,13 @@ window.PrisonFugitive = {
 
   enterPrisonState(s, crimeName, years, securityLevel = 'minimum', opts = {}) {
     this.ensureFields(s);
+    const isMafiaMember = Boolean(s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia');
+    const effectiveYears = isMafiaMember ? 99 : Math.max(1, years);
+    const effectiveSecurity = isMafiaMember ? 'maximum' : securityLevel;
     const detentionType = opts.detentionType || (s.age < 18 ? 'juvenile' : 'prison');
     const isJuv = detentionType === 'juvenile';
     if (window.CharacterStatus) CharacterStatus.syncCharacterModeTransitions(s, 'enter_prison');
-    if (!isJuv && window.AssetsEngine && (years >= 5 || securityLevel === 'maximum')) {
+    if (!isJuv && window.AssetsEngine && (effectiveYears >= 5 || effectiveSecurity === 'maximum')) {
       AssetsEngine.handleCrimeAssetFreeze(s);
     }
     s.criminalRecord = (s.criminalRecord || 0) + 1;
@@ -543,10 +546,6 @@ window.PrisonFugitive = {
     }
     s.fugitive.isFugitive = false;
     s.fugitive.recaptureRisk = 0;
-
-    const isMafiaMember = Boolean(s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia');
-    const effectiveYears = isMafiaMember ? 99 : Math.max(1, years);
-    const effectiveSecurity = isMafiaMember ? 'maximum' : securityLevel;
 
     s.prison.inPrison = true;
     s.prison.detentionType = detentionType;
@@ -561,7 +560,7 @@ window.PrisonFugitive = {
     s.prison.crimeName = isMafiaMember ? `${crimeName} (Ahli Sindiket Mafia — Seumur Hidup)` : crimeName;
     s.prison.securityLevel = effectiveSecurity;
     s.prison.respect = Utils.clamp(s.prison.respect || 25, 10, 100);
-    s.prison.behavior = Utils.clamp(65 - (securityLevel === 'maximum' ? 15 : 0), 20, 90);
+    s.prison.behavior = Utils.clamp(65 - (effectiveSecurity === 'maximum' ? 15 : 0), 20, 90);
     s.prison.gangName = null;
 
     GameState.adjustStats({ happiness: -22, health: -5 });

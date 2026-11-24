@@ -782,7 +782,7 @@ window.RelationshipDramaData = {
       choices: [
         {
           label: isMinor
-            ? '🕯️ Hadiri Majlis Pengebumian (Kos RM 0 — Ditanggung)'
+            ? `🕯️ Hadiri Majlis Pengebumian (Kos ${Utils.formatMoney(0, s.countryId)} — Ditanggung)`
             : `🕯️ Uruskan Pengebumian Sempurna (${Utils.formatMoney(funeralCost, s.countryId)})`,
           hint: isMinor
             ? `Bawah umur • Urusan & kos pengebumian ditanggung oleh ${minorSponsor}`
