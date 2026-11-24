@@ -107,46 +107,55 @@ window.ModeModals = {
         </div>
       `;
     } else if (activeTab === 'dating') {
-      const minAge = 16;
-      if (s.age < minAge) {
-        body += `<div class="info-banner">Platform ini dibuka pada umur ${minAge} tahun.</div>`;
+      const minAgeAllowed = 18;
+      if (s.age < minAgeAllowed) {
+        body += `<div class="info-banner">Aplikasi Janji Temu &amp; Penapis Umur dibuka pada umur <strong>18+ tahun</strong>.</div>`;
       } else if (s.partnerId) {
         body += `<div class="info-banner highlight">Anda sudah mempunyai pasangan aktif! Uruskan hubungan anda di tab <strong>❤️ Hubungan</strong>.</div>`;
       } else {
-        const selectedAgeRange = s._datingAgeRange || 'all';
-        const ageRanges = SocialMedia.DATING_AGE_RANGES || [{ id: 'all', label: 'Semua Umur (18+ Tahun)' }];
-        const pool = (s._datingPool && s._datingPool.length > 0) ? s._datingPool : SocialMedia.generateDatingCandidates(selectedAgeRange);
+        const curMin = Utils.clamp(Number(s._datingMinAge ?? Math.max(18, s.age - 4)) || 18, 18, 90);
+        const curMax = Utils.clamp(Number(s._datingMaxAge ?? Math.min(90, s.age + 8)) || 35, curMin, 90);
+        const usedSearches = s.yearlyActions.datingSearches || 0;
+        const maxSearches = SocialMedia.MAX_DATING_SEARCHES_YEAR || 8;
+        const leftSearches = Math.max(0, maxSearches - usedSearches);
+        const pool = (s._datingPool && s._datingPool.length > 0 && s._datingPool[0].age >= curMin && s._datingPool[0].age <= curMax)
+          ? s._datingPool
+          : SocialMedia.generateDatingCandidates(curMin, curMax);
+        const cand = pool[0];
         body += `
           <div class="info-banner highlight">
-            <strong>💘 Sesi Date — Kenali Calon Pasangan</strong><br/>
-            Pilih calon yang menarik minat anda untuk memulakan Sesi Date! Awas: sesetengah profil mungkin menyembunyikan <em>Red Flag</em> atau Jodoh Sejati.
+            <strong>💘 Aplikasi Janji Temu (18+)</strong><br/>
+            Tetapkan julat umur calon (18–90 tahun) dan pilih <strong>❤️ Suka</strong> atau <strong>✖️ Langkau</strong>. Baki carian tahun ini: <strong>${leftSearches}/${maxSearches}</strong>.
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <label for="dating-age-range" style="font-size:13px;font-weight:600;white-space:nowrap;">🎂 Umur Pasangan:</label>
-            <select id="dating-age-range" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;font-size:13px;background:#fff;color:#0f172a;">
-              ${ageRanges.map(r => `<option value="${r.id}" ${r.id === selectedAgeRange ? 'selected' : ''}>${Utils.escapeHtml(r.label)}</option>`).join('')}
-            </select>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <label style="font-size:12.5px;font-weight:700;">🎂 Umur Min:
+              <input type="number" id="dating-min-age" min="18" max="90" value="${curMin}" style="width:64px;padding:5px 8px;border-radius:8px;border:1px solid #cbd5e1;margin-left:4px;" />
+            </label>
+            <label style="font-size:12.5px;font-weight:700;">Umur Maks:
+              <input type="number" id="dating-max-age" min="18" max="90" value="${curMax}" style="width:64px;padding:5px 8px;border-radius:8px;border:1px solid #cbd5e1;margin-left:4px;" />
+            </label>
+            <button type="button" class="secondary-btn" id="btn-apply-age-filter" style="padding:6px 10px;font-size:12px;">🔍 Tapis</button>
           </div>
-          <div class="action-list">
-            ${pool.map(cand => {
-              return `
-                <div class="dating-card">
-                  <div class="dc-top">
-                    <strong>${Utils.escapeHtml(cand.name)} <small>(${cand.age} thn)</small></strong>
-                    <span class="dc-badge">✨ Rupa ${cand.looks}%</span>
-                  </div>
-                  <div class="dc-meta">
-                    💼 ${Utils.escapeHtml(cand.job)} • 💰 ${cand.wealth}<br/>
-                    🤝 Keserasian ${cand.compatibility}%
-                  </div>
-                  <button class="btn-sm primary match-cand-btn" data-uid="${cand.uid}" style="width:100%;margin-top:8px;">
-                    💘 Mula Sesi Date
-                  </button>
-                </div>
-              `;
-            }).join('')}
-          </div>
-          <button class="ghost-btn" id="btn-refresh-dating" style="margin-top:8px;">🔄 Cari Senarai Calon Lain</button>
+          ${cand ? `
+            <div class="dating-card">
+              <div class="dc-top">
+                <strong>${Utils.escapeHtml(cand.name)} <small>(${cand.age} thn)</small></strong>
+                <span class="dc-badge">✨ Rupa ${cand.looks}%</span>
+              </div>
+              <div class="dc-meta">
+                💼 ${Utils.escapeHtml(cand.job)} • 💰 ${cand.wealth}<br/>
+                🤝 Keserasian ${cand.compatibility}%
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button type="button" class="btn-sm primary match-cand-btn" data-uid="${cand.uid}" style="flex:1;">
+                  ❤️ Suka / Ajak Bercinta
+                </button>
+                <button type="button" class="btn-sm secondary skip-cand-btn" data-uid="${cand.uid}" style="flex:1;" ${leftSearches <= 0 ? 'disabled' : ''}>
+                  ✖️ Langkau / Cari Lain (${leftSearches})
+                </button>
+              </div>
+            </div>
+          ` : '<div class="info-banner">Tiada calon semasa. Tekan Tapis untuk menjana calon baharu.</div>'}
         `;
       }
     }
@@ -210,19 +219,24 @@ window.ModeModals = {
       });
     });
 
-    const ageRangeSelect = document.getElementById('dating-age-range');
-    if (ageRangeSelect) {
-      ageRangeSelect.addEventListener('change', () => {
-        SocialMedia.generateDatingCandidates(ageRangeSelect.value);
+    document.querySelectorAll('.skip-cand-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = SocialMedia.skipCandidate(btn.dataset.uid);
+        if (!res.ok) App.toast(res.msg, 'error');
         this.showSocialHub('dating');
       });
-    }
+    });
 
-    const refBtn = document.getElementById('btn-refresh-dating');
-    if (refBtn) {
-      refBtn.addEventListener('click', () => {
-        const rangeId = ageRangeSelect ? ageRangeSelect.value : (s._datingAgeRange || 'all');
-        SocialMedia.generateDatingCandidates(rangeId);
+    const applyFilterBtn = document.getElementById('btn-apply-age-filter');
+    if (applyFilterBtn) {
+      applyFilterBtn.addEventListener('click', () => {
+        const minEl = document.getElementById('dating-min-age');
+        const maxEl = document.getElementById('dating-max-age');
+        let minVal = Utils.clamp(Number(minEl ? minEl.value : 18) || 18, 18, 90);
+        let maxVal = Utils.clamp(Number(maxEl ? maxEl.value : 35) || 35, 18, 90);
+        if (minVal > maxVal) maxVal = minVal;
+        SocialMedia.generateDatingCandidates(minVal, maxVal);
+        GameState.save();
         this.showSocialHub('dating');
       });
     }

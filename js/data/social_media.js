@@ -215,55 +215,68 @@ window.SocialMedia = {
     { id: '65_plus', label: '65+ Tahun', min: 65, max: 80 }
   ],
 
-  generateDatingCandidates(rangeId) {
+  MAX_DATING_SEARCHES_YEAR: 8,
+
+  generateDatingCandidates(minAgeInput, maxAgeInput) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     const c = Utils.getCountry(s.countryId);
     const targetGender = s.gender === 'male' ? 'female' : 'male';
-    const selectedId = rangeId || s._datingAgeRange || 'all';
-    const rangeObj = this.DATING_AGE_RANGES.find(r => r.id === selectedId) || this.DATING_AGE_RANGES[0];
-    s._datingAgeRange = rangeObj.id;
+    const defaultMin = Math.max(18, Math.min(80, (s.age || 22) - 4));
+    const defaultMax = Math.max(defaultMin, Math.min(90, (s.age || 22) + 8));
+    const min = Utils.clamp(Number(minAgeInput ?? s._datingMinAge ?? defaultMin) || 18, 18, 90);
+    const max = Utils.clamp(Number(maxAgeInput ?? s._datingMaxAge ?? defaultMax) || 35, min, 90);
+    s._datingMinAge = min;
+    s._datingMaxAge = max;
 
     const wealthTiers = ['Sederhana', 'Stabil', 'Berada', 'Mewah'];
-    const list = [];
+    const heritage = Utils.pick(c.heritages).id;
+    const name = Utils.generateName(s.countryId, targetGender, heritage);
+    const job = Utils.pick(c.jobs).title;
+    const age = Utils.randInt(min, max);
+    const looks = Utils.randInt(45, 96);
+    const wealth = Utils.pick(wealthTiers);
+    const traitPool = Utils.chance(0.55) ? [this.HIDDEN_TRAITS[0]] : this.HIDDEN_TRAITS.slice(1);
+    const hiddenTrait = Utils.pick(traitPool);
 
-    for (let i = 0; i < 3; i++) {
-      const heritage = Utils.pick(c.heritages).id;
-      const name = Utils.generateName(s.countryId, targetGender, heritage);
-      const job = Utils.pick(c.jobs).title;
-      const age = Utils.randInt(Math.max(18, rangeObj.min), rangeObj.max);
-      const looks = Utils.randInt(45, 96);
-      const wealth = Utils.pick(wealthTiers);
+    const cand = {
+      uid: `cand_${Date.now()}_${Utils.randInt(10, 99)}`,
+      name,
+      gender: targetGender,
+      age,
+      job,
+      looks,
+      wealth,
+      compatibility: Utils.randInt(55, 96),
+      hiddenTraitId: hiddenTrait.id
+    };
 
-      const traitPool = Utils.chance(0.50) ? [this.HIDDEN_TRAITS[0]] : this.HIDDEN_TRAITS.slice(1);
-      const hiddenTrait = Utils.pick(traitPool);
+    s._datingPool = [cand];
+    return s._datingPool;
+  },
 
-      list.push({
-        uid: `cand_${Date.now()}_${i}_${Utils.randInt(10, 99)}`,
-        name,
-        gender: targetGender,
-        age,
-        job,
-        looks,
-        wealth,
-        compatibility: Utils.randInt(55, 96),
-        hiddenTraitId: hiddenTrait.id
-      });
+  skipCandidate(uid) {
+    const s = GameState.current;
+    GameState.ensureUpgradedState();
+    const used = s.yearlyActions.datingSearches || 0;
+    if (used >= this.MAX_DATING_SEARCHES_YEAR) {
+      return { ok: false, msg: `Had carian pasangan tahun ini (${this.MAX_DATING_SEARCHES_YEAR}x) telah tamat. Cuba lagi tahun hadapan.` };
     }
-
-    s._datingPool = list;
-    return list;
+    s.yearlyActions.datingSearches = used + 1;
+    this.generateDatingCandidates(s._datingMinAge, s._datingMaxAge);
+    GameState.save();
+    return { ok: true, msg: 'Calon baharu ditemui!' };
   },
 
   matchCandidate(uid) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    const minAge = 16;
-    if (s.age < minAge) return { ok: false, msg: `Tunggu umur ${minAge} tahun dahulu!` };
+    const minAge = 18;
+    if (s.age < minAge) return { ok: false, msg: `Aplikasi Janji Temu dibuka pada umur ${minAge}+ tahun!` };
     if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan aktif!' };
 
     const cand = (s._datingPool || []).find(x => x.uid === uid);
-    if (!cand) return { ok: false, msg: 'Profil ini sudah tamat tempoh — jana senarai baru.' };
+    if (!cand) return { ok: false, msg: 'Profil ini sudah tamat tempoh — jana calon baru.' };
 
     // Semak Catfish / Rahsia Sudah Berkahwin terus pada pertemuan pertama!
     if (cand.hiddenTraitId === 'catfish' && Utils.chance(0.75)) {
@@ -273,9 +286,25 @@ window.SocialMedia = {
         `🐟 CATFISH! Semasa pertemuan pertama dengan ${cand.name}, rupa dan pekerjaannya langsung tidak sama dengan profil aplikasi! Anda terus angkat kaki.`,
         'warning'
       );
-      s._datingPool = (s._datingPool || []).filter(x => x.uid !== uid);
+      s._datingPool = [];
       GameState.save();
       return { ok: false, msg: `Kena Catfish oleh ${cand.name}! Profil palsu terbongkar.` };
+    }
+
+    // Peluang diterima ikut rupa, kewangan & jurang umur
+    const looksFactor = ((s.stats && s.stats.looks) || 50) * 0.0045;
+    const usdMoney = Utils.localToUsd(s.money || 0, s.countryId);
+    const wealthFactor = usdMoney >= 100000 ? 0.20 : usdMoney >= 25000 ? 0.12 : usdMoney >= 5000 ? 0.05 : -0.05;
+    const ageGap = Math.abs((s.age || 20) - (cand.age || 20));
+    const gapPenalty = ageGap > 15 ? -0.22 : ageGap > 8 ? -0.10 : 0.04;
+    const acceptChance = Utils.clamp(0.38 + looksFactor + wealthFactor + gapPenalty, 0.12, 0.90);
+
+    if (!Utils.chance(acceptChance)) {
+      s._datingPool = [];
+      GameState.adjustStats({ happiness: -3 });
+      GameState.addJournalEntry(`💔 ${cand.name} (${cand.age} thn) menolak pelawaan bercinta anda dengan sopan.`, 'normal');
+      GameState.save();
+      return { ok: false, msg: `${cand.name} menolak pelawaan anda. Cuba cari calon lain!` };
     }
 
     if (cand.hiddenTraitId === 'secret_married' && Utils.chance(0.65)) {
