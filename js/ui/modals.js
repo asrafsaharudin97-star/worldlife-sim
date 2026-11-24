@@ -7,6 +7,9 @@ window.Modals = {
   locked: false,
 
   open({ icon = '✨', title, subtitle = '', bodyHtml = '', locked = false }) {
+    if (window.PrisonModals && typeof PrisonModals._cleanupMiniGame === 'function') {
+      PrisonModals._cleanupMiniGame();
+    }
     this.locked = locked;
     document.getElementById('modal-icon').textContent = icon;
     document.getElementById('modal-title').textContent = title;
@@ -1660,7 +1663,7 @@ window.Modals = {
           Tolak Hutang &amp; Gadai Janji: <strong style="color:#dc2626;">-${fmt(report.totalDebts)}</strong><br/>
           <strong>Harta Pusaka Bersih: ${fmt(report.netEstate)}</strong><br/>
           ${report.estateTax > 0 ? `Tolak Cukai Pusaka ${Utils.escapeHtml(report.countryName)} (${report.estateTaxRate}%): <strong style="color:#dc2626;">-${fmt(report.estateTaxAmount)}</strong><br/>` : ''}
-          ${true ? `Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>` : ''}
+          Status Wasiat: <strong>${Utils.escapeHtml(report.wasiatLabel)}</strong><br/>
           <strong>Jumlah Diagihkan Kepada Waris: ${fmt(report.distributableEstate)}</strong>
         </div>
 

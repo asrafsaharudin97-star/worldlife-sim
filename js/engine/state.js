@@ -194,6 +194,9 @@ window.GameState = {
     if (window.Dynasty && Dynasty.resetForFreshDynasty) {
       Dynasty.resetForFreshDynasty();
     }
+    if (window.KarmaEndings && KarmaEndings._saveUnlocked) {
+      KarmaEndings._saveUnlocked({ endings: [], modes: [] });
+    }
     this.current = state;
     this.ensureUpgradedState();
     if (window.SpecialModesEngine && SpecialModesEngine.maybeGrantBirthRoyalty) {
@@ -476,6 +479,7 @@ window.GameState = {
       criminalRecord: child.isDelinquent ? 1 : 0,
       hasDriverLicense: childAge >= 18,
       generation: (parent.generation || 1) + 1,
+      pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
       alignment: {
         karma: child.isDelinquent ? -30 : ((typeof child.morals === 'number' && child.morals >= 75) ? 20 : 0),
@@ -943,6 +947,7 @@ window.GameState = {
       criminalRecord: 0,
       hasDriverLicense: heirAge >= 18,
       generation: newGen,
+      pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
       education: {
         stage: heirAge < 18 ? 'secondary' : 'highschool_done',
@@ -1213,6 +1218,7 @@ window.GameState = {
     try { netWorth = this.getNetWorth(); } catch (e) {}
     this.current = prevCurrent;
 
+    const isCurrentSlot = slotId === this.getActiveSlotId();
     return {
       slotId,
       updatedAt: Date.now(),
@@ -1226,6 +1232,8 @@ window.GameState = {
       netWorthFormatted: (window.Utils && Utils.formatMoney) ? Utils.formatMoney(netWorth, s.countryId, true) : String(Math.round(netWorth)),
       generation: s.generation || 1,
       alive: Boolean(s.alive),
+      dynasty: (isCurrentSlot && window.Dynasty) ? JSON.parse(JSON.stringify(Dynasty.getData())) : undefined,
+      unlocked: (isCurrentSlot && window.KarmaEndings) ? JSON.parse(JSON.stringify(KarmaEndings.getUnlocked())) : undefined,
       gameState: JSON.parse(JSON.stringify(s))
     };
   },
@@ -1308,6 +1316,13 @@ window.GameState = {
     if (!payload || !payload.gameState) return null;
     this.resetSessionState({ clearCurrent: true });
     this.setActiveSlotId(slotId);
+    if (payload.dynasty && window.Dynasty) {
+      Dynasty._cache = Object.assign(Dynasty._defaultData(), payload.dynasty);
+      Dynasty.save();
+    }
+    if (payload.unlocked && window.KarmaEndings && KarmaEndings._saveUnlocked) {
+      KarmaEndings._saveUnlocked(payload.unlocked);
+    }
     this.current = JSON.parse(JSON.stringify(payload.gameState));
     if (!Array.isArray(this.current.pastLives)) this.current.pastLives = [];
     this.ensureUpgradedState();
@@ -1336,11 +1351,16 @@ window.GameState = {
     return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
   },
 
-  resolveDefaultActiveSlot(slotsMap = null) {
+  resolveDefaultActiveSlot(slotsMap = null, { preserveExplicit = false } = {}) {
+    const key = this._activeSlotStorageKey();
+    const rawExplicit = (!this.isGuestMode && typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
+    if (preserveExplicit && this.SLOT_IDS.includes(rawExplicit)) {
+      return rawExplicit;
+    }
     const map = slotsMap || this.getLocalSlots();
     const filled = this.SLOT_IDS.filter(id => Boolean(map && map[id]));
     if (filled.length === 0) {
-      return this.setActiveSlotId('slot_1');
+      return this.setActiveSlotId(this.SLOT_IDS.includes(rawExplicit) ? rawExplicit : 'slot_1');
     }
     const currentId = this.getActiveSlotId();
     if (filled.includes(currentId)) {
@@ -1382,7 +1402,7 @@ window.GameState = {
       }
     });
 
-    const activeSlotId = this.resolveDefaultActiveSlot(merged);
+    const activeSlotId = this.resolveDefaultActiveSlot(merged, { preserveExplicit: true });
     return { slots: merged, localOnlyIds, isCloud, activeSlotId };
   },
 
@@ -1537,10 +1557,11 @@ if (window.SafeStorage) {
     if (GameState.current) GameState.trimJournal(GameState.current, 120);
   });
   SafeStorage.registerTrimmer(() => {
-    if (GameState.current) GameState.trimJournal(GameState.current, 60);
-    const h = GameState.getHistory();
-    if (h.length > 8) {
-      try { localStorage.setItem(GameState.HISTORY_KEY, JSON.stringify(h.slice(0, 8))); } catch (e) {}
+    if (GameState.current) {
+      GameState.trimJournal(GameState.current, 60);
+      if (Array.isArray(GameState.current.pastLives) && GameState.current.pastLives.length > 8) {
+        GameState.current.pastLives = GameState.current.pastLives.slice(0, 8);
+      }
     }
   });
   SafeStorage.registerTrimmer(() => {
@@ -1551,11 +1572,14 @@ if (window.SafeStorage) {
     }
     if (window.Dynasty && Dynasty._cache && Array.isArray(Dynasty._cache.dynastyHistory) && Dynasty._cache.dynastyHistory.length > 15) {
       Dynasty._cache.dynastyHistory = Dynasty._cache.dynastyHistory.slice(0, 15);
-      try { localStorage.setItem(Dynasty.STORAGE_KEY, JSON.stringify(Dynasty._cache)); } catch (e) {}
+      Dynasty.save();
     }
   });
   SafeStorage.registerTrimmer(() => {
-    if (GameState.current) GameState.trimJournal(GameState.current, 8);
-    try { localStorage.setItem(GameState.HISTORY_KEY, '[]'); } catch (e) {}
+    if (GameState.current) {
+      GameState.trimJournal(GameState.current, 8);
+      GameState.current.pastLives = [];
+    }
+    GameState.cleanupLegacyGlobalKeys();
   });
 }

@@ -164,18 +164,29 @@ window.App = {
       this._fbListenersBound = true;
       FirebaseService.onAuthChange((user) => {
         const nextUid = user && user.uid ? user.uid : null;
-        if (this._lastAuthUid !== undefined && this._lastAuthUid !== nextUid) {
+        const uidChanged = this._lastAuthUid !== undefined && this._lastAuthUid !== nextUid;
+        if (uidChanged) {
+          if (window.Modals) Modals.close(true);
           GameState.resetSessionState({ clearCurrent: true });
         }
         this._lastAuthUid = nextUid;
         if (user) {
+          const wasGuest = GameState.isGuest();
           GameState.setGuestMode(false);
           this.updateGuestBanner();
           const gate = document.getElementById('entry-gate-screen');
-          if (gate && !gate.classList.contains('hidden')) {
-            GameState.load();
-            this.showStartScreen();
+          const inGate = gate && !gate.classList.contains('hidden');
+          if (inGate || uidChanged || wasGuest) {
+            const loaded = GameState.load();
+            if (loaded && !inGate) {
+              this.showGameScreen();
+              this.renderAll();
+            } else {
+              this.showStartScreen({ skipSave: true });
+            }
           }
+        } else if (uidChanged && !GameState.isGuest()) {
+          this.showEntryGate();
         }
         this._renderEntryGateError();
         this.renderStartAuthBar();
