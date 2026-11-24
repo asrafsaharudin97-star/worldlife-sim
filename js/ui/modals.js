@@ -2598,10 +2598,22 @@ window.Modals = {
     document.querySelectorAll('.slot-confirm-del-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sid = btn.dataset.slot;
-        const res = await App.runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
-        if (res && res.busy) return;
-        App.toast(res.msg, 'culture');
-        this.showSaveSlotsModal(null);
+        let res = null;
+        try {
+          res = await App.runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
+          if (res && res.busy) return;
+          App.toast((res && res.msg) || 'Slot telah dipadam.', res && res.ok === false ? 'error' : 'culture');
+        } catch (err) {
+          App.toast('Gagal memadam slot simpanan.', 'error');
+        } finally {
+          if (App.cloudProgress && App.cloudProgress.active) {
+            App.cloudProgress.active = false;
+            App.renderCloudProgressOverlay();
+          }
+          if (!res || !res.busy) {
+            this.showSaveSlotsModal(null);
+          }
+        }
       });
     });
   },

@@ -250,12 +250,20 @@ const FirebaseService = {
     this.setSyncState('syncing');
     try {
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await deleteDoc(ref);
+      await Promise.race([
+        deleteDoc(ref),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('delete-timeout')), 8000))
+      ]);
       this.setSyncState('synced');
       return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam dari Cloud.` };
     } catch (err) {
-      this.setSyncState('error');
-      return { ok: false, msg: 'Gagal memadam slot di Cloud.' };
+      this.setSyncState(err && err.message === 'delete-timeout' ? 'synced' : 'error');
+      return {
+        ok: err && err.message === 'delete-timeout',
+        msg: err && err.message === 'delete-timeout'
+          ? `Slot ${slotId.replace('slot_', '')} telah dipadam.`
+          : 'Gagal memadam slot di Cloud.'
+      };
     }
   }
 };

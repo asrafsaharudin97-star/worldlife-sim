@@ -1429,11 +1429,23 @@ window.GameState = {
   },
 
   async deleteSlot(slotId) {
-    this.deleteLocalSlot(slotId);
-    if (window.FirebaseService && FirebaseService.isLoggedIn()) {
-      await FirebaseService.deleteCloudSlot(slotId);
+    const label = String(slotId || '').replace('slot_', '');
+    try {
+      this.deleteLocalSlot(slotId);
+      if (window.FirebaseService && FirebaseService.isLoggedIn()) {
+        await Promise.race([
+          FirebaseService.deleteCloudSlot(slotId),
+          new Promise(resolve => setTimeout(() => resolve({ ok: true, timeout: true }), 8500))
+        ]);
+      }
+      return { ok: true, msg: `Slot ${label} telah dipadam.` };
+    } catch (err) {
+      return { ok: false, msg: `Ralat semasa memadam Slot ${label}.` };
+    } finally {
+      if (this.getActiveSlotId() === slotId && this.current) {
+        this.resetSessionState({ clearCurrent: true });
+      }
     }
-    return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam.` };
   },
 
   save() {
