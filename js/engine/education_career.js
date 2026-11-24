@@ -1406,9 +1406,99 @@ window.EduCareerEngine = {
     };
   },
 
+  CONTRACT_JOBS: [
+    { id: 'contract_consultant', icon: '💼', title: 'Perunding Kontrak', desc: 'Khidmat nasihat profesional secara kontrak fleksibel.', mult: 1.25 },
+    { id: 'contract_lecturer', icon: '🎓', title: 'Tutor / Pensyarah Sambilan', desc: 'Mengajar dan membimbing pelajar secara kontrak sambilan.', mult: 1.12 },
+    { id: 'contract_supervisor', icon: '📋', title: 'Penyelia Kontrak', desc: 'Menyelia operasi projek dan pasukan secara berkala.', mult: 1.0 },
+    { id: 'contract_assistant', icon: '🤝', title: 'Pembantu Am Kontrak', desc: 'Tugasan pentadbiran dan sokongan operasi kontrak.', mult: 0.85 }
+  ],
+
+  getContractJobsForPlayer(s = GameState.current) {
+    if (!s) return [];
+    this.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+    const lvl = (s.education && s.education.educationLevel) || (s.education && s.education.hasDegree ? 'bachelor' : s.education && s.education.hasHighSchool ? 'high_school' : 'none');
+    const eduBaseUsdMap = {
+      none: 9000,
+      primary: 9500,
+      high_school: 14000,
+      diploma: 21000,
+      bachelor: 32000,
+      master: 46000,
+      phd: 64000
+    };
+    const eduLabelMap = {
+      none: 'Tiada/Rendah',
+      primary: 'Sekolah Rendah',
+      high_school: 'Menengah',
+      diploma: 'Diploma',
+      bachelor: 'Ijazah',
+      master: 'Sarjana',
+      phd: 'PhD'
+    };
+    const baseUsd = eduBaseUsdMap[lvl] || 11000;
+    const econScale = Math.max(0.45, c.salaryMultiplier || 0.7);
+    const eduLabel = eduLabelMap[lvl] || 'Asas';
+    return this.CONTRACT_JOBS.map(j => ({
+      ...j,
+      eduLabel,
+      salary: Utils.usdToLocal(Math.round(baseUsd * j.mult * econScale), s.countryId)
+    }));
+  },
+
+  acceptContractJob(contractId, s = GameState.current) {
+    if (!s) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.age < 60) return { ok: false, msg: 'Kerja kontrak pesara dibuka pada umur 60+.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh mengambil kerja kontrak semasa dalam penjara.' };
+    if (s.job) return { ok: false, msg: 'Tamatkan kerja semasa dahulu sebelum mengambil kontrak baharu.' };
+    const list = this.getContractJobsForPlayer(s);
+    const picked = list.find(j => j.id === contractId);
+    if (!picked) return { ok: false, msg: 'Tawaran kerja kontrak tidak ditemui.' };
+
+    s.job = {
+      id: picked.id,
+      title: picked.title,
+      icon: picked.icon,
+      salary: picked.salary,
+      years: 0,
+      performance: 75,
+      countryId: s.countryId,
+      isContract: true,
+      ladder: [picked.title],
+      rankIndex: 0
+    };
+    s.retired = true;
+    s.isRetired = true;
+    GameState.addJournalEntry(
+      `📋 Anda menerima Kerja Kontrak sebagai ${picked.title} (Gaji ${Utils.formatMoney(picked.salary, s.countryId)}/thn berdasarkan kelulusan ${picked.eduLabel}). Pencen sedia ada kekal aktif!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Berjaya memulakan ${picked.title}! Pencen anda kekal aktif.` };
+  },
+
   retireFromJob(s = GameState.current, { isMandatory = false } = {}) {
     if (!s || !s.job) return { ok: false, msg: 'Tiada pekerjaan aktif untuk bersara.' };
     this.ensureFields(s);
+    if (s.job.isContract) {
+      const cTitle = s.job.title;
+      s.job = null;
+      s.yearsInCurrentJob = 0;
+      s.retired = true;
+      s.isRetired = true;
+      GameState.addJournalEntry(
+        `🏖️ Anda menamatkan kerja kontrak (${cTitle}) dan kembali berehat sebagai Pesara. Pencen tahunan anda kekal aktif.`,
+        'culture'
+      );
+      GameState.save();
+      return {
+        ok: true,
+        lumpSum: 0,
+        pensionAnnual: s.pensionAnnual || 0,
+        msg: `🏖️ Kontrak ${cTitle} ditamatkan! Pencen tahunan anda kekal aktif.`
+      };
+    }
+
     const elig = this.canRetire(s);
     if (!isMandatory && !elig.ok) {
       return { ok: false, msg: elig.reason };
@@ -1428,11 +1518,13 @@ window.EduCareerEngine = {
     s.money = Math.round((s.money || 0) + totalLumpSum);
     s.retirementFund = 0;
 
-    // 2. Pencen Tahunan Berulang (jika umur >= 55 dan >= 15 tahun bekerja: 30%–60% gaji akhir)
+    // 2. Pencen Tahunan Berulang (wajib pada umur >= 60 atau >= 55 & >= 15 thn bekerja)
     let pensionAnnual = s.pensionAnnual || 0;
     let pensionPct = 0;
-    if (s.age >= 55 && totalYrs >= 15) {
-      pensionPct = Math.min(60, Math.max(30, 30 + Math.round((totalYrs - 15) * 1.5)));
+    if ((s.age >= 60 && totalYrs >= 1) || (s.age >= 55 && totalYrs >= 15)) {
+      pensionPct = totalYrs >= 15
+        ? Math.min(60, Math.max(30, 30 + Math.round((totalYrs - 15) * 1.5)))
+        : Math.min(28, Math.max(12, 10 + totalYrs * 1.2));
       const rawPension = Math.round(finalSalary * (pensionPct / 100));
       const maxCap = Utils.usdToLocal(180000, s.countryId);
       pensionAnnual = Math.min(maxCap, rawPension);
@@ -1466,11 +1558,11 @@ window.EduCareerEngine = {
 
     const schemeName = c.retirementScheme || 'Tabung Persaraan';
     const pensionNote = s.pensionAnnual > 0
-      ? ` Anda turut menerima Pencen Tahunan sebanyak ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn (${pensionPct}% gaji akhir) sepanjang hayat!`
+      ? ` Anda turut menerima Pencen Tahunan sebanyak ${Utils.formatMoney(s.pensionAnnual, s.countryId)}/thn (${Math.round(pensionPct)}% gaji akhir) sepanjang hayat!`
       : '';
 
     GameState.addJournalEntry(
-      `🏖️ BERSARA RASMI: Selepas ${totalYrs} tahun berkhidmat, anda bersara daripada jawatan ${jobTitle} pada usia ${s.age} tahun. Bayaran sekali gus (${schemeName} + Ganjaran) berjumlah ${Utils.formatMoney(totalLumpSum, s.countryId)} telah dikreditkan ke akaun anda.${pensionNote}`,
+      `🏖️ ${isMandatory ? 'BERSARA WAJIB (UMUR 60+)' : 'BERSARA RASMI'}: Selepas ${totalYrs} tahun berkhidmat, anda bersara daripada jawatan ${jobTitle} pada usia ${s.age} tahun. Bayaran sekali gus (${schemeName} + Ganjaran) berjumlah ${Utils.formatMoney(totalLumpSum, s.countryId)} telah dikreditkan ke akaun anda.${pensionNote}`,
       'milestone'
     );
     GameState.save();

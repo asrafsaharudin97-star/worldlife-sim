@@ -573,10 +573,16 @@ window.Sim = {
       if (usdGross > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdGross);
     }
 
-    if ((s.retired || s.isRetired) && !s.job && (s.pensionAnnual || 0) > 0 && !(s.prison && s.prison.inPrison)) {
+    if ((s.retired || s.isRetired) && (!s.job || s.job.isContract) && (s.pensionAnnual || 0) > 0 && !(s.prison && s.prison.inPrison)) {
       GameState.addJournalEntry(
         `🏖️ Pencen Persaraan tahunan anda berjumlah ${Utils.formatMoney(s.pensionAnnual, s.countryId)} telah dikreditkan secara automatik ke akaun tunai anda.`
       );
+    }
+
+    // Bersara wajib automatik pada umur >= 60 bagi pemegang kerja tetap
+    if (s.age >= 60 && s.job && !s.job.isContract && !(s.prison && s.prison.inPrison) && window.EduCareerEngine && EduCareerEngine.retireFromJob) {
+      EduCareerEngine.retireFromJob(s, { isMandatory: true });
+      return;
     }
 
     if (s.job && !(s.prison && s.prison.inPrison)) {

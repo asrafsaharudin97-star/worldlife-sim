@@ -195,8 +195,8 @@ window.CharacterStatus = {
       breakdown.push({ label: 'Tajaan & Iklan Media Sosial', gross: g, net: g, icon: '📱' });
     }
 
-    // 5) Pencen Persaraan (dibayar apabila bersara & tiada kerja aktif supaya tiada pertindihan gaji+pencen)
-    if ((s.retired || s.isRetired) && !s.job && s.pensionAnnual > 0) {
+    // 5) Pencen Persaraan (kekal dibayar walaupun memegang kerja kontrak 60+)
+    if ((s.retired || s.isRetired) && (!s.job || s.job.isContract) && s.pensionAnnual > 0) {
       const g = Math.round(s.pensionAnnual);
       grossLocal += g;
       breakdown.push({ label: 'Pencen Persaraan', gross: g, net: g, icon: '🌅' });

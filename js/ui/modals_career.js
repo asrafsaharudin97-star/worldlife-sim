@@ -167,13 +167,13 @@ window.CareerModals = {
             </span>
             <span class="ai-right">Rundingan</span>
           </button>
-          <button type="button" class="action-item" id="act-retire-job" ${retElig.ok ? '' : 'style="opacity:0.75;"'}>
+          <button type="button" class="action-item" id="act-retire-job" ${retElig.ok || s.job.isContract ? '' : 'style="opacity:0.75;"'}>
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
-              <span class="ai-title">Bersara (Pencen)</span>
-              <span class="ai-desc">${retElig.ok ? `Layak bersara penuh! Keluarkan Tabung ${Utils.formatMoney(s.retirementFund || 0, s.countryId)} + Ganjaran${isPensionEligible ? ' & Pencen Tahunan (30%–60% gaji)' : ''}` : `Syarat: Umur 55+ (kini ${s.age}) atau 20+ tahun bekerja (kini ${totalYrs} thn)`}</span>
+              <span class="ai-title">${s.job.isContract ? 'Bersara / Tamat Kontrak' : 'Bersara (Pencen)'}</span>
+              <span class="ai-desc">${s.job.isContract ? 'Tamatkan kerja kontrak bila-bila masa tanpa menjejaskan pencen sedia ada' : retElig.ok ? `Layak bersara penuh! Keluarkan Tabung ${Utils.formatMoney(s.retirementFund || 0, s.countryId)} + Ganjaran${isPensionEligible ? ' & Pencen Tahunan (30%–60% gaji)' : ''}` : `Syarat: Umur 55+ (kini ${s.age}) atau 20+ tahun bekerja (kini ${totalYrs} thn)`}</span>
             </span>
-            <span class="ai-right" style="color:${retElig.ok ? '#059669' : '#64748b'};font-weight:700;">${retElig.ok ? 'Bersara' : 'Belum Layak'}</span>
+            <span class="ai-right" style="color:${retElig.ok || s.job.isContract ? '#059669' : '#64748b'};font-weight:700;">${s.job.isContract ? 'Tamat Kontrak' : retElig.ok ? 'Bersara' : 'Belum Layak'}</span>
           </button>
           <button type="button" class="action-item" id="act-quit-job">
             <span class="ai-icon">🚪</span>
@@ -189,6 +189,29 @@ window.CareerModals = {
 
     if (s.age < 18) {
       return html + `<div class="info-banner highlight">💼 Pasaran kerja sepenuh masa di ${c.name} dibuka pada umur <strong>18 tahun</strong>. Fokus pada pendidikan &amp; sijil dahulu!</div>`;
+    }
+
+    if (s.age >= 60) {
+      const contracts = EduCareerEngine.getContractJobsForPlayer(s);
+      const eduLbl = contracts[0] ? contracts[0].eduLabel : 'Asas';
+      return html + `
+        <div class="info-banner highlight" style="margin-bottom:10px;">
+          <strong>📋 Kerja Kontrak Pesara (Umur 60+)</strong><br/>
+          <small style="opacity:0.88;">Kerja tetap biasa ditutup pada umur 60+. Gaji kontrak dikira mengikut tahap akademik tertinggi anda (<strong>${Utils.escapeHtml(eduLbl)}</strong>) dan <strong>tidak menghilangkan pencen sedia ada</strong>.</small>
+        </div>
+        <div class="action-list">
+          ${contracts.map(cj => `
+            <button type="button" class="action-item contract-apply-btn" data-contract-id="${cj.id}" ${s.job || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+              <span class="ai-icon">${cj.icon}</span>
+              <span class="ai-content">
+                <span class="ai-title">${Utils.escapeHtml(cj.title)}</span>
+                <span class="ai-desc">${Utils.escapeHtml(cj.desc)}</span>
+              </span>
+              <span class="ai-right free">${Utils.formatMoney(cj.salary, s.countryId)}/thn</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
     }
 
     if (s.careerMarket.openings.length === 0 || s.careerMarket.lastMarketYear !== s.year) {
@@ -615,7 +638,16 @@ window.CareerModals = {
     });
 
     if (tab === 'jobs') {
-      const openEduBtn = document.getElementById('btn-jobs-open-edu');
+      document.querySelectorAll('.contract-apply-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = EduCareerEngine.acceptContractJob(btn.dataset.contractId);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('jobs');
+      });
+    });
+
+    const openEduBtn = document.getElementById('btn-jobs-open-edu');
       if (openEduBtn) openEduBtn.addEventListener('click', () => this.showHub('education'));
 
       const openCertsBtn = document.getElementById('btn-jobs-open-certs');
