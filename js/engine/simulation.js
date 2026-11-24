@@ -13,6 +13,12 @@ window.Sim = {
     s.age += 1;
     s.year += 1;
     s.yearsInCurrentCountry += 1;
+    const didCrimeLastYear = Boolean(
+      s.yearlyActions && (
+        (s.yearlyActions.crimeCount || 0) > 0 ||
+        (Array.isArray(s.yearlyActions.crimesDoneIds) && s.yearlyActions.crimesDoneIds.length > 0)
+      )
+    );
     s.yearlyActions = {};
     s.stoleMoneyIdsThisYear = [];
     s.askedMoneyCountThisYear = 0;
@@ -738,9 +744,9 @@ window.Sim = {
       s.socialMedia.followers += passive;
     }
 
-    // 4. Penyejukan semula jadi Haba Polis
-    if (s.alignment.notoriety > 0) {
-      s.alignment.notoriety = Math.max(0, s.alignment.notoriety - Utils.randInt(2, 5));
+    // 4. Penyejukan semula jadi Haba Polis (-10 hingga -15 jika tiada jenayah tahun itu)
+    if (s.alignment.notoriety > 0 && !didCrimeLastYear) {
+      s.alignment.notoriety = Math.max(0, s.alignment.notoriety - Utils.randInt(10, 15));
     }
 
     // 5. KESAN STRES BERPERINGKAT (TIERED STRESS CONSEQUENCES) SEBELUM PENYEJUKAN RINGAN
@@ -1086,7 +1092,7 @@ window.Sim = {
   _maybeTriggerHighPoliceHeatEvent(s, c) {
     if (!s || (s.prison && s.prison.inPrison)) return null;
     const heat = (s.alignment && typeof s.alignment.notoriety === 'number') ? s.alignment.notoriety : 0;
-    if (heat <= 70 || s.age < 13) return null;
+    if (heat < 70 || s.age < 13) return null;
     if (!Utils.chance(0.55)) return null;
 
     const hasJob = Boolean(s.job);
@@ -1916,6 +1922,22 @@ window.Sim = {
     }
     if (targetCountryId === s.countryId) return { ok: false, msg: 'Anda sudah menetap di negara ini!' };
 
+    const travelHeat = (s.alignment && s.alignment.notoriety) || 0;
+    if (travelHeat >= 70 && Utils.chance(0.55)) {
+      const yrs = Utils.randInt(1, 3);
+      if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+        PrisonFugitive.enterPrisonState(s, 'Ditahan Imigresen di Sempadan (Haba Polis Tinggi)', yrs, 'medium');
+      } else if (window.PrisonEngine && PrisonEngine.sendToPrison) {
+        PrisonEngine.sendToPrison(s, 'Ditahan di Sempadan (Haba Polis Tinggi)', yrs);
+      }
+      GameState.addJournalEntry(
+        `🚨 DITAHAN DI SEMPADAN! Pihak imigresen mengesan Haba Polis anda (${travelHeat}%) ketika cuba keluar negara dan menyerahkan anda kepada polis (penjara ${yrs} tahun).`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: `🚨 DITAHAN DI SEMPADAN! Imigresen mengesan Haba Polis anda (${travelHeat}%) dan menahan anda!` };
+    }
+
     const fromC = Utils.getCountry(s.countryId);
     const toC = Utils.getCountry(targetCountryId);
     const alreadyCitizen = s.citizenships.includes(targetCountryId);
@@ -2234,6 +2256,18 @@ window.Sim = {
     if (s.criminalRecord > 0 && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast)) && jobDef.reqDegree && Utils.chance(0.5)) {
       return { ok: false, msg: 'Semakan latar belakang mengesan rekod jenayah anda.' };
     }
+    const jobHeat = (s.alignment && s.alignment.notoriety) || 0;
+    if (jobHeat >= 40 && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast))) {
+      const heatRejectChance = jobHeat >= 70 ? 0.85 : 0.65;
+      if (Utils.chance(heatRejectChance)) {
+        GameState.addJournalEntry(
+          `🚔 Permohonan kerja "${jobDef.title}" ditolak selepas semakan latar belakang mengesan Haba Polis anda (${jobHeat}%).`,
+          'warning'
+        );
+        GameState.save();
+        return { ok: false, msg: `🚔 Permohonan ditolak! Haba Polis anda terlalu tinggi (${jobHeat}%) semasa semakan latar belakang.` };
+      }
+    }
 
     s.job = {
       id: jobDef.id,
@@ -2478,11 +2512,17 @@ window.Sim = {
   visitDoctor(isPrivate = false) {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
-    const cost = isPrivate ? c.healthcare.privateCost : c.healthcare.doctorCost;
-    if (s.money < cost && s.age >= 18) {
-      return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk rawatan ini.` };
+    const actId = isPrivate ? 'doc_priv' : 'doc_pub';
+    if (!Array.isArray(s.yearlyActions.usedActivitiesThisYear)) s.yearlyActions.usedActivitiesThisYear = [];
+    if (s.yearlyActions.usedActivitiesThisYear.includes(actId)) {
+      return { ok: false, msg: 'Aktiviti ini sudah selesai tahun ini.' };
     }
-    if (s.age >= 18) s.money -= cost;
+    const cost = isPrivate ? c.healthcare.privateCost : c.healthcare.doctorCost;
+    if (cost > 0 && s.money < cost) {
+      return { ok: false, msg: `Wang tidak mencukupi! Perlukan ${Utils.formatMoney(cost, s.countryId)}.` };
+    }
+    if (cost > 0) s.money -= cost;
+    s.yearlyActions.usedActivitiesThisYear.push(actId);
     const heal = isPrivate ? Utils.randInt(14, 24) : Utils.randInt(9, 16);
     GameState.adjustStats({ health: heal, happiness: 3 });
     GameState.addJournalEntry(
@@ -2832,10 +2872,11 @@ window.Sim = {
 
     const strictCountries = ['SG', 'JP', 'KR', 'AE', 'SA'];
     const currentHeat = (s.alignment && s.alignment.notoriety) || 0;
+    const highHeatPenalty = currentHeat >= 70 ? 0.28 : currentHeat >= 40 ? 0.18 : 0;
     const smartsBonus = Math.max(0, ((s.stats && s.stats.smarts) || 50) - 50) * 0.002;
     const catchChance = Math.min(
-      0.85,
-      Math.max(0.12, def.baseCatch + (strictCountries.includes(c.id) ? 0.14 : 0) + (currentHeat * 0.003) - smartsBonus)
+      0.95,
+      Math.max(0.12, def.baseCatch + (strictCountries.includes(c.id) ? 0.14 : 0) + (currentHeat * 0.003) + highHeatPenalty - smartsBonus)
     );
 
     if (Utils.chance(catchChance)) {
@@ -2900,43 +2941,43 @@ window.Sim = {
     if (!s || s.age < 18) return false;
     if (s.prison && s.prison.inPrison) return false;
     if (s.activeSpecialMode) return false;
-    const crimes = s.crimesCommitted || 0;
-    const rep = s.criminalRep || 0;
-    const karma = (s.alignment && s.alignment.karma) || 0;
-    const heat = (s.alignment && s.alignment.notoriety) || 0;
-    return crimes >= 3 || rep >= 40 || (karma <= -30 && crimes >= 1) || (heat >= 45 && crimes >= 1);
+    if (Array.isArray(s.exitedModeIds) && s.exitedModeIds.includes('mafia')) return false;
+    return true;
   },
 
   applyToJoinMafia(s) {
     const st = s || GameState.current;
     if (!this.canJoinMafiaDirectly(st)) {
-      return { ok: false, msg: 'Anda belum cukup reputasi dunia gelap untuk mendekati Sindiket Mafia.' };
+      return { ok: false, msg: 'Anda tidak layak memohon menyertai Sindiket Mafia buat masa ini.' };
     }
     if (st.yearlyActions.mafiaApply) {
-      return { ok: false, msg: 'Anda sudah mencuba menghubungi sindiket tahun ini. Tunggu tahun hadapan.' };
+      return { ok: false, msg: 'Had cubaan 1 kali setahun telah digunakan. Cuba lagi tahun hadapan.' };
     }
     st.yearlyActions.mafiaApply = true;
 
-    const rep = st.criminalRep || 0;
+    const record = st.criminalRecord || 0;
     const crimes = st.crimesCommitted || 0;
-    const passProb = Math.min(0.92, 0.55 + crimes * 0.08 + rep * 0.004);
+    const karma = (st.alignment && st.alignment.karma) || 0;
+    const karmaBoost = karma < 0 ? Math.min(0.18, Math.abs(karma) * 0.002) : 0;
+    const crimeBoost = Math.min(0.22, record * 0.06 + crimes * 0.03);
+    const passProb = Math.min(0.75, 0.28 + karmaBoost + crimeBoost);
     if (Utils.chance(passProb) && window.SpecialModesEngine) {
       SpecialModesEngine.enterMode(st, 'mafia');
       GameState.addJournalEntry(
-        '🕶️ UJIAN KESETIAAN LULUS! Anda berjaya meyakinkan ketua sindiket dan rasmi diterima menyertai Mod Khas Sindiket & Mafia!',
+        '🕶️ UJIAN KESETIAAN LULUS! Anda berjaya meyakinkan ketua sindiket dan rasmi diterima menyertai Sindiket Mafia!',
         'milestone'
       );
       GameState.save();
-      return { ok: true, msg: 'Tahniah! Anda rasmi diterima menyertai Sindiket & Mafia!' };
+      return { ok: true, msg: 'Tahniah! Anda rasmi diterima menyertai Sindiket Mafia!' };
     }
 
     if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8, notoriety: 5 });
     GameState.addJournalEntry(
-      '🕶️ Permohonan anda untuk menyertai Sindiket Mafia ditolak buat masa ini — mereka masih meragui kesetiaan anda.',
+      '🕶️ Permohonan anda untuk menyertai Sindiket Mafia ditolak tahun ini — mereka masih meragui kelayakan anda.',
       'warning'
     );
     GameState.save();
-    return { ok: false, msg: 'Ujian kesetiaan ditolak. Tingkatkan reputasi dunia gelap dan cuba lagi tahun hadapan.' };
+    return { ok: false, msg: 'Permohonan ditolak. Rekod jenayah/karma rendah membantu peluang — cuba lagi tahun hadapan.' };
   },
 
   investMoney(fraction = 0.5) {

@@ -1126,6 +1126,12 @@ window.GAME_EVENTS = {
         text: 'Guru anda melihat anda sangat aktif selepas kelas dan mencadangkan anda menyertai kelab kokurikulum. Pilih satu bidang untuk melihat aktiviti yang ditawarkan.',
         choices: [
           ...categories.map(cat => ({ label: cat.label, customAction: () => ({ nextEvent: cat.event }) })),
+          {
+            label: '😴 Malas nak sertai / Pulang terus ke rumah',
+            hint: 'Gembira +, Pintar -',
+            outcome: 'Anda menolak cadangan guru dan lebih gemar berehat serta bermain di rumah, namun perkembangan kepandaian anda sedikit terjejas.',
+            effects: { smarts: -5, happiness: 3 }
+          },
           { label: '🔥 Buat Hal & Langgar Disiplin', customAction: () => ({ nextEvent: disciplineEvent }) }
         ]
       };

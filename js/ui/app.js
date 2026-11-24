@@ -782,8 +782,18 @@ window.App = {
     if (pillKarma) pillKarma.textContent = `${kInfo.icon} ${a.karma >= 0 ? '+' : ''}${a.karma}`;
     if (pillFame) pillFame.textContent = `⭐ ${a.fame}%`;
     if (pillHeat) {
-      pillHeat.textContent = `🚔 ${a.notoriety}%`;
-      pillHeat.classList.toggle('danger', a.notoriety >= 50);
+      const heatVal = a.notoriety || 0;
+      pillHeat.textContent = heatVal >= 70
+        ? `🚨 Diburu ${heatVal}%`
+        : heatVal >= 40
+          ? `⚠️ Heat ${heatVal}%`
+          : `🚔 ${heatVal}%`;
+      pillHeat.title = heatVal >= 70
+        ? 'AMARAN KRITIKAL: Haba Polis tinggi! Berisiko diserbu polis & ditahan di sempadan.'
+        : heatVal >= 40
+          ? 'AMARAN: Haba Polis tinggi! Peluang ditangkap naik & sukar diterima kerja rasmi.'
+          : 'Haba Polis';
+      pillHeat.classList.toggle('danger', heatVal >= 40);
     }
     if (pillStress) {
       pillStress.textContent = a.stress >= 75 ? `⚠️ Burnout ${a.stress}%` : `🧠 ${a.stress}%`;
@@ -956,6 +966,9 @@ window.App = {
       Utils.playTone(type);
     }
     const wrap = document.getElementById('toast-container');
+    while (wrap.children.length >= 3) {
+      wrap.removeChild(wrap.firstChild);
+    }
     const el = document.createElement('div');
     el.className = `toast ${type}`;
     el.textContent = message;

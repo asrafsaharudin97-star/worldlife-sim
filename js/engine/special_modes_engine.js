@@ -1083,44 +1083,63 @@ window.SpecialModesEngine = {
         GameState.addJournalEntry(`🏅 ${msg}`, 'warning');
       }
     } else if (def.id === 'mafia') {
-      // BAHAYA TERTINGGI: Wang Cuci Tangan berat + 35–50% serangan balas / pembelot ke polis
-      const tribute = Utils.usdToLocal(35000 + (am.rankIndex * 28000), s.countryId);
-      s.money -= tribute;
-      const ambushChance = 0.35 + (am.rankIndex * 0.05); // 35% -> 50% di pangkat Godfather
-      msg = `Anda membayar "Wang Cuci Tangan" sebanyak ${Utils.formatMoney(tribute, s.countryId)} untuk meninggalkan sindiket.`;
-      if (Utils.chance(ambushChance)) {
-        const roll = Math.random();
-        if (am.rankIndex >= 3 && roll < 0.14) {
-          // Risiko maut kecil di pangkat Godfather
-          GameState.addJournalEntry(`🕶️ SERANGAN BALAS MAUT SINDIKET! Bekas pengikut yang marah melepaskan tembakan hendap sebaik anda meninggalkan markas.`, 'warning');
+      if (choice === 'mafia_risk_life') {
+        const deathChance = 0.38 + (am.rankIndex * 0.06);
+        if (Utils.chance(deathChance)) {
+          GameState.addJournalEntry('🕶️ DIBUNUH SINDIKET! Anda cuba keluar secara paksa dan ditembak mati oleh skuad pembersih Mafia.', 'warning');
           s.exitedModeIds.push('mafia');
           s.activeSpecialMode = null;
           if (window.Sim && Sim.triggerDeath) {
-            Sim.triggerDeath('Serangan Hendap Balas Dendam Sindiket Mafia');
+            Sim.triggerDeath('Dibunuh Skuad Pembersih Sindiket Mafia');
           } else {
             s.alive = false;
-            s.causeOfDeath = 'Serangan Hendap Balas Dendam Sindiket Mafia';
+            s.causeOfDeath = 'Dibunuh Skuad Pembersih Sindiket Mafia';
           }
           GameState.save();
-          return { ok: true, msg: 'Anda terkorban dalam serangan balas dendam sindiket!', died: true };
-        } else if (roll < 0.58) {
-          const dmg = Utils.randInt(28, 44);
-          GameState.adjustStats({ health: -dmg, happiness: -16 });
-          msg += ` AMARAN: Skuad pembunuh sindiket menyerang hendap anda di jalan raya (Kesihatan -${dmg}%) — anda nyaris maut!`;
-        } else if (window.PrisonFugitive) {
-          msg += ' Seorang ahli sindiket yang berdendam membocorkan fail jenayah anda kepada polis — anda diheret ke Mahkamah!';
-          followUpEvent = PrisonFugitive.buildCourtTrialEvent({
-            crimeLabel: 'Konspirasi Jenayah Terancang & Sindiket Mafia',
-            minYears: 4,
-            maxYears: 12,
-            security: 'max',
-            heat: 70
-          });
+          return { ok: true, msg: 'Anda terkorban dibunuh oleh sindiket Mafia!', died: true };
         }
+        const dmg = Utils.randInt(35, 55);
+        GameState.adjustStats({ health: -dmg, happiness: -20 });
+        msg = `Anda bertarung nyawa meninggalkan sindiket — cedera parah (Kesihatan -${dmg}%), namun berjaya keluar hidup-hidup!`;
+        GameState.addJournalEntry(`🕶️ ${msg}`, 'warning');
+      } else if (choice === 'mafia_flee') {
+        const allCountries = Object.keys(window.COUNTRIES || {}).filter(id => id !== s.countryId);
+        const destId = Utils.pick(allCountries) || s.countryId;
+        const destC = Utils.getCountry(destId);
+        s.countryId = destId;
+        s.city = Utils.pick(destC.cities) || s.city;
+        s.residencyStatus = 'Work Visa';
+        s.yearsInCurrentCountry = 0;
+        s.job = null;
+        if (!s.countriesLivedIn.includes(destId)) s.countriesLivedIn.push(destId);
+        if (s.fugitive) {
+          s.fugitive.isFugitive = true;
+          s.fugitive.recaptureRisk = Math.max(s.fugitive.recaptureRisk || 0, 35);
+        }
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 18, stress: 18 });
+        msg = `Anda melarikan diri secara kecemasan ke ${s.city}, ${destC.name} ${destC.flag}! Akses lama hilang & anda masih berisiko diburu (Pelarian).`;
+        GameState.addJournalEntry(`✈️🕶️ ${msg}`, 'warning');
+      } else if (choice === 'mafia_final_mission') {
+        const heatNow = (s.alignment && s.alignment.notoriety) || 0;
+        const arrestChance = Math.min(0.75, 0.35 + heatNow * 0.004);
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 25, stress: 15 });
+        if (Utils.chance(arrestChance)) {
+          if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+            PrisonFugitive.enterPrisonState(s, 'Misi Akhir Sindiket Mafia', 99, 'maximum', { isLife: true });
+          }
+          msg = '🚨 GAGAL & DITANGKAP! Polis menyerbu misi khas keluar anda — hukuman wajib PENJARA SEUMUR HIDUP!';
+          GameState.addJournalEntry(`⛓️ ${msg}`, 'warning');
+          GameState.save();
+          return { ok: true, msg };
+        }
+        msg = 'Anda berjaya menyelesaikan misi khas keluar sindiket tanpa ditangkap polis! Ketua melepaskan anda dengan rasmi.';
+        GameState.addJournalEntry(`🕶️ ${msg}`, 'milestone');
       } else {
-        msg += ' Anda bernasib baik — keluarga sindiket menghormati bayaran anda dan melepaskan anda hidup-hidup!';
+        const tribute = Utils.usdToLocal(35000 + (am.rankIndex * 28000), s.countryId);
+        s.money -= tribute;
+        msg = `Anda membayar "Wang Cuci Tangan" sebanyak ${Utils.formatMoney(tribute, s.countryId)} untuk meninggalkan sindiket.`;
+        GameState.addJournalEntry(`🕶️ ${msg}`, 'warning');
       }
-      GameState.addJournalEntry(`🕶️ ${msg}`, 'warning');
     } else if (def.id === 'cult') {
       // Tindak balas pengikut fanatik: Reputasi & Karma merosot + risiko tinggi saman penipuan / serbuan polis
       if (window.Dynasty) Dynasty.adjustReputation(-12);
@@ -1188,5 +1207,49 @@ window.SpecialModesEngine = {
     GameState.save();
 
     return { ok: true, msg, followUpEvent };
+  },
+
+  contributeMafiaTribute() {
+    const s = GameState.current;
+    const info = this.getActiveInfo(s);
+    if (!info || info.def.id !== 'mafia') {
+      return { ok: false, msg: 'Anda bukan ahli Sindiket Mafia.' };
+    }
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh membuat sumbangan dari dalam penjara.' };
+    }
+    if (s.yearlyActions.mafiaTribute) {
+      return { ok: false, msg: 'Anda sudah menyumbang kepada Ketua Sindiket tahun ini.' };
+    }
+    const { state: am } = info;
+    const costLocal = Utils.usdToLocal(15000 * (am.rankIndex + 1), s.countryId);
+    if (s.money < costLocal) {
+      return { ok: false, msg: `Baki bank tidak cukup — perlukan ${Utils.formatMoney(costLocal, s.countryId)}.` };
+    }
+
+    s.yearlyActions.mafiaTribute = true;
+    s.money -= costLocal;
+    am.metric1 = Utils.clamp((am.metric1 || 0) + 14, 0, 100);
+    am.metric2 = Utils.clamp((am.metric2 || 0) + 12, 0, 100);
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, karma: -8, stress: 6 });
+
+    const heatNow = (s.alignment && s.alignment.notoriety) || 0;
+    const catchChance = Math.min(0.45, 0.12 + heatNow * 0.003);
+    if (Utils.chance(catchChance) && window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+      PrisonFugitive.enterPrisonState(s, 'Pengubahan Wang Haram Sindiket Mafia', 99, 'maximum', { isLife: true });
+      GameState.addJournalEntry(
+        `🚨 TRANSAKSI DIKESAN POLIS! Sumbangan wang besar anda kepada Ketua Sindiket (${Utils.formatMoney(costLocal, s.countryId)}) membongkar identiti Mafia anda — hukuman wajib PENJARA SEUMUR HIDUP!`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: '🚨 Transaksi dikesan polis! Anda ditangkap & dijatuhi PENJARA SEUMUR HIDUP!' };
+    }
+
+    GameState.addJournalEntry(
+      `💼🕶️ Anda menyumbang ${Utils.formatMoney(costLocal, s.countryId)} kepada Ketua Sindiket Mafia (+14% Reputasi Ketua, Haba Polis +14%).`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Sumbangan diterima Ketua! Reputasi Ketua +14% (${am.metric1}%).` };
   }
 };

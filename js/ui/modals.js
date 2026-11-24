@@ -1963,6 +1963,15 @@ window.Modals = {
       const activeStressIllnesses = Array.isArray(s.stressIllnesses) && s.stressIllnesses.length > 0
         ? `<div style="margin-top:4px;font-size:0.78rem;color:#fca5a5;">🩺 Penyakit Akibat Stres: <strong>${s.stressIllnesses.map(i => Utils.escapeHtml(i)).join(', ')}</strong></div>`
         : '';
+      const usedActs = Array.isArray(s.yearlyActions.usedActivitiesThisYear) ? s.yearlyActions.usedActivitiesThisYear : [];
+      const docPubDone = usedActs.includes('doc_pub');
+      const docPrivDone = usedActs.includes('doc_priv');
+      const canAffordPub = c.healthcare.doctorCost === 0 || s.money >= c.healthcare.doctorCost;
+      const canAffordPriv = c.healthcare.privateCost === 0 || s.money >= c.healthcare.privateCost;
+      const canAffordGym = s.age < 18 || s.money >= gymCost;
+      const canAffordVac = s.money >= vacationCost;
+      const canAffordTherapy = s.age < 18 || s.money >= therapyCost;
+      const canAffordCharity = s.age < 18 || s.money >= charityCost;
       contentHtml += `
         <div class="section-heading">🏥 Kesihatan di ${c.name} (${c.healthcare.type})</div>
         <div class="info-banner">${Utils.escapeHtml(c.healthcare.desc)}</div>
@@ -1971,77 +1980,77 @@ window.Modals = {
           ${activeStressIllnesses}
         </div>
         <div class="action-list">
-          <button class="action-item" id="act-doc-pub">
+          <button class="action-item" id="act-doc-pub" ${docPubDone || !canAffordPub ? 'disabled' : ''}>
             <span class="ai-icon">🏥</span>
             <span class="ai-content">
               <span class="ai-title">Klinik Awam (${c.healthcare.type.split(' ')[0]})</span>
-              <span class="ai-desc">Pemeriksaan kesihatan asas di klinik kerajaan</span>
+              <span class="ai-desc">${docPubDone ? 'Selesai tahun ini' : 'Pemeriksaan kesihatan asas di klinik kerajaan'}</span>
             </span>
-            <span class="ai-right cost">${c.healthcare.doctorCost === 0 ? 'PERCUMA' : Utils.formatMoney(c.healthcare.doctorCost, s.countryId)}</span>
+            <span class="ai-right cost">${docPubDone ? 'Selesai tahun ini' : (c.healthcare.doctorCost === 0 ? 'PERCUMA' : Utils.formatMoney(c.healthcare.doctorCost, s.countryId))}</span>
           </button>
-          <button class="action-item" id="act-doc-priv">
+          <button class="action-item" id="act-doc-priv" ${docPrivDone || !canAffordPriv ? 'disabled' : ''}>
             <span class="ai-icon">🩺</span>
             <span class="ai-content">
               <span class="ai-title">Hospital Pakar Swasta</span>
-              <span class="ai-desc">Pemeriksaan &amp; rawatan pakar yang lebih pantas</span>
+              <span class="ai-desc">${docPrivDone ? 'Selesai tahun ini' : 'Pemeriksaan &amp; rawatan pakar yang lebih pantas'}</span>
             </span>
-            <span class="ai-right cost">${Utils.formatMoney(c.healthcare.privateCost, s.countryId)}</span>
+            <span class="ai-right cost">${docPrivDone ? 'Selesai tahun ini' : Utils.formatMoney(c.healthcare.privateCost, s.countryId)}</span>
           </button>
         </div>
 
         <div class="section-heading">🧘‍♂️ Pengurusan Stres &amp; Kesihatan Mental</div>
         <div class="action-list">
-          <button class="action-item" id="act-gym" ${s.yearlyActions.gym ? 'disabled' : ''}>
+          <button class="action-item" id="act-gym" ${s.yearlyActions.gym || !canAffordGym ? 'disabled' : ''}>
             <span class="ai-icon">🏃‍♂️</span>
             <span class="ai-content">
               <span class="ai-title">Bersenam / Joging</span>
-              <span class="ai-desc">Lakukan aktiviti kecergasan fizikal secara aktif</span>
+              <span class="ai-desc">${s.yearlyActions.gym ? 'Selesai tahun ini' : 'Lakukan aktiviti kecergasan fizikal secara aktif'}</span>
             </span>
-            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(gymCost, s.countryId)}</span>
+            <span class="ai-right cost">${s.yearlyActions.gym ? 'Selesai tahun ini' : (s.age < 18 ? 'Percuma' : Utils.formatMoney(gymCost, s.countryId))}</span>
           </button>
-          <button class="action-item" id="act-vacation-rest" ${s.yearlyActions.vacationRest ? 'disabled' : ''}>
+          <button class="action-item" id="act-vacation-rest" ${s.yearlyActions.vacationRest || !canAffordVac ? 'disabled' : ''}>
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
               <span class="ai-title">Bercuti / Rehat</span>
-              <span class="ai-desc">Luangkan masa bercuti &amp; rehatkan minda</span>
+              <span class="ai-desc">${s.yearlyActions.vacationRest ? 'Selesai tahun ini' : 'Luangkan masa bercuti &amp; rehatkan minda'}</span>
             </span>
-            <span class="ai-right cost">${Utils.formatMoney(vacationCost, s.countryId)}</span>
+            <span class="ai-right cost">${s.yearlyActions.vacationRest ? 'Selesai tahun ini' : Utils.formatMoney(vacationCost, s.countryId)}</span>
           </button>
-          <button class="action-item" id="act-counseling" ${s.yearlyActions.counselingTherapy ? 'disabled' : ''}>
+          <button class="action-item" id="act-counseling" ${s.yearlyActions.counselingTherapy || !canAffordTherapy ? 'disabled' : ''}>
             <span class="ai-icon">🛋️</span>
             <span class="ai-content">
               <span class="ai-title">Sesi Kaunseling / Terapi</span>
-              <span class="ai-desc">Dapatkan bantuan pakar psikologi untuk kesejahteraan mental</span>
+              <span class="ai-desc">${s.yearlyActions.counselingTherapy ? 'Selesai tahun ini' : 'Dapatkan bantuan pakar psikologi untuk kesejahteraan mental'}</span>
             </span>
-            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(therapyCost, s.countryId)}</span>
+            <span class="ai-right cost">${s.yearlyActions.counselingTherapy ? 'Selesai tahun ini' : (s.age < 18 ? 'Percuma' : Utils.formatMoney(therapyCost, s.countryId))}</span>
           </button>
           <button class="action-item" id="act-family-hobby" ${s.yearlyActions.familyHobby ? 'disabled' : ''}>
             <span class="ai-icon">🎨</span>
             <span class="ai-content">
               <span class="ai-title">Luangkan Masa Bersama Keluarga / Hobi</span>
-              <span class="ai-desc">Aktiviti santai bersama orang tersayang &amp; hobi kegemaran</span>
+              <span class="ai-desc">${s.yearlyActions.familyHobby ? 'Selesai tahun ini' : 'Aktiviti santai bersama orang tersayang &amp; hobi kegemaran'}</span>
             </span>
-            <span class="ai-right">Percuma</span>
+            <span class="ai-right">${s.yearlyActions.familyHobby ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
         </div>
 
         <div class="section-heading">💪 Minda, Jiwa &amp; Badan</div>
         <div class="action-list">
-          <button class="action-item" id="act-community-charity" ${s.yearlyActions.communityCharity ? 'disabled' : ''}>
+          <button class="action-item" id="act-community-charity" ${s.yearlyActions.communityCharity || !canAffordCharity ? 'disabled' : ''}>
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
               <span class="ai-title">Sukarelawan &amp; Kebajikan Komuniti</span>
-              <span class="ai-desc">Luangkan masa membantu komuniti setempat dan menyumbang kepada kebajikan</span>
+              <span class="ai-desc">${s.yearlyActions.communityCharity ? 'Selesai tahun ini' : 'Luangkan masa membantu komuniti setempat dan menyumbang kepada kebajikan'}</span>
             </span>
-            <span class="ai-right cost">${s.age < 18 ? 'Percuma' : Utils.formatMoney(charityCost, s.countryId)}</span>
+            <span class="ai-right cost">${s.yearlyActions.communityCharity ? 'Selesai tahun ini' : (s.age < 18 ? 'Percuma' : Utils.formatMoney(charityCost, s.countryId))}</span>
           </button>
           <button class="action-item" id="act-library" ${s.yearlyActions.library ? 'disabled' : ''}>
             <span class="ai-icon">📚</span>
             <span class="ai-content">
               <span class="ai-title">Ke Perpustakaan Awam</span>
-              <span class="ai-desc">Luangkan masa membaca bahan ilmiah di perpustakaan</span>
+              <span class="ai-desc">${s.yearlyActions.library ? 'Selesai tahun ini' : 'Luangkan masa membaca bahan ilmiah di perpustakaan'}</span>
             </span>
-            <span class="ai-right">Percuma</span>
+            <span class="ai-right">${s.yearlyActions.library ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
           <button class="action-item" id="act-meditate" ${s.yearlyActions.meditate ? 'disabled' : ''}>
             <span class="ai-icon">🧘</span>
@@ -2238,12 +2247,14 @@ window.Modals = {
       const res = Sim.visitDoctor(false);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
+      this.showActivities('lifestyle');
     });
     const docPriv = document.getElementById('act-doc-priv');
     if (docPriv) docPriv.addEventListener('click', () => {
       const res = Sim.visitDoctor(true);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
+      this.showActivities('lifestyle');
     });
 
     const charityBtn = document.getElementById('act-community-charity');
@@ -2332,7 +2343,7 @@ window.Modals = {
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
       if (res.ok && window.SpecialModeModals) {
-        SpecialModeModals.showHub();
+        SpecialModeModals.showDashboard();
       } else {
         this.showActivities('crime');
       }

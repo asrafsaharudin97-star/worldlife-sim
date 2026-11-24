@@ -118,11 +118,32 @@ window.SpecialModeModals = {
 
         <div class="action-list" style="margin-bottom:12px;">${actionsHtml}</div>
 
+        ${def.id === 'mafia' ? `
+          <button type="button" class="action-item" id="btn-mafia-tribute" style="margin-bottom:10px;" ${s.yearlyActions.mafiaTribute || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+            <span class="ai-icon">💼</span>
+            <span class="ai-content">
+              <span class="ai-title">Sumbang Wang Besar Kepada Ketua Sindiket</span>
+              <span class="ai-desc">Naikkan Reputasi dengan Ketua (+14% Hormat) untuk peluang naik pangkat • Risiko Haba Polis tinggi!</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(15000 * (am.rankIndex + 1), s.countryId), s.countryId, true)}</span>
+          </button>
+        ` : ''}
+
         <button type="button" class="ghost-btn" id="btn-sp-exit-prompt" style="border-color:#fca5a5;color:#dc2626;font-weight:800;">
           ${def.id === 'royalty' ? '👑 Buang Gelaran Diraja (Renounce Title)' : `🚪 Keluar / Letak Jawatan Daripada ${Utils.escapeHtml(def.shortLabel)}`}
         </button>
       `
     });
+
+    const tributeBtn = document.getElementById('btn-mafia-tribute');
+    if (tributeBtn) {
+      tributeBtn.addEventListener('click', () => {
+        const res = SpecialModesEngine.contributeMafiaTribute();
+        App.renderAll();
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        this.showDashboard();
+      });
+    }
 
     const rerollBtn = document.getElementById('btn-sp-reroll');
     if (rerollBtn) {
@@ -167,6 +188,7 @@ window.SpecialModeModals = {
     if (!info) return;
     const { def, state: am, rank } = info;
     const isCeo = def.id === 'ceo';
+    const isMafia = def.id === 'mafia';
     const ceoEq = isCeo ? SpecialModesEngine.getCeoEquityLocal(s) : 0;
 
     Modals.open({
@@ -195,6 +217,31 @@ window.SpecialModeModals = {
                 <span class="ai-desc">Selesaikan hutang pampasan pekerja &amp; kesan Reputasi Keluarga (-8%)</span>
               </span>
               <span class="ai-right cost">Tutup</span>
+            </button>
+          ` : isMafia ? `
+            <button type="button" class="action-item sp-confirm-exit" data-choice="mafia_risk_life">
+              <span class="ai-icon">💀</span>
+              <span class="ai-content">
+                <span class="ai-title">Pertaruhkan Nyawa</span>
+                <span class="ai-desc">Risiko sangat tinggi dibunuh skuad sindiket atau cedera parah</span>
+              </span>
+              <span class="ai-right cost">Risiko Maut</span>
+            </button>
+            <button type="button" class="action-item sp-confirm-exit" data-choice="mafia_flee">
+              <span class="ai-icon">✈️</span>
+              <span class="ai-content">
+                <span class="ai-title">Lari Sejauh Mungkin</span>
+                <span class="ai-desc">Hijrah kecemasan ke luar negara &amp; hilang akses lama, masih berisiko diburu</span>
+              </span>
+              <span class="ai-right cost">Lari</span>
+            </button>
+            <button type="button" class="action-item sp-confirm-exit" data-choice="mafia_final_mission">
+              <span class="ai-icon">🎯</span>
+              <span class="ai-content">
+                <span class="ai-title">Selesaikan Misi Khas Keluar Sindiket</span>
+                <span class="ai-desc">Misi terakhir tanpa ditangkap polis — jika tertangkap, penjara seumur hidup!</span>
+              </span>
+              <span class="ai-right cost">Misi Akhir</span>
             </button>
           ` : `
             <button type="button" class="action-item sp-confirm-exit" data-choice="standard">

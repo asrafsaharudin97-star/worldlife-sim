@@ -413,18 +413,22 @@ window.PrisonFugitive = {
     s.fugitive.isFugitive = false;
     s.fugitive.recaptureRisk = 0;
 
+    const isMafiaMember = Boolean(s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia');
+    const effectiveYears = isMafiaMember ? 99 : Math.max(1, years);
+    const effectiveSecurity = isMafiaMember ? 'maximum' : securityLevel;
+
     s.prison.inPrison = true;
     s.prison.detentionType = detentionType;
     s.prison.transferAt18 = Boolean(opts.transferAt18);
-    s.prison.isLife = Boolean(opts.isLife);
+    s.prison.isLife = Boolean(opts.isLife || isMafiaMember);
     s.prison.isDeathPenalty = Boolean(opts.isDeathPenalty);
-    s.prison.lawTierLabel = opts.lawTierLabel || null;
-    s.prison.yearsLeft = Math.max(1, years);
-    s.prison.originalSentence = Math.max(1, years);
+    s.prison.lawTierLabel = opts.lawTierLabel || (isMafiaMember ? 'Hukuman Wajib Sindiket Mafia (Penjara Seumur Hidup)' : null);
+    s.prison.yearsLeft = effectiveYears;
+    s.prison.originalSentence = effectiveYears;
     s.prison.yearsServed = 0;
-    s.prison.totalServed = (s.prison.totalServed || 0) + years;
-    s.prison.crimeName = crimeName;
-    s.prison.securityLevel = securityLevel;
+    s.prison.totalServed = (s.prison.totalServed || 0) + effectiveYears;
+    s.prison.crimeName = isMafiaMember ? `${crimeName} (Ahli Sindiket Mafia — Seumur Hidup)` : crimeName;
+    s.prison.securityLevel = effectiveSecurity;
     s.prison.respect = Utils.clamp(s.prison.respect || 25, 10, 100);
     s.prison.behavior = Utils.clamp(65 - (securityLevel === 'maximum' ? 15 : 0), 20, 90);
     s.prison.gangName = null;
