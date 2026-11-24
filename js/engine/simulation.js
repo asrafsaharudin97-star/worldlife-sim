@@ -2958,8 +2958,7 @@ window.Sim = {
   canJoinMafiaDirectly(s) {
     if (!s || s.age < 18) return false;
     if (s.prison && s.prison.inPrison) return false;
-    if (s.activeSpecialMode) return false;
-    if (Array.isArray(s.exitedModeIds) && s.exitedModeIds.includes('mafia')) return false;
+    if (s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia') return false;
     return true;
   },
 

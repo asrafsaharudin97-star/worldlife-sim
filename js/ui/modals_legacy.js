@@ -229,15 +229,46 @@ window.LegacyModals = {
       ? '<div class="info-banner">Tiada aktiviti untuk umur ini — klik +UMUR untuk melangkah ke tahun seterusnya!</div>'
       : `<div class="info-banner">Tiada kad dalam kategori <strong>${Utils.escapeHtml(filterDef.label)}</strong> pada dek semasa. Cuba pilih tab <strong>Semua</strong> atau klik <strong>🎲 Cari Idea Lain</strong>!</div>`;
 
-    const darkSectionHtml = (s.age >= 7 && window.Sim && Sim.getYearlyDarkActivities) ? (() => {
-      const darkList = Sim.getYearlyDarkActivities(s);
+    const darkSectionHtml = (() => {
+      const inPrison = Boolean(s.prison && s.prison.inPrison);
+      const isMafiaMember = Boolean(s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia');
+      const spInfo = isMafiaMember && window.SpecialModesEngine ? SpecialModesEngine.getActiveInfo(s) : null;
+      const mafiaTopCard = isMafiaMember && spInfo ? `
+        <button type="button" class="action-item" id="deck-open-mafia-panel" ${inPrison ? 'disabled' : ''}>
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Panel Sindiket Mafia • ${Utils.escapeHtml(spInfo.rank.title)}</span>
+            <span class="ai-desc">Pangkat ${spInfo.state.rankIndex + 1}/${spInfo.def.ranks.length} • Buka Misi Sindiket, Sumbangan Ketua &amp; Pilihan Keluar Mafia</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill free">Buka Panel →</span></span>
+        </button>
+      ` : s.age < 18 ? `
+        <button type="button" class="action-item" disabled>
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Sertai Mafia / Sindiket</span>
+            <span class="ai-desc">Laluan organisasi jenayah terancang</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill done">Terbuka umur 18+</span></span>
+        </button>
+      ` : `
+        <button type="button" class="action-item" id="deck-join-mafia" ${s.yearlyActions.mafiaApply || inPrison ? 'disabled' : ''}>
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Cuba Sertai Mafia / Sindiket</span>
+            <span class="ai-desc">${s.yearlyActions.mafiaApply ? 'Cubaan tahun ini sudah digunakan (had 1x setahun)' : 'Mohon menyertai organisasi Mafia (peluang rawak • had 1x setahun)'}</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill ${s.yearlyActions.mafiaApply ? 'done' : 'free'}">${s.yearlyActions.mafiaApply ? 'Selesai tahun ini' : 'Cuba Sertai →'}</span></span>
+        </button>
+      `;
+
+      const darkList = (s.age >= 7 && window.Sim && Sim.getYearlyDarkActivities) ? Sim.getYearlyDarkActivities(s) : [];
       const doneDark = Array.isArray(s.yearlyActions.darkDoneIds) ? s.yearlyActions.darkDoneIds : [];
       const darkUsed = s.yearlyActions.darkCount || 0;
-      const inPrison = Boolean(s.prison && s.prison.inPrison);
-      if (darkList.length === 0) return '';
       return `
-        <div class="section-heading" style="margin-top:14px;">🕶️ Aktiviti Gelap &amp; Kontroversi (${darkUsed}/3)</div>
+        <div class="section-heading" style="margin-top:14px;">🕶️ Aktiviti Gelap &amp; Sindiket Mafia${darkList.length > 0 ? ` (${darkUsed}/3)` : ''}</div>
         <div class="action-list">
+          ${mafiaTopCard}
           ${darkList.map(act => {
             const isDone = doneDark.includes(act.id) || darkUsed >= 3 || inPrison;
             return `
@@ -252,7 +283,7 @@ window.LegacyModals = {
           }).join('')}
         </div>
       `;
-    })() : '';
+    })();
 
     return `
       <div class="act-engine-header">
@@ -296,6 +327,27 @@ window.LegacyModals = {
         const res = ActivitiesDeck.rerollDeck();
         App.toast(res.msg, res.ok ? 'culture' : 'error');
         if (typeof onRefresh === 'function') onRefresh();
+      });
+    }
+
+    const deckJoinMafia = document.getElementById('deck-join-mafia');
+    if (deckJoinMafia) {
+      deckJoinMafia.addEventListener('click', () => {
+        const res = Sim.applyToJoinMafia(GameState.current);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        if (res.ok && window.SpecialModeModals) {
+          SpecialModeModals.showDashboard();
+        } else if (typeof onRefresh === 'function') {
+          onRefresh();
+        }
+      });
+    }
+
+    const deckOpenMafia = document.getElementById('deck-open-mafia-panel');
+    if (deckOpenMafia) {
+      deckOpenMafia.addEventListener('click', () => {
+        if (window.SpecialModeModals) SpecialModeModals.showDashboard();
       });
     }
 

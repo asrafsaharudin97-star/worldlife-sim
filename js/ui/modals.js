@@ -1748,7 +1748,7 @@ window.Modals = {
         <button class="tab-pill ${activeSubTab === 'migrate' ? 'active' : ''}" data-sub="migrate">✈️ Hijrah</button>
         <button class="tab-pill ${activeSubTab === 'passport' ? 'active' : ''}" data-sub="passport">🛂 Pasport</button>
         <button class="tab-pill ${activeSubTab === 'lifestyle' ? 'active' : ''}" data-sub="lifestyle">💪 Gaya Hidup</button>
-        ${s.age >= 14 ? `<button class="tab-pill ${activeSubTab === 'crime' ? 'active' : ''}" data-sub="crime">🕶️ Jenayah</button>` : ''}
+        <button class="tab-pill ${activeSubTab === 'crime' ? 'active' : ''}" data-sub="crime">🕶️ Jenayah</button>
       </div>
     `;
 
@@ -2078,44 +2078,72 @@ window.Modals = {
           ` : ''}
         </div>
       `;
-    } else if (activeSubTab === 'crime' && s.age >= 14) {
-      const crimeOpts = Sim.getYearlyCrimeOptions(s);
+    } else if (activeSubTab === 'crime') {
+      const crimeOpts = s.age >= 14 ? Sim.getYearlyCrimeOptions(s) : [];
       const doneIds = Array.isArray(s.yearlyActions.crimesDoneIds) ? s.yearlyActions.crimesDoneIds : [];
       const usedAttempts = s.yearlyActions.crimeCount || 0;
       const maxAttempts = 3;
-      const canJoinMafia = Sim.canJoinMafiaDirectly(s);
       const crimesDoneTotal = s.crimesCommitted || 0;
       const crimRep = s.criminalRep || 0;
       const heat = (s.alignment && s.alignment.notoriety) || 0;
+      const isMafiaMember = Boolean(s.activeSpecialMode && s.activeSpecialMode.modeId === 'mafia');
+      const spInfo = isMafiaMember && window.SpecialModesEngine ? SpecialModesEngine.getActiveInfo(s) : null;
+
+      const mafiaCardHtml = isMafiaMember && spInfo ? `
+        <button class="action-item" id="act-open-mafia-panel">
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Panel Sindiket Mafia • ${Utils.escapeHtml(spInfo.rank.title)}</span>
+            <span class="ai-desc">Pangkat ${spInfo.state.rankIndex + 1}/${spInfo.def.ranks.length} • Reputasi Ketua: ${spInfo.state.metric1}% • Buka Misi, Sumbangan &amp; Keluar Mafia</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill free">Buka Panel →</span></span>
+        </button>
+      ` : s.age < 18 ? `
+        <button class="action-item" disabled>
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Sertai Mafia / Sindiket</span>
+            <span class="ai-desc">Laluan organisasi jenayah terancang</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill done">Terbuka umur 18+</span></span>
+        </button>
+      ` : `
+        <button class="action-item" id="act-join-mafia" ${s.yearlyActions.mafiaApply ? 'disabled' : ''}>
+          <span class="ai-icon">🕶️</span>
+          <span class="ai-content">
+            <span class="ai-title">Cuba Sertai Mafia / Sindiket</span>
+            <span class="ai-desc">${s.yearlyActions.mafiaApply ? 'Cubaan tahun ini sudah digunakan (had 1x setahun)' : 'Mohon menyertai organisasi Mafia (peluang rawak • had 1x setahun)'}</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill ${s.yearlyActions.mafiaApply ? 'done' : 'free'}">${s.yearlyActions.mafiaApply ? 'Selesai tahun ini' : 'Cuba Sertai →'}</span></span>
+        </button>
+      `;
+
       contentHtml += `
         <div class="info-banner" style="border-left:4px solid #334155;">
           <strong>🕶️ Jenayah &amp; Aktiviti Gelap</strong><br/>
           <span style="font-size:12px;">Operasi Berjaya: <strong>${crimesDoneTotal}</strong> • Reputasi Gelap: <strong>${crimRep}%</strong> • Haba Polis: <strong>${heat}%</strong></span>
         </div>
-        <div class="section-heading">Pilihan Aktiviti Gelap Tahun Ini (Percubaan: ${usedAttempts}/${maxAttempts})</div>
-        <div class="action-list">
-          ${crimeOpts.map(cr => {
-            const isDone = doneIds.includes(cr.id) || usedAttempts >= maxAttempts;
-            return `
-              <button class="action-item crime-btn" data-crime="${cr.id}" ${isDone ? 'disabled' : ''}>
-                <span class="ai-icon">${cr.icon}</span>
-                <span class="ai-content">
-                  <span class="ai-title">${Utils.escapeHtml(cr.title)}</span>
-                  <span class="ai-desc">${Utils.escapeHtml(cr.desc)}</span>
-                </span>
-              </button>
-            `;
-          }).join('')}
-          ${canJoinMafia ? `
-            <button class="action-item" id="act-join-mafia" ${s.yearlyActions.mafiaApply ? 'disabled' : ''}>
-              <span class="ai-icon">🤝</span>
-              <span class="ai-content">
-                <span class="ai-title">Cari &amp; Sertai Sindiket Mafia</span>
-                <span class="ai-desc">Gunakan reputasi dunia gelap anda untuk memohon menyertai organisasi Mafia</span>
-              </span>
-            </button>
-          ` : ''}
+        <div class="section-heading">🕶️ Sindiket Mafia</div>
+        <div class="action-list" style="margin-bottom:10px;">
+          ${mafiaCardHtml}
         </div>
+        ${s.age >= 14 ? `
+          <div class="section-heading">Pilihan Aktiviti Gelap Tahun Ini (Percubaan: ${usedAttempts}/${maxAttempts})</div>
+          <div class="action-list">
+            ${crimeOpts.map(cr => {
+              const isDone = doneIds.includes(cr.id) || usedAttempts >= maxAttempts;
+              return `
+                <button class="action-item crime-btn" data-crime="${cr.id}" ${isDone ? 'disabled' : ''}>
+                  <span class="ai-icon">${cr.icon}</span>
+                  <span class="ai-content">
+                    <span class="ai-title">${Utils.escapeHtml(cr.title)}</span>
+                    <span class="ai-desc">${Utils.escapeHtml(cr.desc)}</span>
+                  </span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : `<div class="info-banner">Aktiviti jenayah jalanan dibuka pada umur 14+, manakala Sindiket Mafia terbuka pada umur 18+.</div>`}
       `;
     }
 
@@ -2341,6 +2369,11 @@ window.Modals = {
         App.renderAll();
         this.showActivities('crime');
       });
+    });
+
+    const openMafiaPanelBtn = document.getElementById('act-open-mafia-panel');
+    if (openMafiaPanelBtn) openMafiaPanelBtn.addEventListener('click', () => {
+      if (window.SpecialModeModals) SpecialModeModals.showDashboard();
     });
 
     const joinMafiaBtn = document.getElementById('act-join-mafia');
