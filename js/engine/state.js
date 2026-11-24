@@ -29,60 +29,106 @@ window.GameState = {
     const fatherJob = Utils.pick(country.jobs).title;
     const motherJob = Utils.pick(country.jobs).title;
 
-    const relationships = [
-      {
-        id: 'rel_mom',
-        name: motherName,
-        role: 'Ibu',
-        category: 'family',
-        gender: 'female',
-        age: Utils.randInt(25, 36),
-        countryId,
-        closeness: Utils.randInt(75, 95),
-        trust: Utils.randInt(78, 96),
-        compatibility: Utils.randInt(70, 95),
-        alive: true,
-        job: motherJob
-      },
-      {
-        id: 'rel_dad',
-        name: fatherName,
-        role: 'Ayah',
-        category: 'family',
-        gender: 'male',
-        age: Utils.randInt(26, 39),
-        countryId,
-        closeness: Utils.randInt(72, 94),
-        trust: Utils.randInt(75, 95),
-        compatibility: Utils.randInt(68, 94),
-        alive: true,
-        job: fatherJob
-      }
-    ];
+    const makeParent = (id, pName, role, pGender, pJob, adoptedFlag = false) => ({
+      id,
+      name: pName,
+      role,
+      category: 'family',
+      gender: pGender,
+      age: Utils.randInt(25, 39),
+      countryId,
+      closeness: Utils.randInt(72, 95),
+      trust: Utils.randInt(75, 96),
+      compatibility: Utils.randInt(68, 95),
+      isAdopted: adoptedFlag,
+      alive: true,
+      job: pJob
+    });
 
-    if (Utils.chance(0.55)) {
-      const sibGender = Utils.chance(0.5) ? 'male' : 'female';
-      const sibName = Utils.generateChildName({
-        countryId,
-        gender: sibGender,
-        heritageId: validHeritage
-      });
-      relationships.push({
-        id: 'rel_sib_1',
-        name: sibName,
-        role: sibGender === 'male' ? 'Abang' : 'Kakak',
-        category: 'family',
-        gender: sibGender,
-        age: Utils.randInt(2, 6),
-        countryId,
-        closeness: Utils.randInt(65, 90),
-        trust: Utils.randInt(68, 92),
-        compatibility: Utils.randInt(65, 92),
-        isAdopted: false,
-        isOutOfWedlock: false,
-        alive: true,
-        job: 'Pelajar'
-      });
+    const makeSiblings = (count, adoptedFlag = false) => {
+      const list = [];
+      for (let i = 1; i <= count; i++) {
+        const sibGender = Utils.chance(0.5) ? 'male' : 'female';
+        const sibName = Utils.generateChildName({ countryId, gender: sibGender, heritageId: validHeritage });
+        list.push({
+          id: `rel_sib_${i}`,
+          name: sibName,
+          role: sibGender === 'male' ? 'Abang' : 'Kakak',
+          category: 'family',
+          gender: sibGender,
+          age: Utils.randInt(1, 10),
+          countryId,
+          closeness: Utils.randInt(62, 90),
+          trust: Utils.randInt(65, 92),
+          compatibility: Utils.randInt(62, 92),
+          isAdopted: adoptedFlag,
+          isOutOfWedlock: false,
+          alive: true,
+          job: 'Pelajar'
+        });
+      }
+      return list;
+    };
+
+    const bgRoll = Math.random() * 100;
+    const familyBackground = bgRoll < 35 ? 'normal'
+      : bgRoll < 53 ? 'large_family'
+      : bgRoll < 67 ? 'single_mother'
+      : bgRoll < 77 ? 'single_father'
+      : bgRoll < 87 ? 'adopted'
+      : bgRoll < 94 ? 'orphan'
+      : 'foundling';
+
+    const relationships = [];
+    let resolvedAdopted = Boolean(isAdopted);
+    let birthStory = `Anda dilahirkan di ${city}, ${country.name} ${country.flag}.`;
+
+    if (familyBackground === 'normal') {
+      relationships.push(makeParent('rel_mom', motherName, 'Ibu', 'female', motherJob));
+      relationships.push(makeParent('rel_dad', fatherName, 'Ayah', 'male', fatherJob));
+      const sibCount = Utils.randInt(0, 2);
+      relationships.push(...makeSiblings(sibCount));
+      birthStory = `Anda dilahirkan dalam keluarga biasa di ${city}, ${country.name} ${country.flag}. Ibu anda ialah ${motherName} (${motherJob}) dan ayah anda ialah ${fatherName} (${fatherJob})${sibCount > 0 ? ` bersama ${sibCount} orang adik-beradik` : ''}.`;
+    } else if (familyBackground === 'large_family') {
+      relationships.push(makeParent('rel_mom', motherName, 'Ibu', 'female', motherJob));
+      relationships.push(makeParent('rel_dad', fatherName, 'Ayah', 'male', fatherJob));
+      const sibCount = Utils.randInt(4, 7);
+      relationships.push(...makeSiblings(sibCount));
+      birthStory = `Anda dilahirkan dalam keluarga besar yang meriah di ${city}, ${country.name} ${country.flag}. Ibu anda ialah ${motherName} (${motherJob}) dan ayah anda ialah ${fatherName} (${fatherJob}), dikelilingi ${sibCount} orang adik-beradik!`;
+    } else if (familyBackground === 'single_mother') {
+      relationships.push(makeParent('rel_mom', motherName, 'Ibu', 'female', motherJob));
+      const sibCount = Utils.chance(0.45) ? 1 : 0;
+      relationships.push(...makeSiblings(sibCount));
+      birthStory = `Anda dilahirkan di ${city}, ${country.name} ${country.flag} dan dibesarkan oleh seorang ibu tunggal yang tabah, ${motherName} (${motherJob}).`;
+    } else if (familyBackground === 'single_father') {
+      relationships.push(makeParent('rel_dad', fatherName, 'Ayah', 'male', fatherJob));
+      const sibCount = Utils.chance(0.45) ? 1 : 0;
+      relationships.push(...makeSiblings(sibCount));
+      birthStory = `Anda dilahirkan di ${city}, ${country.name} ${country.flag} dan dibesarkan oleh seorang bapa tunggal yang cekal, ${fatherName} (${fatherJob}).`;
+    } else if (familyBackground === 'adopted') {
+      resolvedAdopted = true;
+      relationships.push(makeParent('rel_mom', motherName, 'Ibu Angkat', 'female', motherJob, true));
+      relationships.push(makeParent('rel_dad', fatherName, 'Ayah Angkat', 'male', fatherJob, true));
+      if (Utils.chance(0.4)) relationships.push(...makeSiblings(1, true));
+      birthStory = `Anda dilahirkan di ${city}, ${country.name} ${country.flag} dan diambil sebagai anak angkat oleh pasangan penyayang, ${motherName} (${motherJob}) dan ${fatherName} (${fatherJob}).`;
+    } else if (familyBackground === 'orphan') {
+      const guardianGender = Utils.chance(0.5) ? 'female' : 'male';
+      const guardianName = Utils.generateName(countryId, guardianGender, validHeritage);
+      relationships.push(makeParent('rel_guardian', guardianName, 'Penjaga Rumah Anak Yatim', guardianGender, 'Penjaga Kebajikan'));
+      birthStory = `Anda dilahirkan di ${city}, ${country.name} ${country.flag} sebagai anak yatim piatu tanpa ibu bapa, dan membesar di rumah anak yatim di bawah jagaan ${guardianName}.`;
+    } else {
+      const adoptedByFamily = Utils.chance(0.5);
+      if (adoptedByFamily) {
+        resolvedAdopted = true;
+        relationships.push(makeParent('rel_mom', motherName, 'Ibu Angkat', 'female', motherJob, true));
+        relationships.push(makeParent('rel_dad', fatherName, 'Ayah Angkat', 'male', fatherJob, true));
+        birthStory = `Anda ditemui semasa bayi di ${city}, ${country.name} ${country.flag} tanpa rekod keluarga kandung, sebelum diambil dan dibesarkan oleh keluarga angkat ${motherName} (${motherJob}) dan ${fatherName} (${fatherJob}).`;
+      } else {
+        const guardianGender = Utils.chance(0.5) ? 'female' : 'male';
+        const guardianName = Utils.generateName(countryId, guardianGender, validHeritage);
+        relationships.push(makeParent('rel_guardian', guardianName, 'Penjaga Pusat Jagaan', guardianGender, 'Pekerja Sosial'));
+        birthStory = `Anda ditemui semasa bayi di ${city}, ${country.name} ${country.flag} tanpa rekod keluarga kandung, dan membesar di pusat jagaan kebajikan di bawah jagaan ${guardianName}.`;
+      }
     }
 
     const state = {
@@ -91,7 +137,8 @@ window.GameState = {
       gender,
       heritageId: validHeritage,
       heritageLabel: heritageObj.label,
-      isAdopted: Boolean(isAdopted),
+      familyBackground,
+      isAdopted: resolvedAdopted,
       isOutOfWedlock: Boolean(isOutOfWedlock),
       age: 0,
       year: startYear,
@@ -100,6 +147,7 @@ window.GameState = {
 
       hiddenFlags: {},
       recentCrises: [],
+      deceasedHistory: [],
 
       birthCountryId: countryId,
       birthCity: city,
@@ -180,7 +228,7 @@ window.GameState = {
           entries: [
             {
               type: 'milestone',
-              text: `Anda dilahirkan di ${city}, ${country.name} ${country.flag}. Ibu anda ialah ${motherName} (${motherJob}) dan ayah anda ialah ${fatherName} (${fatherJob}).`
+              text: birthStory
             },
             {
               type: 'culture',
@@ -207,6 +255,21 @@ window.GameState = {
     }
     this.save();
     return state;
+  },
+
+  recordDeceased(rel, cause) {
+    const s = this.current;
+    if (!s || !rel) return;
+    if (!Array.isArray(s.deceasedHistory)) s.deceasedHistory = [];
+    s.deceasedHistory.push({
+      id: rel.id || `dec_${Date.now()}`,
+      name: rel.name || 'Tidak Diketahui',
+      role: rel.role || 'Kenalan',
+      age: rel.age ?? 0,
+      cause: cause || 'Sebab semula jadi',
+      year: s.year,
+      playerAge: s.age
+    });
   },
 
   addJournalEntry(text, type = 'normal') {
@@ -451,6 +514,7 @@ window.GameState = {
 
       hiddenFlags: {},
       recentCrises: [],
+      deceasedHistory: [],
 
       birthCountryId: cId,
       birthCity: city,

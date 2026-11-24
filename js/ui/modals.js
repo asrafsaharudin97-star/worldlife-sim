@@ -567,6 +567,17 @@ window.Modals = {
 
     html += `<div class="section-heading">❤️ Keluarga (${familyList.length})</div><div class="action-list">${renderList(familyList)}</div>`;
 
+    const deceasedList = Array.isArray(s.deceasedHistory) ? s.deceasedHistory : [];
+    if (deceasedList.length > 0) {
+      html += `<div class="section-heading">🕊️ Dalam Kenangan / Sejarah Kematian (${deceasedList.length})</div>`;
+      html += `<div class="action-list">${deceasedList.map(d => `
+        <div class="info-banner" style="margin-bottom:6px;">
+          <strong>🕊️ ${Utils.escapeHtml(d.name)}</strong> <small style="color:#64748b;">(${Utils.escapeHtml(d.role)} • Umur ${d.age} thn)</small><br/>
+          <small style="color:#475569;">Punca: ${Utils.escapeHtml(d.cause)} • Tahun ${d.year} (Umur anda: ${d.playerAge} thn)</small>
+        </div>
+      `).join('')}</div>`;
+    }
+
     this.open({
       icon: '❤️',
       title: 'Hubungan & Sosial',

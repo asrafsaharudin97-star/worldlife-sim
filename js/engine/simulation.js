@@ -68,6 +68,10 @@ window.Sim = {
               ? RelationshipDramaData.isCloseFamilyMember(s, rel)
               : ['Ibu', 'Ayah', 'Bapa', 'Abang', 'Kakak', 'Adik/Abang', 'Adik/Kakak'].includes(rel.role));
 
+        if (window.GameState && GameState.recordDeceased) {
+          GameState.recordDeceased(rel, deathInfo.cause);
+        }
+
         if (s.partnerId === rel.id) {
           if (wasSpouse) {
             s.maritalStatus = s.gender === 'male' ? 'Duda' : 'Balu';

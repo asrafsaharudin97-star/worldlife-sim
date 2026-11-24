@@ -762,9 +762,12 @@ window.RelationshipDramaData = {
     // Hanya ahli keluarga terdekat (pasangan, anak, ibu bapa, adik-beradik) membuka modal pengurusan pengebumian penuh
     if (!this.isCloseFamilyMember(s, npc)) return null;
 
-    const funeralCost = Utils.usdToLocal(650, s.countryId);
+    const isMinor = (s.age || 0) < 18;
+    const funeralCost = isMinor ? 0 : Utils.usdToLocal(650, s.countryId);
     const charityCost = Utils.usdToLocal(250, s.countryId);
     const counselCost = Utils.usdToLocal(180, s.countryId);
+    const hasLivingParent = (s.relationships || []).some(r => r.alive && r.id !== npc.id && ['Ibu', 'Ayah', 'Ibu Angkat', 'Ayah Angkat', 'Mother', 'Father'].includes(r.role));
+    const minorSponsor = hasLivingParent ? 'ibu/bapa yang masih hidup' : 'saudara-mara dan bantuan kebajikan masyarakat';
     const wasSpouse = Boolean(npc._wasSpouse);
     const statusNote = wasSpouse
       ? `\n\nStatus anda kini bertukar kepada ${s.gender === 'male' ? 'Duda' : 'Balu'}.`
@@ -778,16 +781,22 @@ window.RelationshipDramaData = {
       text: `Innalillahi wa inna ilaihi raji'un / Salam takziah. ${npc.role} anda, ${npc.name} (Umur ${npc.age} tahun), telah menghembuskan nafas terakhir akibat ${cause}.${statusNote}${impactNote}`,
       choices: [
         {
-          label: `🕯️ Uruskan Pengebumian Sempurna (${Utils.formatMoney(funeralCost, s.countryId)})`,
-          hint: 'Berbayar • Penghormatan terakhir terbaik (+Karma & +Reputasi Keluarga)',
+          label: isMinor
+            ? '🕯️ Hadiri Majlis Pengebumian (Kos RM 0 — Ditanggung)'
+            : `🕯️ Uruskan Pengebumian Sempurna (${Utils.formatMoney(funeralCost, s.countryId)})`,
+          hint: isMinor
+            ? `Bawah umur • Urusan & kos pengebumian ditanggung oleh ${minorSponsor}`
+            : 'Berbayar • Penghormatan terakhir terbaik (+Karma & +Reputasi Keluarga)',
           customAction: (state) => {
-            if (state.money >= funeralCost) {
+            if (!isMinor && state.money >= funeralCost) {
               state.money -= funeralCost;
             }
             if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 12, -100, 100);
             if (window.Dynasty) Dynasty.adjustReputation(6);
             return {
-              outcome: `Anda menguruskan majlis pengebumian ${npc.name} dengan penuh tertib dan penghormatan terakhir (${happyDrop}% Kegembiraan).`,
+              outcome: isMinor
+                ? `Urusan pengebumian ${npc.name} ditanggung sepenuhnya oleh ${minorSponsor} tanpa caj kepada anda. Anda menghadiri majlis dengan penuh rasa hiba (${happyDrop}% Kegembiraan).`
+                : `Anda menguruskan majlis pengebumian ${npc.name} dengan penuh tertib dan penghormatan terakhir (${happyDrop}% Kegembiraan).`,
               toastType: 'culture'
             };
           }
@@ -798,7 +807,9 @@ window.RelationshipDramaData = {
           customAction: (state) => {
             if (state.alignment) state.alignment.karma = Utils.clamp((state.alignment.karma || 0) + 5, -100, 100);
             return {
-              outcome: `Majlis pengebumian dan peringatan ringkas diadakan untuk mengenang pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
+              outcome: isMinor
+                ? `Majlis pengebumian dan peringatan ringkas untuk ${npc.name} diuruskan oleh ${minorSponsor} (${happyDrop}% Kegembiraan).`
+                : `Majlis pengebumian dan peringatan ringkas diadakan untuk mengenang pemergian ${npc.name} (${happyDrop}% Kegembiraan).`,
               toastType: 'culture'
             };
           }
