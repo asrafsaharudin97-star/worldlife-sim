@@ -366,10 +366,22 @@ window.PrisonFugitive = {
     };
   },
 
+  imprisonCharacter(s, years, crimeName, securityLevel = 'medium') {
+    const st = s || GameState.current;
+    if (!st) return;
+    this.enterPrisonState(st, crimeName || 'Kesalahan Jenayah', years || 3, securityLevel);
+  },
+
   // --------------------------------------------------------------------------
   // 1. SISTEM PERBICARAAN MAHKAMAH & PEGUAM (5 PILIHAN PEMBELAAN)
   // --------------------------------------------------------------------------
   buildCourtTrialEvent(s, crimeName, baseYears = 3, forcedSecurity = null) {
+    if (s && typeof s === 'object' && !Array.isArray(s) && ('crimeLabel' in s || 'minYears' in s) && GameState.current) {
+      const cfg = s;
+      const avgYrs = Math.max(1, Math.round(((cfg.minYears || 2) + (cfg.maxYears || 5)) / 2));
+      const secMap = { max: 'maximum', maximum: 'maximum', medium: 'medium', min: 'minimum', minimum: 'minimum' };
+      return this.buildCourtTrialEvent(GameState.current, cfg.crimeLabel || 'Pertuduhan Jenayah', avgYrs, secMap[cfg.security] || null);
+    }
     this.ensureFields(s);
     const c = Utils.getCountry(s.countryId);
     const secLevel = forcedSecurity || this.getSecurityTierForYears(baseYears);

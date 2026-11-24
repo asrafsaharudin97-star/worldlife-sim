@@ -416,6 +416,15 @@ window.Sim = {
     return { event, died: false, babyBirth, childMilestoneQueue, secondarySchoolChoice: Boolean(s.education && s.education.pendingSecondaryChoice) };
   },
 
+  triggerDeath(cause) {
+    const s = GameState.current;
+    if (!s || !s.alive) return;
+    s.alive = false;
+    s.causeOfDeath = cause || 'Sebab tidak diketahui';
+    GameState.archiveCurrentLife();
+    GameState.save();
+  },
+
   computeMiscarriageChance(s, motherAge) {
     let base = 0.09; // 8–10% (umur < 35)
     if (motherAge > 42) base = 0.38; // 35%+ (umur > 42)
@@ -1612,6 +1621,9 @@ window.Sim = {
 
   _enforceExactlyThreeChoices(ev, s, c) {
     if (!ev || !Array.isArray(ev.choices)) return ev;
+    if (ev.id && /^(uni_child_talent|npc_death_|court_trial_|police_arrest_)/.test(ev.id)) {
+      return ev;
+    }
 
     const shuffle = (arr) => {
       const copy = [...arr];
@@ -2895,15 +2907,17 @@ window.Sim = {
 
       // Risiko hukuman penjara bagi jenayah berat (18+) atau pusat juvana bagi bawah umur berulang
       const shouldJail = s.age >= 18 && def.jailYears && (currentHeat >= 45 || Utils.chance(0.45));
-      if (shouldJail && window.PrisonEngine && PrisonEngine.sendToPrison) {
+      if (shouldJail && window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
         const yrs = Utils.randInt(def.jailYears[0], def.jailYears[1]);
-        PrisonEngine.sendToPrison(s, def.title, yrs);
+        PrisonFugitive.enterPrisonState(s, def.title, yrs, this.CRIME_POOL && yrs >= 6 ? 'maximum' : 'medium');
+        const isMafiaLife = Boolean(s.prison && s.prison.isLife);
+        const termLabel = isMafiaLife ? 'SEUMUR HIDUP (Ahli Mafia)' : `${yrs} tahun`;
         GameState.addJournalEntry(
-          `🚓 DICEKUP POLIS! Anda gagal dalam "${def.title}" di ${c.name}, didenda ${Utils.formatMoney(fine, s.countryId)} dan dijatuhi hukuman penjara ${yrs} tahun!`,
+          `🚓 DICEKUP POLIS! Anda gagal dalam "${def.title}" di ${c.name}, didenda ${Utils.formatMoney(fine, s.countryId)} dan dijatuhi hukuman penjara ${termLabel}!`,
           'warning'
         );
         GameState.save();
-        return { ok: false, msg: `Kantoi! Dipenjara ${yrs} tahun & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
+        return { ok: false, msg: `Kantoi! Dipenjara ${termLabel} & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
       }
 
       if (s.age < 18 && currentHeat >= 30 && Utils.chance(0.4)) {
@@ -3013,9 +3027,11 @@ window.Sim = {
     const c = Utils.getCountry(s.countryId);
     if (s.hasDriverLicense) return { ok: false, msg: 'Anda sudah memiliki lesen memandu!' };
     if (s.age < 17) return { ok: false, msg: 'Tunggu umur 17 tahun untuk ambil lesen memandu!' };
+    if (s.yearlyActions.drivingTest) return { ok: false, msg: 'Ujian memandu sudah diambil tahun ini.' };
     const fee = Utils.usdToLocal(220, s.countryId);
-    if (s.money < fee && s.age >= 18) return { ok: false, msg: `Yuran ujian memandu ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    if (s.money < fee && s.age >= 18) return { ok: false, msg: `Wang tidak mencukupi! Yuran ujian memandu ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     if (s.age >= 18) s.money -= fee;
+    s.yearlyActions.drivingTest = true;
 
     const passChance = Math.min(0.95, 0.55 + s.stats.smarts * 0.004);
     const localTestName = c.id === 'MY' ? 'Ujian Bukit & Jalan Raya JPJ'
@@ -3034,7 +3050,7 @@ window.Sim = {
       GameState.adjustStats({ happiness: -4 });
       GameState.addJournalEntry(`🚗 Kereta termati enjin di bukit semasa ${localTestName} — cuba lagi nanti!`);
       GameState.save();
-      return { ok: false, msg: `Gagal ${localTestName}! Cuba lagi.` };
+      return { ok: false, msg: `Gagal ${localTestName}! Cuba lagi tahun hadapan.` };
     }
   },
 
@@ -3045,12 +3061,8 @@ window.Sim = {
       return { ok: false, msg: 'Anda sudah menyertai aktiviti kebajikan komuniti tahun ini.' };
     }
     const charityCost = s.age >= 18 ? Utils.usdToLocal(35, s.countryId) : 0;
-    if (s.age >= 18 && s.money < charityCost) {
-      s.yearlyActions.communityCharity = true;
-      GameState.adjustStats({ happiness: 7, health: 3 });
-      GameState.addJournalEntry('🤝 Sukarelawan Komuniti: Anda meluangkan masa membantu jiran dan komuniti setempat.', 'mindful');
-      GameState.save();
-      return { ok: true, msg: 'Aktiviti sukarelawan selesai! Hati terasa lebih tenang.' };
+    if (charityCost > 0 && s.money < charityCost) {
+      return { ok: false, msg: `Wang tidak mencukupi! Perlukan ${Utils.formatMoney(charityCost, s.countryId)}.` };
     }
     if (charityCost > 0) s.money -= charityCost;
     s.yearlyActions.communityCharity = true;

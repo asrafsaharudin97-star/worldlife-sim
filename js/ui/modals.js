@@ -57,6 +57,12 @@ window.Modals = {
         const idx = Number(btn.dataset.choiceIdx);
         const choice = event.choices[idx];
         const res = Sim.resolveEventChoice(event, choice) || {};
+        if (GameState.current && !GameState.current.alive) {
+          this.close(true);
+          App.renderAll();
+          setTimeout(() => this.showDeathSummary(), 200);
+          return;
+        }
         if (res.openDivorceModal) {
           this.showDivorceModal(res.openDivorceModal.partnerId, res.openDivorceModal);
           return;
@@ -2056,18 +2062,18 @@ window.Modals = {
             <span class="ai-icon">🧘</span>
             <span class="ai-content">
               <span class="ai-title">Tenangkan Fikiran di Taman</span>
-              <span class="ai-desc">Ambil angin segar &amp; tenangkan fikiran di taman</span>
+              <span class="ai-desc">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Ambil angin segar &amp; tenangkan fikiran di taman'}</span>
             </span>
-            <span class="ai-right">Percuma</span>
+            <span class="ai-right">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
           ${s.age >= 17 && !s.hasDriverLicense ? `
-            <button class="action-item" id="act-driving-test">
+            <button class="action-item" id="act-driving-test" ${s.yearlyActions.drivingTest || (s.age >= 18 && s.money < Utils.usdToLocal(220, s.countryId)) ? 'disabled' : ''}>
               <span class="ai-icon">🚗</span>
               <span class="ai-content">
                 <span class="ai-title">Ambil Ujian Memandu ${c.id === 'MY' ? 'JPJ' : c.name}</span>
-                <span class="ai-desc">Lulus ujian jalan raya untuk dapatkan lesen memandu</span>
+                <span class="ai-desc">${s.yearlyActions.drivingTest ? 'Selesai tahun ini' : 'Lulus ujian jalan raya untuk dapatkan lesen memandu'}</span>
               </span>
-              <span class="ai-right cost">${s.age < 18 ? 'Mak Ayah Bayar' : Utils.formatMoney(Utils.usdToLocal(220, s.countryId), s.countryId)}</span>
+              <span class="ai-right cost">${s.yearlyActions.drivingTest ? 'Selesai tahun ini' : (s.age < 18 ? 'Mak Ayah Bayar' : Utils.formatMoney(Utils.usdToLocal(220, s.countryId), s.countryId))}</span>
             </button>
           ` : ''}
         </div>
@@ -2312,7 +2318,7 @@ window.Modals = {
     if (medBtn) medBtn.addEventListener('click', () => {
       s.yearlyActions.meditate = true;
       GameState.adjustStats({ happiness: 8, health: 4 });
-      if (typeof AlignmentEngine !== 'undefined') AlignmentEngine.adjust(s, { stress: -6 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -6 });
       GameState.addJournalEntry(`🧘 Bertenang dan berjalan santai di taman rekreasi (-6% Stres).`);
       GameState.save();
       App.renderAll();

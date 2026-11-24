@@ -835,6 +835,7 @@ window.GameState = {
 
       hiddenFlags: {},
       recentCrises: [],
+      deceasedHistory: [],
 
       birthCountryId: cId,
       birthCity: city,
@@ -983,6 +984,7 @@ window.GameState = {
 
       hiddenFlags: {},
       recentCrises: [],
+      deceasedHistory: [],
 
       birthCountryId: cId,
       birthCity: city,
