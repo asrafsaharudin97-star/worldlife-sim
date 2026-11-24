@@ -299,6 +299,10 @@ window.App = {
     });
   },
 
+  _isToddlerLocked() {
+    return Boolean(GameState.current && GameState.current.age <= 4);
+  },
+
   _bindGlobalEvents() {
     this._bindPerfAndSoundListeners();
     document.getElementById('modal-close').addEventListener('click', () => Modals.close());
@@ -307,15 +311,24 @@ window.App = {
     });
 
     document.getElementById('btn-menu').addEventListener('click', () => Modals.showMenu());
-    document.getElementById('btn-passport').addEventListener('click', () => Modals.showActivities('passport'));
-    document.getElementById('char-avatar').addEventListener('click', () => Modals.showActivities('passport'));
+    document.getElementById('btn-passport').addEventListener('click', () => {
+      if (this._isToddlerLocked()) return;
+      Modals.showActivities('passport');
+    });
+    document.getElementById('char-avatar').addEventListener('click', () => {
+      if (this._isToddlerLocked()) return;
+      Modals.showActivities('passport');
+    });
     document.getElementById('btn-open-legacy').addEventListener('click', () => {
+      if (this._isToddlerLocked()) return;
       if (GameState.current && GameState.current.alive && window.LegacyModals) LegacyModals.showFamilyLegacy();
     });
     document.getElementById('btn-open-modes').addEventListener('click', () => {
+      if (this._isToddlerLocked()) return;
       if (GameState.current && GameState.current.alive && window.SpecialModeModals) SpecialModeModals.showDashboard();
     });
     document.getElementById('btn-open-social').addEventListener('click', () => {
+      if (this._isToddlerLocked()) return;
       if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
     });
     document.getElementById('prison-alert-bar').addEventListener('click', () => {
@@ -329,6 +342,7 @@ window.App = {
 
     document.querySelectorAll('.dock-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (this._isToddlerLocked()) return;
         const tab = btn.dataset.tab;
         if (!GameState.current || !GameState.current.alive) return;
         const pr = GameState.current.prison;
@@ -824,7 +838,27 @@ window.App = {
     this._renderStat('smarts', s.stats.smarts);
     this._renderStat('looks', s.stats.looks);
 
+    this._syncToddlerLockUI(s);
     this._renderJournal(s);
+  },
+
+  _syncToddlerLockUI(s) {
+    const locked = Boolean(s && s.age <= 4);
+    document.querySelectorAll('.dock-btn').forEach(btn => {
+      btn.disabled = locked;
+      btn.setAttribute('aria-disabled', String(locked));
+    });
+    ['btn-passport', 'btn-open-legacy', 'btn-open-modes', 'btn-open-social'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.disabled = locked;
+        el.setAttribute('aria-disabled', String(locked));
+      }
+    });
+    const avatar = document.getElementById('char-avatar');
+    if (avatar) avatar.classList.toggle('is-locked', locked);
+    const notice = document.getElementById('toddler-lock-notice');
+    if (notice) notice.classList.toggle('hidden', !locked);
   },
 
   _renderStat(key, val) {

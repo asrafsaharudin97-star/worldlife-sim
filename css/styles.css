@@ -475,6 +475,29 @@ html, body {
 .dock-btn:active { transform: translateY(0); }
 .dock-icon { font-size: 19px; line-height: 1.1; }
 .dock-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.dock-btn:disabled,
+.quick-hub-btn:disabled,
+.passport-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+.avatar-wrap.is-locked {
+  cursor: default;
+  pointer-events: none;
+}
+.toddler-lock-notice {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+}
 
 .age-up-btn {
   width: 68px;
