@@ -96,6 +96,9 @@ window.EduCareerEngine = {
     if (!('secondaryTrack' in ed)) ed.secondaryTrack = null;
     if (typeof ed.technicalBonus !== 'boolean') ed.technicalBonus = ed.secondaryTrack === 'teknik';
     if (typeof ed.pendingSecondaryChoice !== 'boolean') ed.pendingSecondaryChoice = false;
+    if (ed.droppedOut || ed.stage === 'dropped_out' || ed.secondaryTrack === 'none') {
+      ed.pendingSecondaryChoice = false;
+    }
 
     // Fix nama sekolah untuk tahap menengah / save lama yang sudah umur sekolah menengah
     const c = window.Utils && Utils.getCountry ? Utils.getCountry(s.countryId) : null;

@@ -464,10 +464,20 @@ window.Sim = {
   },
 
   _processEducation(s, c) {
-    const ed = s.education;
-    const ced = c.education;
+    const ed = s && s.education;
+    const ced = c && c.education;
+    if (!ed) return;
 
-    if (s.age === ced.preschool.startAge && ed.stage === 'infant') {
+    if (ed.droppedOut || ed.stage === 'dropped_out' || ed.secondaryTrack === 'none') {
+      ed.pendingSecondaryChoice = false;
+      if (window.EduCareerEngine && EduCareerEngine.tickYearlyEducation) {
+        EduCareerEngine.tickYearlyEducation(s, c);
+      }
+      return;
+    }
+    if (!ced) return;
+
+    if (ced.preschool && s.age === ced.preschool.startAge && ed.stage === 'infant') {
       ed.stage = 'preschool';
       ed.schoolName = `${ced.preschool.name} ${s.city}`;
       GameState.addJournalEntry(`🎒 Anda memulakan alam persekolahan di ${ed.schoolName}, ${c.name}!`, 'milestone');

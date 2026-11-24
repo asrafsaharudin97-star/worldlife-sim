@@ -904,7 +904,7 @@ window.CareerModals = {
         const res = EduCareerEngine.chooseSecondarySchool(btn.dataset.choice);
         App.toast(res.msg, res.ok ? 'success' : 'error');
         if (!res.ok) return;
-        Modals.close();
+        Modals.close(true);
         App.renderAll();
         if (typeof onDone === 'function') onDone();
       });
