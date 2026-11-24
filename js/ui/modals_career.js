@@ -305,8 +305,28 @@ window.CareerModals = {
       return html;
     }
 
+    if (ed.pendingSecondaryChoice) {
+      html += `
+        <div class="info-banner highlight">
+          <strong>🎓 Tamat Sekolah Rendah!</strong><br/>
+          Sila pilih haluan sekolah menengah anda di ${c.name}.
+        </div>
+        <div class="action-list">
+          <button type="button" class="action-item" id="btn-open-sec-choice">
+            <span class="ai-icon">🏫</span>
+            <span class="ai-content">
+              <span class="ai-title">Pilih Sekolah Menengah</span>
+              <span class="ai-desc">Pilih antara Sekolah Menengah Harian, Berasrama, Teknik/Vokasional, atau Tidak Mahu Belajar</span>
+            </span>
+            <span class="ai-right">Pilih</span>
+          </button>
+        </div>
+      `;
+      return html;
+    }
+
     if (['preschool', 'primary', 'secondary'].includes(ed.stage) && !ed.activeStudy) {
-      const canDropSec = ed.stage === 'secondary' && s.age >= 16;
+      const canDropSec = ed.stage === 'secondary';
       html += `
         <div class="info-banner highlight">
           <strong>🏫 ${Utils.escapeHtml(ed.schoolName)}</strong><br/>
@@ -325,8 +345,8 @@ window.CareerModals = {
             <button type="button" class="action-item" id="act-dropout-study" style="border-color:#fca5a5;">
               <span class="ai-icon">🚪</span>
               <span class="ai-content">
-                <span class="ai-title" style="color:#b91c1c;">Berhenti Belajar</span>
-                <span class="ai-desc">Tamatkan persekolahan menengah tanpa SPM/sijil (boleh sambung semula melalui Kelas Dewasa nanti)</span>
+                <span class="ai-title" style="color:#b91c1c;">Berhenti Sekolah</span>
+                <span class="ai-desc">Tamatkan persekolahan menengah tanpa sijil menengah (boleh sambung semula melalui Kelas Dewasa nanti)</span>
               </span>
               <span class="ai-right cost">Berhenti</span>
             </button>
@@ -701,6 +721,11 @@ window.CareerModals = {
         });
       });
     } else if (tab === 'education') {
+      const secChoiceBtn = document.getElementById('btn-open-sec-choice');
+      if (secChoiceBtn) secChoiceBtn.addEventListener('click', () => {
+        this.showSecondarySchoolChoiceModal(() => this.showHub('education'));
+      });
+
       const studyBtn = document.getElementById('act-study-hard');
       if (studyBtn) studyBtn.addEventListener('click', () => {
         const res = EduCareerEngine.studyHarder();
@@ -760,39 +785,39 @@ window.CareerModals = {
   },
 
   // --------------------------------------------------------------------------
-  // MODAL PENGESAHAN BERHENTI BELAJAR ("🚪 Berhenti Belajar")
+  // MODAL PENGESAHAN BERHENTI BELAJAR / BERHENTI SEKOLAH
   // --------------------------------------------------------------------------
   showDropoutConfirmation() {
     const s = GameState.current;
     if (!s || !EduCareerEngine.canDropOut(s)) return;
+    const isSec = s.education && s.education.stage === 'secondary' && !s.education.activeStudy;
     const courseLabel = EduCareerEngine.getActiveStudyLabel(s);
     const lvlInfo = EducationData.LEVEL_INFO[s.education.educationLevel] || EducationData.LEVEL_INFO.none;
 
     Modals.open({
       icon: '🚪',
-      title: 'Pengesahan Berhenti Belajar',
+      title: isSec ? 'Pengesahan Berhenti Sekolah' : 'Pengesahan Berhenti Belajar',
       subtitle: courseLabel,
       bodyHtml: `
         <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;line-height:1.58;">
-          <strong>⚠️ AMARAN SEBELUM BERHENTI BELAJAR</strong><br/>
-          • Pengajian semasa anda (<strong>${Utils.escapeHtml(courseLabel)}</strong>) akan dibatalkan <strong>tanpa sebarang sijil atau ijazah</strong> — kelayakan tertinggi anda kekal pada tahap terakhir yang tamat (<strong>${lvlInfo.icon} ${Utils.escapeHtml(lvlInfo.label)}</strong>).<br/>
-          • <strong>Yuran atau pinjaman pengajian yang telah dibayar tidak akan dipulangkan.</strong><br/>
-          • Yuran tahunan akan dihentikan serta-merta, stres berkurang (-15% hingga -25%), dan anda boleh terus memohon pekerjaan sepenuh masa (atau mendaftar semula pengajian pada masa hadapan).
+          <strong>⚠️ AMARAN SEBELUM ${isSec ? 'BERHENTI SEKOLAH' : 'BERHENTI BELAJAR'}</strong><br/>
+          • Pengajian semasa anda (<strong>${Utils.escapeHtml(courseLabel)}</strong>) akan ditamatkan <strong>tanpa sebarang sijil atau ijazah</strong> — kelayakan tertinggi anda kekal pada tahap terakhir yang tamat (<strong>${lvlInfo.icon} ${Utils.escapeHtml(lvlInfo.label)}</strong>).<br/>
+          ${isSec ? '• Status pelajar akan ditamatkan serta-merta dan kad sekolah akan dikeluarkan.' : '• <strong>Yuran atau pinjaman pengajian yang telah dibayar tidak akan dipulangkan.</strong><br/>• Yuran tahunan akan dihentikan serta-merta, stres berkurang (-15% hingga -25%), dan anda boleh terus memohon pekerjaan sepenuh masa (atau mendaftar semula pengajian pada masa hadapan).'}
           ${s.age < 23 ? '<br/>• Ibu bapa mungkin kecewa dengan keputusan ini (-10% hingga -20% Hubungan).' : ''}
         </div>
         <div class="action-list">
           <button type="button" class="action-item" id="btn-confirm-dropout" style="border-color:#ef4444;">
             <span class="ai-icon">🚪</span>
             <span class="ai-content">
-              <span class="ai-title" style="color:#b91c1c;">Sah Berhenti Belajar</span>
-              <span class="ai-desc">Batalkan pengajian sekarang &amp; hentikan yuran tahunan</span>
+              <span class="ai-title" style="color:#b91c1c;">${isSec ? 'Sah Berhenti Sekolah' : 'Sah Berhenti Belajar'}</span>
+              <span class="ai-desc">${isSec ? 'Tamatkan persekolahan menengah sekarang' : 'Batalkan pengajian sekarang &amp; hentikan yuran tahunan'}</span>
             </span>
             <span class="ai-right cost">Sah Berhenti</span>
           </button>
           <button type="button" class="action-item" id="btn-cancel-dropout">
             <span class="ai-icon">↩️</span>
             <span class="ai-content">
-              <span class="ai-title">Batal &amp; Teruskan Pengajian</span>
+              <span class="ai-title">Batal &amp; Teruskan ${isSec ? 'Sekolah' : 'Pengajian'}</span>
               <span class="ai-desc">Kembali ke panel Pendidikan</span>
             </span>
             <span class="ai-right">Kembali</span>
@@ -810,6 +835,79 @@ window.CareerModals = {
       App.renderAll();
       App.toast(res.msg, res.ok ? 'culture' : 'error');
       this.showHub(s.age >= 18 ? 'jobs' : 'education');
+    });
+  },
+
+  // --------------------------------------------------------------------------
+  // MODAL PILIHAN MASUK SEKOLAH MENENGAH (4 PILIHAN)
+  // --------------------------------------------------------------------------
+  showSecondarySchoolChoiceModal(onDone) {
+    const s = GameState.current;
+    if (!s) return;
+    EduCareerEngine.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+    const fee = EduCareerEngine.getBoardingSchoolFee(s.countryId);
+    const smartsOk = (s.stats && s.stats.smarts || 0) >= 70;
+    const moneyOk = (s.money || 0) >= fee;
+    const canBoarding = smartsOk && moneyOk;
+    const harianName = EduCareerEngine.getSecondarySchoolName(s, c, 'harian');
+    const berasramaName = EduCareerEngine.getSecondarySchoolName(s, c, 'berasrama');
+    const teknikName = EduCareerEngine.getSecondarySchoolName(s, c, 'teknik');
+
+    Modals.open({
+      icon: '🏫',
+      title: 'Pilihan Masuk Sekolah Menengah',
+      subtitle: `${c.flag} ${c.name} • Umur ${s.age} tahun`,
+      bodyHtml: `
+        <div class="info-banner highlight">
+          Anda telah menamatkan sekolah rendah! Pilih haluan sekolah menengah anda di <strong>${Utils.escapeHtml(c.name)}</strong>:
+        </div>
+        <div class="action-list">
+          <button type="button" class="action-item sec-choice-btn" data-choice="harian">
+            <span class="ai-icon">🏫</span>
+            <span class="ai-content">
+              <span class="ai-title">Sekolah Menengah Harian</span>
+              <span class="ai-desc">${Utils.escapeHtml(harianName)} • Laluan standard &amp; percuma</span>
+            </span>
+            <span class="ai-right free">Percuma</span>
+          </button>
+          <button type="button" class="action-item sec-choice-btn" data-choice="berasrama" ${!canBoarding ? 'disabled' : ''}>
+            <span class="ai-icon">🏛️</span>
+            <span class="ai-content">
+              <span class="ai-title">Sekolah Berasrama</span>
+              <span class="ai-desc">${Utils.escapeHtml(berasramaName)} • Bonus akademik &amp; peperiksaan (Syarat: Kepintaran ≥ 70%, Yuran ${Utils.formatMoney(fee, s.countryId)})</span>
+            </span>
+            <span class="ai-right ${canBoarding ? 'cost' : ''}">${canBoarding ? Utils.formatMoney(fee, s.countryId) : (!smartsOk ? 'Kepintaran < 70%' : 'Baki Kurang')}</span>
+          </button>
+          <button type="button" class="action-item sec-choice-btn" data-choice="teknik">
+            <span class="ai-icon">🔧</span>
+            <span class="ai-content">
+              <span class="ai-title">Sekolah Teknik / Vokasional</span>
+              <span class="ai-desc">${Utils.escapeHtml(teknikName)} • Bonus kemahiran &amp; kelebihan kerja teknikal</span>
+            </span>
+            <span class="ai-right free">Percuma</span>
+          </button>
+          <button type="button" class="action-item sec-choice-btn" data-choice="tidak_belajar" style="border-color:#fca5a5;">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title" style="color:#b91c1c;">Tidak Mahu Belajar</span>
+              <span class="ai-desc">Terus tamatkan sekolah sekarang tanpa sijil menengah</span>
+            </span>
+            <span class="ai-right cost">Tamat</span>
+          </button>
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.sec-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = EduCareerEngine.chooseSecondarySchool(btn.dataset.choice);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        if (!res.ok) return;
+        Modals.close();
+        App.renderAll();
+        if (typeof onDone === 'function') onDone();
+      });
     });
   }
 };

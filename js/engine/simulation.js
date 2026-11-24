@@ -403,7 +403,7 @@ window.Sim = {
     }
 
     GameState.save();
-    return { event, died: false, babyBirth, childMilestoneQueue };
+    return { event, died: false, babyBirth, childMilestoneQueue, secondarySchoolChoice: Boolean(s.education && s.education.pendingSecondaryChoice) };
   },
 
   computeMiscarriageChance(s, motherAge) {
@@ -467,11 +467,10 @@ window.Sim = {
       );
       GameState.adjustStats({ happiness: score >= 60 ? 8 : -4, smarts: 3 });
     } else if (s.age === ced.secondary.startAge && ed.stage === 'primary') {
-      ed.stage = 'secondary';
-      ed.schoolName = `${ced.secondary.name} ${s.city}`;
-      GameState.addJournalEntry(`🏫 Anda melangkah ke ${ed.schoolName}! Zaman remaja bermula.`, 'milestone');
+      ed.pendingSecondaryChoice = true;
     } else if (s.age === ced.secondary.examAge && ed.stage === 'secondary') {
-      const score = Utils.clamp(s.stats.smarts + Utils.randInt(-8, 12), 20, 100);
+      const trackBonus = ed.secondaryTrack === 'berasrama' ? 8 : 0;
+      const score = Utils.clamp(s.stats.smarts + trackBonus + Utils.randInt(-8, 12), 20, 100);
       let gradeText;
       if (c.id === 'MY') {
         gradeText = score >= 85 ? '9A+ (Pelajar Cemerlang SPM!)' : score >= 70 ? '6A 3B (Keputusan SPM Mantap!)' : score >= 50 ? 'Kepujian BM & Matematik' : 'Lulus Asas';
@@ -492,6 +491,12 @@ window.Sim = {
         'milestone'
       );
       GameState.adjustStats({ happiness: score >= 65 ? 12 : 2, smarts: 5 });
+    } else if (ed.stage === 'secondary' && !ed.activeStudy) {
+      if (ed.secondaryTrack === 'berasrama') {
+        GameState.adjustStats({ smarts: 3 });
+      } else if (ed.secondaryTrack === 'teknik') {
+        GameState.adjustStats({ smarts: 2 });
+      }
     }
 
     // Enjin Pendidikan Sepanjang Hayat (Kelas Dewasa, Diploma, Ijazah, Master, PhD & Bayaran Balik Pinjaman)

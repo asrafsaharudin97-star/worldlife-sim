@@ -641,7 +641,7 @@ window.App = {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
-    const { event, died, babyBirth, childMilestoneQueue } = Sim.ageUp();
+    const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice } = Sim.ageUp();
     GameState.syncActiveSlotToCloud('age_up');
     this.renderAll();
 
@@ -672,12 +672,22 @@ window.App = {
       }
     };
 
-    if (babyBirth && Modals.showBabyNamingModal) {
+    const runAfterSecondary = () => {
+      if (babyBirth && Modals.showBabyNamingModal) {
+        setTimeout(() => {
+          Modals.showBabyNamingModal(babyBirth, () => runNextMilestone());
+        }, 160);
+      } else {
+        runNextMilestone();
+      }
+    };
+
+    if (secondarySchoolChoice && window.CareerModals && CareerModals.showSecondarySchoolChoiceModal) {
       setTimeout(() => {
-        Modals.showBabyNamingModal(babyBirth, () => runNextMilestone());
+        CareerModals.showSecondarySchoolChoiceModal(() => runAfterSecondary());
       }, 160);
     } else {
-      runNextMilestone();
+      runAfterSecondary();
     }
   },
 

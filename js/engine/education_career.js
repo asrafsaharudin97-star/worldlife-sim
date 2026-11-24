@@ -93,6 +93,29 @@ window.EduCareerEngine = {
       ed.graduatedCgpa = (lastDeg && typeof lastDeg.gpa === 'number') ? Number(lastDeg.gpa.toFixed(2)) : null;
     }
 
+    if (!('secondaryTrack' in ed)) ed.secondaryTrack = null;
+    if (typeof ed.technicalBonus !== 'boolean') ed.technicalBonus = ed.secondaryTrack === 'teknik';
+    if (typeof ed.pendingSecondaryChoice !== 'boolean') ed.pendingSecondaryChoice = false;
+
+    // Fix nama sekolah untuk tahap menengah / save lama yang sudah umur sekolah menengah
+    const c = window.Utils && Utils.getCountry ? Utils.getCountry(s.countryId) : null;
+    if (c && c.education && c.education.secondary && c.education.primary && !ed.droppedOut && !ed.activeStudy && !ed.hasHighSchool) {
+      const secStart = c.education.secondary.startAge || 13;
+      const secExam = c.education.secondary.examAge || 17;
+      if (ed.stage === 'primary' && s.age >= secStart && s.age <= secExam && !ed.pendingSecondaryChoice) {
+        ed.stage = 'secondary';
+      }
+      if (ed.stage === 'secondary') {
+        const primaryName = c.education.primary.name || '';
+        const needsNameFix = !ed.schoolName
+          || /sekolah rendah/i.test(ed.schoolName)
+          || (primaryName && ed.schoolName.includes(primaryName));
+        if (needsNameFix) {
+          ed.schoolName = this.getSecondarySchoolName(s, c, ed.secondaryTrack || 'harian');
+        }
+      }
+    }
+
     // Kekalkan flag serasi versi lama
     const rank = window.EducationData ? EducationData.levelRank(ed.educationLevel) : 0;
     if (rank >= 1) ed.hasHighSchool = true;
@@ -313,12 +336,118 @@ window.EduCareerEngine = {
     return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${finalTotalYears} tahun, ${fundingLabel})!` };
   },
 
+  getSecondarySchoolName(s, c, track = 'harian') {
+    const city = (s && s.city) || '';
+    const secBase = (c && c.education && c.education.secondary && c.education.secondary.name) || 'Sekolah Menengah';
+    const isMY = c && c.id === 'MY';
+    if (track === 'berasrama') {
+      return isMY ? `Sekolah Berasrama Penuh (SBP) ${city}`.trim() : `Sekolah Berasrama ${secBase} ${city}`.trim();
+    }
+    if (track === 'teknik') {
+      return isMY ? `Sekolah Menengah Teknik / Kolej Vokasional ${city}`.trim() : `Sekolah Teknik & Vokasional ${city}`.trim();
+    }
+    return `${secBase} ${city}`.trim();
+  },
+
+  getBoardingSchoolFee(countryId) {
+    return Utils.usdToLocal(100, countryId);
+  },
+
+  chooseSecondarySchool(choice) {
+    const s = GameState.current;
+    if (!s) return { ok: false, msg: 'Tiada permainan aktif.' };
+    this.ensureFields(s);
+    const ed = s.education;
+    const c = Utils.getCountry(s.countryId);
+
+    if (choice === 'berasrama') {
+      const fee = this.getBoardingSchoolFee(s.countryId);
+      if ((s.stats && s.stats.smarts || 0) < 70) {
+        return { ok: false, msg: 'Syarat Sekolah Berasrama tidak dipenuhi: Kepintaran minimum 70%.' };
+      }
+      if ((s.money || 0) < fee) {
+        return { ok: false, msg: `Baki tidak mencukupi untuk yuran Sekolah Berasrama (${Utils.formatMoney(fee, s.countryId)}).` };
+      }
+      s.money -= fee;
+      ed.stage = 'secondary';
+      ed.secondaryTrack = 'berasrama';
+      ed.technicalBonus = false;
+      ed.schoolName = this.getSecondarySchoolName(s, c, 'berasrama');
+      ed.isStudying = true;
+      ed.droppedOut = false;
+      ed.pendingSecondaryChoice = false;
+      GameState.adjustStats({ smarts: 6, happiness: 3 });
+      GameState.addJournalEntry(
+        `🏛️ Anda diterima masuk ke ${ed.schoolName} (Sekolah Berasrama)! Yuran ${Utils.formatMoney(fee, s.countryId)} dibayar. Bonus akademik aktif!`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: `Berjaya mendaftar ke ${ed.schoolName}!` };
+    }
+
+    if (choice === 'teknik') {
+      ed.stage = 'secondary';
+      ed.secondaryTrack = 'teknik';
+      ed.technicalBonus = true;
+      ed.schoolName = this.getSecondarySchoolName(s, c, 'teknik');
+      ed.isStudying = true;
+      ed.droppedOut = false;
+      ed.pendingSecondaryChoice = false;
+      GameState.adjustStats({ smarts: 4, health: 4 });
+      GameState.addJournalEntry(
+        `🔧 Anda mendaftar masuk ke ${ed.schoolName} (Sekolah Teknik/Vokasional)! Bonus kemahiran & kerja teknikal aktif.`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, msg: `Berjaya mendaftar ke ${ed.schoolName}!` };
+    }
+
+    if (choice === 'tidak_belajar') {
+      ed.stage = 'dropped_out';
+      ed.secondaryTrack = 'none';
+      ed.technicalBonus = false;
+      ed.schoolName = null;
+      ed.isStudying = false;
+      ed.droppedOut = true;
+      ed.hasHighSchool = false;
+      ed.pendingSecondaryChoice = false;
+      ed.educationHistory.push({
+        type: 'dropout',
+        label: 'Tidak menyambung ke Sekolah Menengah',
+        courseLabel: 'Sekolah Menengah',
+        age: s.age,
+        year: s.year
+      });
+      GameState.addJournalEntry(
+        `🚪 Anda memilih untuk tidak menyambung ke sekolah menengah pada umur ${s.age} tahun. Persekolahan tamat tanpa sijil menengah.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: true, msg: 'Anda memilih untuk tidak menyambung ke sekolah menengah.' };
+    }
+
+    // Default: Sekolah Menengah Harian
+    ed.stage = 'secondary';
+    ed.secondaryTrack = 'harian';
+    ed.technicalBonus = false;
+    ed.schoolName = this.getSecondarySchoolName(s, c, 'harian');
+    ed.isStudying = true;
+    ed.droppedOut = false;
+    ed.pendingSecondaryChoice = false;
+    GameState.addJournalEntry(
+      `🏫 Anda melangkah ke ${ed.schoolName} (Sekolah Menengah Harian)! Zaman remaja bermula.`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Berjaya mendaftar ke ${ed.schoolName}!` };
+  },
+
   canDropOut(s = GameState.current) {
     if (!s || !s.education) return false;
     const ed = s.education;
     if (ed.activeStudy) return true;
     if (ed.stage === 'university') return true;
-    if (ed.stage === 'secondary' && s.age >= 16) return true;
+    if (ed.stage === 'secondary') return true;
     return false;
   },
 
@@ -360,6 +489,7 @@ window.EduCareerEngine = {
     ed.uniYearsLeft = 0;
     ed.universityName = null;
     ed.droppedOut = true;
+    ed.pendingSecondaryChoice = false;
 
     if (wasSecondary) {
       ed.stage = 'dropped_out';
@@ -390,13 +520,15 @@ window.EduCareerEngine = {
     // Rekod dalam Sejarah Pendidikan & Log Kehidupan
     ed.educationHistory.push({
       type: 'dropout',
-      label: `Berhenti belajar daripada ${courseLabel}`,
+      label: wasSecondary ? `Berhenti sekolah daripada ${courseLabel}` : `Berhenti belajar daripada ${courseLabel}`,
       courseLabel,
       age: s.age,
       year: s.year
     });
 
-    const logMsg = `🚪 Berhenti belajar daripada ${courseLabel} pada umur ${s.age} tahun tanpa sijil/ijazah (Stres -${stressDrop}%${parentHitNote}). Yuran tahunan dihentikan dan anda bebas memohon pekerjaan sepenuh masa!`;
+    const logMsg = wasSecondary
+      ? `🚪 Anda berhenti sekolah daripada ${courseLabel} pada umur ${s.age} tahun tanpa sijil menengah (Stres -${stressDrop}%${parentHitNote}).`
+      : `🚪 Berhenti belajar daripada ${courseLabel} pada umur ${s.age} tahun tanpa sijil/ijazah (Stres -${stressDrop}%${parentHitNote}). Yuran tahunan dihentikan dan anda bebas memohon pekerjaan sepenuh masa!`;
     GameState.addJournalEntry(logMsg, 'warning');
     GameState.save();
 
