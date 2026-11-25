@@ -2648,6 +2648,9 @@ window.Modals = {
             btn.disabled = false;
             return;
           }
+          if (syncRes && syncRes.ok === false) {
+            App.toast(syncRes.msg || 'Cloud Save gagal/tamat masa, meneruskan ke slot baharu...', 'error');
+          }
         }
 
         // 2. Kosongkan watak aktif dalam memori sebelum menukar activeSlotId supaya slot baharu tidak ditimpa

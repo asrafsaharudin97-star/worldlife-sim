@@ -596,7 +596,10 @@ window.App = {
     }, 140);
 
     try {
-      const result = await taskFn();
+      const result = await Promise.race([
+        Promise.resolve().then(() => taskFn()),
+        new Promise(resolve => setTimeout(() => resolve({ ok: false, timeout: true, msg: 'Proses Cloud tamat masa (simpanan lokal kekal selamat).' }), 9000))
+      ]);
       if (p._timer) { clearInterval(p._timer); p._timer = null; }
       if (result && result.ok === false) {
         return result;
@@ -606,6 +609,9 @@ window.App = {
       this.renderCloudProgressOverlay();
       await new Promise(r => setTimeout(r, 350));
       return result;
+    } catch (err) {
+      console.error('[CloudProgress] Ralat:', err);
+      return { ok: false, msg: 'Ralat penyegerakan Cloud.' };
     } finally {
       if (p._timer) { clearInterval(p._timer); p._timer = null; }
       p.active = false;

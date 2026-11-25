@@ -191,12 +191,19 @@ const FirebaseService = {
     }
   },
 
+  _withTimeout(promise, ms = 8000, code = 'firestore-timeout') {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(code)), ms))
+    ]);
+  },
+
   async listCloudSlots() {
     if (!db || !this.isLoggedIn()) return {};
     this.setSyncState('syncing');
     try {
       const colRef = collection(db, 'users', this.user.uid, 'saves');
-      const snap = await getDocs(colRef);
+      const snap = await this._withTimeout(getDocs(colRef), 8000, 'list-timeout');
       const map = {};
       snap.forEach(d => {
         if (SLOT_IDS.includes(d.id)) {
@@ -206,6 +213,7 @@ const FirebaseService = {
       this.setSyncState('synced');
       return map;
     } catch (err) {
+      console.error('[Firebase] listCloudSlots error:', err);
       this.setSyncState('error');
       return {};
     }
@@ -215,9 +223,10 @@ const FirebaseService = {
     if (!db || !this.isLoggedIn() || !SLOT_IDS.includes(slotId)) return null;
     try {
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      const snap = await getDoc(ref);
+      const snap = await this._withTimeout(getDoc(ref), 8000, 'get-timeout');
       return snap.exists() ? { ...snap.data(), slotId } : null;
     } catch (err) {
+      console.error('[Firebase] getCloudSlot error:', err);
       return null;
     }
   },
@@ -229,17 +238,25 @@ const FirebaseService = {
     this.setSyncState('syncing');
     try {
       const cleanPayload = JSON.parse(JSON.stringify({
-        ...payload,
+        ...(payload || {}),
         slotId,
-        updatedAt: payload.updatedAt || Date.now()
+        updatedAt: (payload && payload.updatedAt) || Date.now()
       }));
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await setDoc(ref, cleanPayload);
+      await this._withTimeout(setDoc(ref, cleanPayload), 8000, 'save-timeout');
       this.setSyncState('synced');
       return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} berjaya disimpan ke Cloud!` };
     } catch (err) {
+      console.error('[Firebase] saveCloudSlot error:', err);
       this.setSyncState('error');
-      return { ok: false, msg: 'Gagal menyegerakkan simpanan ke Cloud.' };
+      const isTimeout = err && err.message === 'save-timeout';
+      return {
+        ok: false,
+        timeout: isTimeout,
+        msg: isTimeout
+          ? 'Cloud Save tamat masa (simpanan lokal kekal selamat).'
+          : 'Gagal menyegerakkan simpanan ke Cloud (simpanan lokal kekal selamat).'
+      };
     }
   },
 
@@ -250,13 +267,11 @@ const FirebaseService = {
     this.setSyncState('syncing');
     try {
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await Promise.race([
-        deleteDoc(ref),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('delete-timeout')), 8000))
-      ]);
+      await this._withTimeout(deleteDoc(ref), 8000, 'delete-timeout');
       this.setSyncState('synced');
       return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam dari Cloud.` };
     } catch (err) {
+      console.error('[Firebase] deleteCloudSlot error:', err);
       this.setSyncState(err && err.message === 'delete-timeout' ? 'synced' : 'error');
       return {
         ok: err && err.message === 'delete-timeout',
