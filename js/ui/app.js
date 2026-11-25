@@ -220,7 +220,7 @@ window.App = {
       const syncLabel = fb.syncState === 'syncing'
         ? '🔄 Menyegerak...'
         : fb.syncState === 'error'
-          ? '⚠️ Ralat Sync'
+          ? `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`
           : '☁️ Disegerakkan';
       const avatarHtml = u.photoURL
         ? `<img src="${Utils.escapeHtml(u.photoURL)}" alt="" style="width:28px;height:28px;border-radius:999px;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />`
@@ -598,7 +598,7 @@ window.App = {
     try {
       const result = await Promise.race([
         Promise.resolve().then(() => taskFn()),
-        new Promise(resolve => setTimeout(() => resolve({ ok: false, timeout: true, msg: 'Proses Cloud tamat masa (simpanan lokal kekal selamat).' }), 9000))
+        new Promise(resolve => setTimeout(() => resolve({ ok: false, timeout: true, msg: 'Proses Cloud tamat masa (simpanan lokal kekal selamat).' }), 16000))
       ]);
       if (p._timer) { clearInterval(p._timer); p._timer = null; }
       if (result && result.ok === false) {

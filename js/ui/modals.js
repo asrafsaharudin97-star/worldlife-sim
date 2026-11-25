@@ -2435,7 +2435,7 @@ window.Modals = {
       : fb.syncState === 'syncing'
         ? '🔄 Menyegerak...'
         : fb.syncState === 'error'
-          ? '⚠️ Ralat Sync'
+          ? `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`
           : '☁️ Disegerakkan';
 
     let authBarHtml = '';
