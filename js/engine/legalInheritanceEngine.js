@@ -174,23 +174,81 @@ window.LegalInheritanceEngine = {
     }
   },
 
+  _getLivingFamilyHeirs(s) {
+    return (s.relationships || []).filter(r =>
+      r && r.alive && (
+        r.id === s.partnerId ||
+        r.category === 'family' ||
+        r.category === 'spouse' ||
+        this._isChildRel(r) ||
+        this._isParentRel(r)
+      )
+    );
+  },
+
   // --------------------------------------------------------------------------
   // 6. PENGURUSAN WASIAT SIVIL (CUSTOMIZABLE WILL)
   // --------------------------------------------------------------------------
   setCivilWasiat(s, mode, soleBeneficiaryId = null) {
     this.ensureLegalFields(s);
-    const validModes = ['equal', 'spouse_all', 'single_child', 'charity'];
+    const validModes = ['equal', 'spouse_all', 'single_child', 'sole_heir', 'charity'];
     if (!validModes.includes(mode)) {
       return { ok: false, msg: 'Mod wasiat tidak sah.' };
     }
+    const isSoleMode = mode === 'sole_heir' || mode === 'single_child';
+    const nextSoleId = isSoleMode ? soleBeneficiaryId : null;
+    if (isSoleMode && !nextSoleId) {
+      return { ok: false, msg: 'Sila pilih seorang pewaris tunggal.' };
+    }
+
+    const prevMode = s.legal.wasiat.mode;
+    const prevSoleId = s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId || null;
+    const isSameSelection = prevMode === mode && prevSoleId === nextSoleId;
+
     s.legal.wasiat.mode = mode;
-    s.legal.wasiat.soleBeneficiaryId = mode === 'single_child' ? soleBeneficiaryId : null;
+    s.legal.wasiat.willType = mode;
+    s.legal.wasiat.soleBeneficiaryId = nextSoleId;
+    s.legal.wasiat.soleHeirId = nextSoleId;
     s.legal.wasiat.charityPct = mode === 'charity' ? 100 : 0;
+
+    if (isSoleMode) {
+      const livingFamily = this._getLivingFamilyHeirs(s);
+      const chosen = livingFamily.find(r => r.id === nextSoleId);
+      const chosenName = chosen ? chosen.name : 'Pewaris Pilihan';
+      if (!isSameSelection) {
+        const others = livingFamily.filter(r => r.id !== nextSoleId);
+        if (others.length > 0) {
+          others.forEach(rel => {
+            const dropClose = Utils.randInt(25, 40);
+            const dropTrust = Utils.randInt(25, 40);
+            rel.closeness = Utils.clamp((rel.closeness ?? 60) - dropClose, 0, 100);
+            rel.trust = Utils.clamp((rel.trust ?? 60) - dropTrust, 0, 100);
+          });
+          const stressGain = Utils.randInt(15, 25);
+          if (window.KarmaEndings) {
+            KarmaEndings.adjustAlignment({ stress: stressGain });
+          } else if (s.alignment) {
+            s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + stressGain, 0, 100);
+          }
+          GameState.addJournalEntry(
+            `🔥 KONFLIK KELUARGA (WASIAT): Keputusan anda menyerahkan 100% harta kepada ${chosenName} menimbulkan kemarahan ${others.length} ahli keluarga lain (Kepercayaan & Kemesraan merosot teruk, Stres +${stressGain}%).`,
+            'warning'
+          );
+          GameState.save();
+          return {
+            ok: true,
+            msg: `Wasiat 100% ditetapkan kepada ${chosenName}! Ahli keluarga lain berang (+${stressGain}% Stres).`
+          };
+        }
+      }
+      GameState.addJournalEntry(`📜 Wasiat sivil dikemas kini: 100% harta diserahkan kepada pewaris tunggal, ${chosenName}.`, 'milestone');
+      GameState.save();
+      return { ok: true, msg: `Wasiat 100% ditetapkan kepada ${chosenName}.` };
+    }
 
     const labels = {
       equal: 'Pembahagian Sama Rata (Pasangan & Semua Anak)',
       spouse_all: '100% Kepada Pasangan',
-      single_child: '100% Kepada Seorang Anak Pilihan',
       charity: '100% Didermakan Kepada Yayasan Kebajikan'
     };
     GameState.addJournalEntry(`📜 Wasiat sivil dikemas kini: ${labels[mode]}.`, 'milestone');
@@ -229,12 +287,15 @@ window.LegalInheritanceEngine = {
       : null;
     const children = (s.relationships || []).filter(r => this._isChildRel(r) && r.alive);
     const parents = (s.relationships || []).filter(r => this._isParentRel(r) && r.alive);
+    const livingFamily = this._getLivingFamilyHeirs(s);
 
-    const mode = (s.legal.wasiat && s.legal.wasiat.mode) || 'equal';
+    const mode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
+    const soleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
     const wasiatLabels = {
       equal: 'Pembahagian Sama Rata (Sivil)',
       spouse_all: '100% Kepada Pasangan',
-      single_child: '100% Kepada Anak Pilihan',
+      single_child: '100% Kepada Pewaris Tunggal',
+      sole_heir: '100% Kepada Pewaris Tunggal',
       charity: '100% Yayasan Kebajikan'
     };
     const shares = [];
@@ -244,10 +305,10 @@ window.LegalInheritanceEngine = {
         shares.push({ id: 'charity', isEntity: true, name: 'Yayasan Kebajikan Awam', role: 'Derma Wasiat', fractionLabel: 'Wasiat Kebajikan', pct: 100, amount: distributable });
       } else if (mode === 'spouse_all' && spouse) {
         shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Wasiat Penuh Pasangan', pct: 100, amount: distributable });
-      } else if (mode === 'single_child' && s.legal.wasiat.soleBeneficiaryId) {
-        const chosen = children.find(ch => ch.id === s.legal.wasiat.soleBeneficiaryId);
+      } else if ((mode === 'sole_heir' || mode === 'single_child') && soleId) {
+        const chosen = livingFamily.find(rel => rel.id === soleId);
         if (chosen) {
-          shares.push({ id: chosen.id, isEntity: false, name: chosen.name, role: chosen.isAdopted ? 'Anak Angkat' : (chosen.role || 'Anak'), fractionLabel: 'Pewaris Tunggal Wasiat', pct: 100, amount: distributable });
+          shares.push({ id: chosen.id, isEntity: false, name: chosen.name, role: chosen.isAdopted ? 'Anak Angkat' : (chosen.role || 'Pewaris'), fractionLabel: 'Pewaris Tunggal Wasiat (100%)', pct: 100, amount: distributable });
         }
       }
 

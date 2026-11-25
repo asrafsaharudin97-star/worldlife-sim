@@ -1546,8 +1546,11 @@ window.Modals = {
     LegalInheritanceEngine.ensureLegalFields(s);
     const report = LegalInheritanceEngine.calculateEstateStatement(s);
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
-    const curMode = (s.legal.wasiat && s.legal.wasiat.mode) || 'equal';
-    const children = (s.relationships || []).filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+    const curMode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
+    const curSoleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
+    const livingHeirs = LegalInheritanceEngine._getLivingFamilyHeirs
+      ? LegalInheritanceEngine._getLivingFamilyHeirs(s)
+      : (s.relationships || []).filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
 
     this.open({
       icon: '📜',
@@ -1575,15 +1578,6 @@ window.Modals = {
               <span class="ai-desc">Seluruh harta pusaka diserahkan kepada pasangan hidup anda</span>
             </span>
           </button>
-          ${children.map(ch => `
-            <button type="button" class="action-item civil-wasiat-btn" data-mode="single_child" data-target="${ch.id}">
-              <span class="ai-icon">👶</span>
-              <span class="ai-content">
-                <span class="ai-title">100% Kepada ${Utils.escapeHtml(ch.name)} ${curMode === 'single_child' && s.legal.wasiat.soleBeneficiaryId === ch.id ? '✓' : ''}</span>
-                <span class="ai-desc">${ch.isAdopted ? 'Anak Angkat' : 'Anak'} (${ch.age} tahun)</span>
-              </span>
-            </button>
-          `).join('')}
           <button type="button" class="action-item civil-wasiat-btn" data-mode="charity">
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
@@ -1592,6 +1586,24 @@ window.Modals = {
             </span>
           </button>
         </div>
+
+        ${livingHeirs.length > 0 ? `
+          <div class="section-heading" style="margin-top:12px;">👑 Serah Semua Harta (100%) kepada Seorang Pewaris</div>
+          <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-bottom:8px;">
+            ⚠️ Amaran: Memilih seorang pewaris tunggal akan mencetuskan kemarahan ahli keluarga lain yang masih hidup (-Kepercayaan, -Kemesraan &amp; +Stres).
+          </div>
+          <div class="action-list">
+            ${livingHeirs.map(h => `
+              <button type="button" class="action-item civil-wasiat-btn" data-mode="sole_heir" data-target="${h.id}">
+                <span class="ai-icon">👑</span>
+                <span class="ai-content">
+                  <span class="ai-title">100% Kepada ${Utils.escapeHtml(h.name)} ${(curMode === 'sole_heir' || curMode === 'single_child') && curSoleId === h.id ? '✓' : ''}</span>
+                  <span class="ai-desc">${Utils.escapeHtml(h.isAdopted ? `${h.role} (Angkat)` : (h.role || 'Keluarga'))} • Umur ${h.age} tahun</span>
+                </span>
+              </button>
+            `).join('')}
+          </div>
+        ` : ''}
 
         <button type="button" class="secondary-btn" id="btn-wasiat-back" style="width:100%;margin-top:8px;">← Kembali</button>
       `
