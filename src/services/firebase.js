@@ -15,6 +15,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore,
+  initializeFirestore,
   collection,
   doc,
   getDocs,
@@ -42,7 +43,11 @@ let initialized = false;
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  try {
+    db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  } catch (fsErr) {
+    db = getFirestore(app);
+  }
   provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   initialized = true;
@@ -193,7 +198,7 @@ const FirebaseService = {
     }
   },
 
-  _withTimeout(promise, ms = 15000, code = 'timeout') {
+  _withTimeout(promise, ms = 22000, code = 'timeout') {
     return Promise.race([
       promise,
       new Promise((_, reject) => setTimeout(() => reject(new Error(code)), ms))
@@ -201,10 +206,24 @@ const FirebaseService = {
   },
 
   _sanitizeForFirestore(data) {
-    return JSON.parse(JSON.stringify(data, (_, v) => {
-      if (typeof v === 'number' && !Number.isFinite(v)) return 0;
-      return v;
-    }));
+    const replacer = (_, v) => (typeof v === 'number' && !Number.isFinite(v) ? 0 : v);
+    let jsonStr = JSON.stringify(data, replacer);
+    const clean = JSON.parse(jsonStr);
+    if (jsonStr.length > 800000 && clean && clean.gameState && Array.isArray(clean.gameState.journal)) {
+      const journal = clean.gameState.journal;
+      const kept = [];
+      let count = 0;
+      for (let i = journal.length - 1; i >= 0 && count < 180; i--) {
+        const blk = journal[i];
+        const entries = Array.isArray(blk && blk.entries) ? blk.entries : [];
+        const room = 180 - count;
+        const slice = entries.length > room ? entries.slice(-room) : entries;
+        kept.unshift({ ...blk, entries: slice });
+        count += slice.length;
+      }
+      clean.gameState.journal = kept;
+    }
+    return clean;
   },
 
   async listCloudSlots() {
@@ -212,7 +231,7 @@ const FirebaseService = {
     this.setSyncState('syncing');
     try {
       const colRef = collection(db, 'users', this.user.uid, 'saves');
-      const snap = await this._withTimeout(getDocs(colRef), 15000, 'timeout');
+      const snap = await this._withTimeout(getDocs(colRef), 22000, 'timeout');
       const map = {};
       snap.forEach(d => {
         if (SLOT_IDS.includes(d.id)) {
@@ -223,7 +242,7 @@ const FirebaseService = {
       return map;
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
-      console.error('[Firebase] listCloudSlots error:', err);
+      console.error('[Firebase] listCloudSlots error:', detail, err);
       this.setSyncState('error', detail);
       return {};
     }
@@ -233,10 +252,10 @@ const FirebaseService = {
     if (!db || !this.isLoggedIn() || !SLOT_IDS.includes(slotId)) return null;
     try {
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      const snap = await this._withTimeout(getDoc(ref), 15000, 'timeout');
+      const snap = await this._withTimeout(getDoc(ref), 22000, 'timeout');
       return snap.exists() ? { ...snap.data(), slotId } : null;
     } catch (err) {
-      console.error('[Firebase] getCloudSlot error:', err);
+      console.error('[Firebase] getCloudSlot error:', (err && (err.code || err.message)) || 'unknown', err);
       return null;
     }
   },
@@ -253,12 +272,12 @@ const FirebaseService = {
         updatedAt: (payload && payload.updatedAt) || Date.now()
       });
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await this._withTimeout(setDoc(ref, cleanPayload), 15000, 'timeout');
+      await this._withTimeout(setDoc(ref, cleanPayload), 22000, 'timeout');
       this.setSyncState('synced');
       return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} berjaya disimpan ke Cloud!` };
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
-      console.error('[Firebase] saveCloudSlot error:', err);
+      console.error('[Firebase] saveCloudSlot error:', detail, err);
       this.setSyncState('error', detail);
       const isTimeout = detail === 'timeout';
       return {
@@ -279,12 +298,12 @@ const FirebaseService = {
     this.setSyncState('syncing');
     try {
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await this._withTimeout(deleteDoc(ref), 15000, 'timeout');
+      await this._withTimeout(deleteDoc(ref), 22000, 'timeout');
       this.setSyncState('synced');
       return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam dari Cloud.` };
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
-      console.error('[Firebase] deleteCloudSlot error:', err);
+      console.error('[Firebase] deleteCloudSlot error:', detail, err);
       this.setSyncState(detail === 'timeout' ? 'synced' : 'error', detail);
       return {
         ok: detail === 'timeout',

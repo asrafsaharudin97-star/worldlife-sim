@@ -598,7 +598,7 @@ window.App = {
     try {
       const result = await Promise.race([
         Promise.resolve().then(() => taskFn()),
-        new Promise(resolve => setTimeout(() => resolve({ ok: false, timeout: true, msg: 'Proses Cloud tamat masa (simpanan lokal kekal selamat).' }), 16000))
+        new Promise(resolve => setTimeout(() => resolve({ ok: false, timeout: true, msg: 'Ralat Sync: timeout (simpanan lokal kekal selamat).' }), 24000))
       ]);
       if (p._timer) { clearInterval(p._timer); p._timer = null; }
       if (result && result.ok === false) {
