@@ -1416,9 +1416,15 @@ window.GameState = {
     if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
       return { ok: false, msg: 'Log masuk Google untuk menggunakan Cloud Save.' };
     }
-    const payload = payloadOverride || this.getLocalSlot(slotId) || (this.getActiveSlotId() === slotId && this.current ? this.buildSlotPayload(slotId, this.current) : null);
-    if (!payload) return { ok: false, msg: 'Tiada data untuk disegerakkan.' };
-    return await FirebaseService.saveCloudSlot(slotId, payload);
+    try {
+      const payload = payloadOverride || this.getLocalSlot(slotId) || (this.getActiveSlotId() === slotId && this.current ? this.buildSlotPayload(slotId, this.current) : null);
+      if (!payload) return { ok: false, msg: 'Tiada data untuk disegerakkan.' };
+      return await FirebaseService.saveCloudSlot(slotId, payload);
+    } catch (err) {
+      const detail = (err && (err.code || err.message)) || 'unknown';
+      console.error('[State] syncSlotToCloud error:', err);
+      return { ok: false, msg: `Gagal simpan ke Cloud (${detail}). Simpanan tempatan kekal selamat.` };
+    }
   },
 
   async syncActiveSlotToCloud(reason = 'manual') {
@@ -1429,7 +1435,13 @@ window.GameState = {
     if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
       return { ok: false, offline: true, msg: 'Disimpan secara tempatan.' };
     }
-    return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
+    try {
+      return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
+    } catch (err) {
+      const detail = (err && (err.code || err.message)) || 'unknown';
+      console.error('[State] syncActiveSlotToCloud error:', err);
+      return { ok: false, msg: `Ralat Cloud Save (${detail}). Simpanan tempatan kekal selamat.` };
+    }
   },
 
   resolveDefaultActiveSlot(slotsMap = null, { preserveExplicit = false } = {}) {
@@ -1491,22 +1503,30 @@ window.GameState = {
     if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
       return { ok: false, uploaded: 0, msg: 'Sila log masuk Google dahulu.' };
     }
-    const { slots, localOnlyIds } = await this.getMergedSlots();
-    let uploaded = 0;
-    for (const id of localOnlyIds) {
-      const item = slots[id];
-      if (item && item.gameState) {
-        const res = await FirebaseService.saveCloudSlot(id, item);
-        if (res.ok) uploaded += 1;
+    try {
+      const { slots, localOnlyIds } = await this.getMergedSlots();
+      let uploaded = 0;
+      let lastErrMsg = null;
+      for (const id of localOnlyIds) {
+        const item = slots[id];
+        if (item && item.gameState) {
+          const res = await FirebaseService.saveCloudSlot(id, item);
+          if (res && res.ok) uploaded += 1;
+          else if (res && res.msg) lastErrMsg = res.msg;
+        }
       }
+      return {
+        ok: uploaded > 0,
+        uploaded,
+        msg: uploaded > 0
+          ? `${uploaded} slot simpanan tempatan berjaya dimuat naik ke Cloud!`
+          : (lastErrMsg || 'Tiada slot tempatan baru untuk dimuat naik.')
+      };
+    } catch (err) {
+      const detail = (err && (err.code || err.message)) || 'unknown';
+      console.error('[State] uploadLocalSlotsToCloud error:', err);
+      return { ok: false, uploaded: 0, msg: `Gagal muat naik ke Cloud (${detail}). Simpanan tempatan kekal selamat.` };
     }
-    return {
-      ok: uploaded > 0,
-      uploaded,
-      msg: uploaded > 0
-        ? `${uploaded} slot simpanan tempatan berjaya dimuat naik ke Cloud!`
-        : 'Tiada slot tempatan baru untuk dimuat naik.'
-    };
   },
 
   async deleteSlot(slotId) {

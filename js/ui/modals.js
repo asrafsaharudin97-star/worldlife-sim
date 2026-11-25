@@ -2583,10 +2583,21 @@ window.Modals = {
     const uploadBtn = document.getElementById('slots-btn-upload-local');
     if (uploadBtn) {
       uploadBtn.addEventListener('click', async () => {
-        const res = await App.runWithCloudProgress('save', () => GameState.uploadLocalSlotsToCloud());
-        if (res && res.busy) return;
-        App.toast(res.msg, res.ok ? 'success' : 'culture');
-        this.showSaveSlotsModal();
+        let res = null;
+        try {
+          res = await App.runWithCloudProgress('save', () => GameState.uploadLocalSlotsToCloud());
+          if (res && res.busy) return;
+          App.toast((res && res.msg) || 'Muat naik Cloud selesai.', res && res.ok ? 'success' : 'error');
+        } catch (err) {
+          console.error('[Slots] uploadLocalSlotsToCloud error:', err);
+          App.toast('Gagal memuat naik simpanan ke Cloud.', 'error');
+        } finally {
+          if (App.cloudProgress && App.cloudProgress.active) {
+            App.cloudProgress.active = false;
+            App.renderCloudProgressOverlay();
+          }
+          if (!res || !res.busy) this.showSaveSlotsModal();
+        }
       });
     }
 
@@ -2617,10 +2628,21 @@ window.Modals = {
     document.querySelectorAll('.slot-sync-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sid = btn.dataset.slot;
-        const res = await App.runWithCloudProgress('save', () => GameState.syncSlotToCloud(sid, slots[sid]));
-        if (res && res.busy) return;
-        App.toast(res.msg, res.ok ? 'success' : 'error');
-        this.showSaveSlotsModal();
+        let res = null;
+        try {
+          res = await App.runWithCloudProgress('save', () => GameState.syncSlotToCloud(sid, slots[sid]));
+          if (res && res.busy) return;
+          App.toast((res && res.msg) || 'Simpanan Cloud selesai.', res && res.ok ? 'success' : 'error');
+        } catch (err) {
+          console.error('[Slots] syncSlotToCloud error:', err);
+          App.toast('Gagal menyegerakkan slot ke Cloud.', 'error');
+        } finally {
+          if (App.cloudProgress && App.cloudProgress.active) {
+            App.cloudProgress.active = false;
+            App.renderCloudProgressOverlay();
+          }
+          if (!res || !res.busy) this.showSaveSlotsModal();
+        }
       });
     });
 
