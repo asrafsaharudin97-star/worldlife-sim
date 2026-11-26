@@ -298,7 +298,8 @@ window.SocialMedia = {
     const wealthFactor = usdMoney >= 100000 ? 0.20 : usdMoney >= 25000 ? 0.12 : usdMoney >= 5000 ? 0.05 : -0.05;
     const ageGap = Math.abs((s.age || 20) - (cand.age || 20));
     const gapPenalty = ageGap > 15 ? -0.22 : ageGap > 8 ? -0.10 : 0.04;
-    const acceptChance = Utils.clamp(0.38 + looksFactor + wealthFactor + gapPenalty, 0.12, 0.90);
+    const luxuryBoost = (window.AssetsEngine && AssetsEngine.hasLuxuryWorkingVehicle && AssetsEngine.hasLuxuryWorkingVehicle(s)) ? 0.06 : 0;
+    const acceptChance = Utils.clamp(0.38 + looksFactor + wealthFactor + gapPenalty + luxuryBoost, 0.12, 0.90);
 
     if (!Utils.chance(acceptChance)) {
       s._datingPool = [];

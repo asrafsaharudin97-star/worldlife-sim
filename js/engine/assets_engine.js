@@ -53,6 +53,13 @@ window.AssetsEngine = {
       if (typeof v.isLemon !== 'boolean') v.isLemon = false;
       if (typeof v.lemonRevealed !== 'boolean') v.lemonRevealed = Boolean(v.isLemon);
     });
+    if (!s.licenses || typeof s.licenses !== 'object') {
+      s.licenses = { moto: false, car: Boolean(s.hasDriverLicense) };
+    } else {
+      if (typeof s.licenses.moto !== 'boolean') s.licenses.moto = false;
+      if (typeof s.licenses.car !== 'boolean') s.licenses.car = Boolean(s.hasDriverLicense);
+    }
+    s.hasDriverLicense = Boolean(s.licenses.car || s.licenses.moto);
 
     if (!s.assetMarket || typeof s.assetMarket !== 'object') {
       s.assetMarket = {
@@ -646,6 +653,374 @@ window.AssetsEngine = {
   },
 
   // --------------------------------------------------------------------------
+  // 3B. SISTEM LESEN MEMANDU & INTERAKSI KENDERAAN AKTIF
+  // --------------------------------------------------------------------------
+  DRIVING_QUESTIONS: {
+    moto: [
+      {
+        q: 'Ketika menunggang motosikal dalam hujan lebat di jalan licin, apakah tindakan paling selamat?',
+        options: [
+          { text: 'Kurangkan kelajuan, jaga jarak selamat dan elakkan brek mengejut', correct: true },
+          { text: 'Pecut lebih laju supaya cepat sampai sebelum hujan makin lebat', correct: false },
+          { text: 'Tarik brek hadapan sekuat hati di selekoh tajam', correct: false }
+        ]
+      },
+      {
+        q: 'Sebuah lori besar berada di hadapan anda dan mahu membelok ke kiri di simpang. Apakah yang patut anda lakukan?',
+        options: [
+          { text: 'Jangan menyelit di titik buta sebelah kiri lori dan tunggu sehingga ia selesai membelok', correct: true },
+          { text: 'Menyelit rapat di sebelah kiri lori dengan segera', correct: false },
+          { text: 'Membunyikan hon berterusan sambil memotong dari bahu jalan', correct: false }
+        ]
+      },
+      {
+        q: 'Sebelum menukar lorong ke kanan di jalan raya utama, apakah urutan langkah yang betul?',
+        options: [
+          { text: 'Beri lampu isyarat awal, periksa cermin sisi dan toleh titik buta sebelum masuk lorong', correct: true },
+          { text: 'Terus masuk lorong dengan pantas kemudian baru beri lampu isyarat', correct: false },
+          { text: 'Hanya lihat hadapan tanpa perlu memeriksa cermin sisi', correct: false }
+        ]
+      }
+    ],
+    car: [
+      {
+        q: 'Lampu isyarat bertukar kuning ketika anda menghampiri garisan berhenti pada kelajuan sederhana. Apakah tindakan yang betul?',
+        options: [
+          { text: 'Perlahankan kereta dan berhenti dengan selamat sebelum garisan berhenti', correct: true },
+          { text: 'Tekan minyak sekuat hati untuk melepasi simpang sebelum lampu merah', correct: false },
+          { text: 'Berhenti mengejut di tengah-tengah petak kuning simpang', correct: false }
+        ]
+      },
+      {
+        q: 'Ketika memandu di bulatan jalan raya (roundabout), kenderaan manakah yang mempunyai hak laluan utama?',
+        options: [
+          { text: 'Kenderaan yang sudah berada di dalam bulatan dari arah kanan', correct: true },
+          { text: 'Kenderaan yang memandu paling laju dari jalan masuk', correct: false },
+          { text: 'Kenderaan paling besar tanpa mengira arah', correct: false }
+        ]
+      },
+      {
+        q: 'Kereta anda mula tergelincir ketika melalui permukaan jalan yang bertakung air. Apakah reaksi pemanduan yang betul?',
+        options: [
+          { text: 'Lepaskan pedal minyak perlahan-lahan dan pegang stereng dengan kemas mengikut arah laluan', correct: true },
+          { text: 'Tekan brek kecemasan secara mengejut dan pusing stereng secara mendadak', correct: false },
+          { text: 'Tukar gear undur serta-merta untuk memperlahankan kereta', correct: false }
+        ]
+      }
+    ]
+  },
+
+  getRequiredLicenseType(v) {
+    if (!v) return null;
+    const tplId = v.tplId || v.id || '';
+    if (tplId === 'veh_road_bike') return null; // Basikal tidak memerlukan lesen memandu
+    if (['veh_kapcai', 'veh_scooter', 'veh_touring_moto', 'veh_superbike'].includes(tplId)) return 'moto';
+    if (v.sub === 'Laut' || v.sub === 'Udara') return 'car';
+    return 'car';
+  },
+
+  hasMatchingLicense(s, v) {
+    this.ensureFields(s);
+    const req = this.getRequiredLicenseType(v);
+    if (!req) return true;
+    return Boolean(s.licenses && s.licenses[req]);
+  },
+
+  isFastVehicle(v) {
+    if (!v) return false;
+    const tplId = v.tplId || v.id || '';
+    return ['veh_superbike', 'veh_sport_gt', 'veh_supercar', 'veh_hypercar', 'veh_ev_modern', 'veh_touring_moto'].includes(tplId);
+  },
+
+  hasFastWorkingVehicle(s) {
+    if (!s || !s.assets || !Array.isArray(s.assets.vehicles)) return false;
+    return s.assets.vehicles.some(v => v && v.condition >= 40 && this.isFastVehicle(v) && this.hasMatchingLicense(s, v));
+  },
+
+  hasLuxuryWorkingVehicle(s) {
+    if (!s || !s.assets || !Array.isArray(s.assets.vehicles)) return false;
+    return s.assets.vehicles.some(v => v && v.condition >= 45 && (v.looksBonus || 0) >= 6);
+  },
+
+  getLicenseFee(s, type = 'car') {
+    const usd = type === 'moto' ? 85 : 220;
+    return Math.max(20, Utils.usdToLocal(usd, s.countryId));
+  },
+
+  checkLicenseTestEligibility(s, type = 'car') {
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, reason: 'Tidak boleh mengambil ujian lesen memandu semasa dalam tahanan.' };
+    }
+    const minAge = type === 'moto' ? 16 : 17;
+    if (s.age < minAge) {
+      return { ok: false, reason: `Umur minimum untuk lesen ini ialah ${minAge} tahun.` };
+    }
+    if (s.licenses && s.licenses[type]) {
+      return { ok: false, reason: 'Anda sudah memiliki lesen ini secara sah.' };
+    }
+    const cdKey = type === 'moto' ? 'licenseTestMoto' : 'licenseTestCar';
+    if (s.yearlyActions && s.yearlyActions[cdKey]) {
+      return { ok: false, reason: 'Anda sudah menduduki ujian lesen kategori ini tahun ini. Cuba lagi tahun hadapan.' };
+    }
+    const fee = this.getLicenseFee(s, type);
+    if ((s.money || 0) < fee) {
+      return { ok: false, reason: `Baki tidak mencukupi. Yuran ujian ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    }
+    return { ok: true, fee };
+  },
+
+  pickDrivingTestQuestions(type = 'car') {
+    const bank = this.DRIVING_QUESTIONS[type] || this.DRIVING_QUESTIONS.car;
+    const shuffled = [...bank].sort(() => Math.random() - 0.5).slice(0, 2);
+    return shuffled.map(item => ({
+      q: item.q,
+      options: [...item.options].sort(() => Math.random() - 0.5)
+    }));
+  },
+
+  submitDrivingLicenseTest(type = 'car', correctCount = 0, totalQuestions = 2) {
+    const s = GameState.current;
+    const elig = this.checkLicenseTestEligibility(s, type);
+    if (!elig.ok) return { ok: false, msg: elig.reason };
+
+    const c = Utils.getCountry(s.countryId);
+    const cdKey = type === 'moto' ? 'licenseTestMoto' : 'licenseTestCar';
+    s.yearlyActions[cdKey] = true;
+    s.money -= elig.fee;
+
+    const label = type === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta';
+    const agency = c.id === 'MY' ? 'JPJ' : c.name;
+    const smarts = (s.stats && s.stats.smarts) || 50;
+
+    // Wajib jawab betul senario peraturan jalan raya + ujian praktikal dipengaruhi Kepintaran
+    const theoryPassed = correctCount >= totalQuestions;
+    const practicalChance = Math.min(0.95, 0.58 + (smarts * 0.0035));
+    const passed = theoryPassed && Utils.chance(practicalChance);
+
+    if (passed) {
+      s.licenses[type] = true;
+      s.hasDriverLicense = Boolean(s.licenses.car || s.licenses.moto);
+      GameState.adjustStats({ happiness: 10 });
+      GameState.addJournalEntry(
+        `🪪 LULUS UJIAN MEMANDU! Anda berjaya memperoleh ${label} sah (${agency}) selepas membayar yuran ${Utils.formatMoney(elig.fee, s.countryId)}.`,
+        'milestone'
+      );
+      GameState.save();
+      return {
+        ok: true,
+        passed: true,
+        msg: `Tahniah! Anda lulus ujian dan memperoleh ${label} sah!`
+      };
+    }
+
+    const failReason = !theoryPassed
+      ? 'gagal menjawab soalan peraturan jalan raya dengan tepat'
+      : 'melakukan kesilapan semasa ujian praktikal di litar dan jalan raya';
+    GameState.adjustStats({ happiness: -4 });
+    GameState.addJournalEntry(
+      `🪪 Gagal ujian ${label} (${agency}) kerana ${failReason}. Yuran ${Utils.formatMoney(elig.fee, s.countryId)} hangus — sila ambil semula tahun hadapan.`,
+      'warning'
+    );
+    GameState.save();
+    return {
+      ok: false,
+      passed: false,
+      msg: `Gagal ujian ${label} (${failReason}). Cuba lagi tahun hadapan.`
+    };
+  },
+
+  cruiseWithVehicle(uid) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh memandu ketika berada dalam tahanan.' };
+    const v = s.assets.vehicles.find(x => x.uid === uid);
+    if (!v) return { ok: false, msg: 'Kenderaan tidak ditemui.' };
+
+    const usedMap = s.yearlyActions.vehCruiseCount || {};
+    const used = usedMap[uid] || 0;
+    if (used >= 2) {
+      return { ok: false, msg: `Anda sudah memandu atau menunggang ${v.name} bersiar-siar sebanyak 2 kali tahun ini.` };
+    }
+    usedMap[uid] = used + 1;
+    s.yearlyActions.vehCruiseCount = usedMap;
+
+    const hasLic = this.hasMatchingLicense(s, v);
+    const reqType = this.getRequiredLicenseType(v);
+    const wear = Utils.randInt(2, 4);
+    v.condition = Utils.clamp((v.condition || 80) - wear, 5, 100);
+
+    // 1) Risiko Sekatan Jalan Raya jika tiada lesen sah!
+    if (!hasLic && reqType) {
+      const licLabel = reqType === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta';
+      if (Utils.chance(0.55)) {
+        const fineLocal = Math.max(Utils.usdToLocal(220, s.countryId), Math.round(v.value * 0.05));
+        s.money -= fineLocal;
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 16, stress: 10, karma: -5 });
+        GameState.adjustStats({ happiness: -12 });
+
+        // Peluang kenderaan disita jika kesalahan berulang atau nasib buruk
+        if (Utils.chance(0.32)) {
+          s.assets.vehicles = s.assets.vehicles.filter(x => x.uid !== uid);
+          GameState.addJournalEntry(
+            `🚓🚨 SEKATAN JALAN RAYA! Anda ditahan memandu/menunggang ${v.name} tanpa ${licLabel}! Anda didenda ${Utils.formatMoney(fineLocal, s.countryId)} dan kenderaan anda DISITA oleh pihak berkuasa!`,
+            'warning'
+          );
+          GameState.save();
+          return {
+            ok: false,
+            impounded: true,
+            msg: `Kantoi Sekatan Jalan Raya tanpa ${licLabel}! Didenda ${Utils.formatMoney(fineLocal, s.countryId)} & ${v.name} disita!`
+          };
+        }
+
+        GameState.addJournalEntry(
+          `🚓 SEKATAN JALAN RAYA! Anda ditahan memandu/menunggang ${v.name} tanpa ${licLabel} sah dan dikenakan saman berat ${Utils.formatMoney(fineLocal, s.countryId)}.`,
+          'warning'
+        );
+        GameState.save();
+        return {
+          ok: false,
+          msg: `Ditahan di Sekatan Jalan Raya tanpa ${licLabel}! Saman ${Utils.formatMoney(fineLocal, s.countryId)} dikenakan.`
+        };
+      }
+    }
+
+    // 2) Risiko kerosakan / kemalangan jika kondisi kenderaan rendah (< 35%)
+    if (v.condition < 35 && Utils.chance(0.52)) {
+      const repairBill = Math.max(Utils.usdToLocal(280, s.countryId), Math.round(v.value * 0.11));
+      s.money -= repairBill;
+      GameState.adjustStats({ health: -Utils.randInt(8, 16), happiness: -10 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+      GameState.addJournalEntry(
+        `💥🔧 KEMALANGAN KECIL & ROSAK TERUK! ${v.name} yang uzur gagal berfungsi dengan baik di jalan raya — anda cedera ringan dan terpaksa menanggung bil tunda serta pembaikan ${Utils.formatMoney(repairBill, s.countryId)}.`,
+        'warning'
+      );
+      GameState.save();
+      return {
+        ok: false,
+        msg: `${v.name} mengalami kerosakan/kemalangan kerana kondisi terlalu rendah! Kos baiki: ${Utils.formatMoney(repairBill, s.countryId)}.`
+      };
+    }
+
+    // Perjalanan lancar & menenangkan
+    GameState.adjustStats({ happiness: Utils.randInt(6, 11) });
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -Utils.randInt(6, 11) });
+    const illegalNote = (!hasLic && reqType) ? ' (Mujur tidak terserempak sekatan jalan raya walaupun tiada lesen!)' : '';
+    GameState.addJournalEntry(
+      `🛣️ Anda bersiar-siar mengambil angin bersama ${v.icon} ${v.name} di sekitar ${s.city}${illegalNote}. Fikiran terasa lebih segar dan tenang!`,
+      'culture'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      msg: `Seronok bersiar-siar dengan ${v.name}! Fikiran kembali tenang.`
+    };
+  },
+
+  familyOutingWithVehicle(uid) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membawa keluarga berjalan semasa dalam tahanan.' };
+    const v = s.assets.vehicles.find(x => x.uid === uid);
+    if (!v) return { ok: false, msg: 'Kenderaan tidak ditemui.' };
+    if (!this.hasMatchingLicense(s, v)) {
+      const req = this.getRequiredLicenseType(v);
+      return { ok: false, msg: `Anda memerlukan ${req === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta'} sah untuk membawa keluarga atau pasangan.` };
+    }
+    if (s.yearlyActions.vehFamilyOuting) {
+      return { ok: false, msg: 'Anda sudah membawa keluarga atau pasangan berjalan-jalan tahun ini.' };
+    }
+
+    const lovedOnes = (s.relationships || []).filter(r => r.alive && (r.id === s.partnerId || r.category === 'family' || r.category === 'spouse' || r.category === 'partner'));
+    if (lovedOnes.length === 0) {
+      return { ok: false, msg: 'Tiada ahli keluarga atau pasangan aktif untuk dibawa berjalan-jalan.' };
+    }
+
+    s.yearlyActions.vehFamilyOuting = true;
+    v.condition = Utils.clamp((v.condition || 80) - Utils.randInt(2, 5), 5, 100);
+
+    if (v.condition < 30 && Utils.chance(0.45)) {
+      const towCost = Math.max(Utils.usdToLocal(200, s.countryId), Math.round(v.value * 0.08));
+      s.money -= towCost;
+      GameState.adjustStats({ happiness: -6 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8 });
+      GameState.addJournalEntry(
+        `🛠️ Perjalanan bersama keluarga menaiki ${v.name} tergendala apabila kenderaan meragam di tepi jalan! Kos baiki kecemasan: ${Utils.formatMoney(towCost, s.countryId)}.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: `${v.name} rosak di pertengahan jalan! Kos baiki: ${Utils.formatMoney(towCost, s.countryId)}.` };
+    }
+
+    lovedOnes.forEach(r => {
+      r.closeness = Utils.clamp((r.closeness ?? 70) + Utils.randInt(6, 11), 0, 100);
+      if (typeof r.trust === 'number') r.trust = Utils.clamp(r.trust + 4, 0, 100);
+    });
+    GameState.adjustStats({ happiness: Utils.randInt(8, 13) });
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -Utils.randInt(5, 9) });
+
+    GameState.addJournalEntry(
+      `🚗👨‍👩‍👧‍👦 Anda membawa insan tersayang berjalan-jalan menaiki ${v.icon} ${v.name}. Hubungan kekeluargaan dan kemesraan bertambah erat!`,
+      'culture'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      msg: `Perjalanan hujung minggu menaiki ${v.name} mengeratkan hubungan keluarga & pasangan!`
+    };
+  },
+
+  sideGigWithVehicle(uid) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh melakukan kerja sambilan semasa dalam tahanan.' };
+    const v = s.assets.vehicles.find(x => x.uid === uid);
+    if (!v) return { ok: false, msg: 'Kenderaan tidak ditemui.' };
+
+    const req = this.getRequiredLicenseType(v);
+    if (!req || v.sub !== 'Darat') {
+      return { ok: false, msg: 'Hanya motosikal atau kereta darat sesuai untuk kerja sambilan penghantaran dan e-hailing.' };
+    }
+    const minAge = req === 'moto' ? 16 : 18;
+    if (s.age < minAge) {
+      return { ok: false, msg: `Umur minimum untuk kerja sambilan ini ialah ${minAge} tahun.` };
+    }
+    if (!this.hasMatchingLicense(s, v)) {
+      return { ok: false, msg: `Syarat pendaftaran memerlukan ${req === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta'} yang sah.` };
+    }
+    if ((v.condition || 0) < 40) {
+      return { ok: false, msg: 'Kondisi kenderaan terlalu rendah untuk kerja sambilan. Sila servis kenderaan anda dahulu.' };
+    }
+    if (s.yearlyActions.vehSideGig) {
+      return { ok: false, msg: 'Anda sudah melakukan kerja sambilan kenderaan tahun ini.' };
+    }
+
+    s.yearlyActions.vehSideGig = true;
+    const isMoto = req === 'moto';
+    const earnUsd = isMoto ? Utils.randInt(950, 2100) : Utils.randInt(1800, 3800);
+    const earnLocal = Math.max(50, Utils.usdToLocal(earnUsd, s.countryId));
+    const wear = Utils.randInt(7, 13);
+
+    s.money += earnLocal;
+    v.condition = Utils.clamp((v.condition || 80) - wear, 5, 100);
+    GameState.adjustStats({ health: -Utils.randInt(2, 5) });
+    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: Utils.randInt(5, 9) });
+
+    const roleName = isMoto ? 'Penghantar Makanan / Barangan (Rider)' : 'Pemandu E-Hailing Sambilan';
+    GameState.addJournalEntry(
+      `🛵💵 Kerja Sambilan (${roleName}) menggunakan ${v.name}: Anda memperoleh pendapatan tambahan ${Utils.formatMoney(earnLocal, s.countryId)} hasil titik peluh di jalan raya.`,
+      'culture'
+    );
+    GameState.save();
+    return {
+      ok: true,
+      earnLocal,
+      msg: `Kerja sambilan selesai! Anda memperoleh ${Utils.formatMoney(earnLocal, s.countryId)}.`
+    };
+  },
+
+  // --------------------------------------------------------------------------
   // 4. TINDAKAN PELABURAN (BELI / JUAL 25% / 50% / 100% / AMAUN + CUKAI JUALAN 2.5%)
   // --------------------------------------------------------------------------
   buyInvestment(instId, amountLocal) {
@@ -954,20 +1329,38 @@ window.AssetsEngine = {
       }
     }
 
-    // 3) Kemas kini Kenderaan (susut nilai lebih pantas bagi Aset Busuk, atau naik nilai bagi Kereta Klasik/Hypercar kondisi >= 80%!)
+    // 3) Kemas kini Kenderaan (Insurans/Cukai Jalan/Minyak, Susut Nilai, Kondisi -6 hingga -14 & Kelebihan Pasif)
+    const isDetained = Boolean(s.prison && s.prison.inPrison);
+    let totalVehicleUpkeep = 0;
+    let hasWorkingLicensedVehicle = false;
+    let hasLuxuryWorking = false;
+
     for (const v of s.assets.vehicles) {
       if (v.isLemon && !v.lemonRevealed) {
         this.revealLemonAsset(s, v, 'vehicle');
       }
       v.ageYrs = (v.ageYrs || 0) + 1;
-      v.condition = Utils.clamp(v.condition - Utils.randInt(v.isLemon ? 7 : 4, v.isLemon ? 14 : 9), 5, 100);
+      const wearDrop = Utils.randInt(v.isLemon ? 9 : 6, 14);
+      v.condition = Utils.clamp((v.condition || 80) - wearDrop, 5, 100);
+
       if (v.classic && v.condition >= 75 && !v.isLemon) {
         v.value = Math.round(v.value * (1 + 0.05 + Math.random() * 0.04));
       } else {
-        const baseDep = Math.max(0.03, v.depRate || 0.08);
+        const baseDep = Math.max(0.04, v.depRate || 0.09);
         const effDep = v.isLemon ? Math.min(0.32, baseDep * 1.65) : baseDep;
         v.value = Math.max(500, Math.round(v.value * (1 - effDep)));
       }
+
+      const annualVehUpkeep = Math.max(0, Math.round(v.upkeep || 0));
+      totalVehicleUpkeep += annualVehUpkeep;
+
+      if (v.condition >= 40 && this.hasMatchingLicense(s, v)) {
+        hasWorkingLicensedVehicle = true;
+      }
+      if (v.condition >= 45 && (v.looksBonus || 0) >= 6) {
+        hasLuxuryWorking = true;
+      }
+
       if ((v.isLemon && Utils.chance(0.38)) || (v.condition < 30 && Utils.chance(0.35))) {
         const fix = Math.max(Utils.usdToLocal(250, s.countryId), Math.round(v.value * (v.isLemon ? 0.16 : 0.12)));
         s.money -= fix;
@@ -977,6 +1370,24 @@ window.AssetsEngine = {
             : `🛠️ ${v.name} rosak di tepi jalan kerana kurang servis! Kos tunda & baiki: ${Utils.formatMoney(fix, s.countryId)}.`,
           'warning'
         );
+      }
+    }
+
+    // Tolak kos tahunan insurans, cukai jalan & minyak secara telus jika memiliki kenderaan
+    if (s.assets.vehicles.length > 0 && totalVehicleUpkeep > 0 && !isDetained) {
+      s.money -= totalVehicleUpkeep;
+      GameState.addJournalEntry(
+        `⛽ Kos Kenderaan Tahunan (${s.assets.vehicles.length} kenderaan — insurans, cukai jalan & minyak): -${Utils.formatMoney(totalVehicleUpkeep, s.countryId)}.`
+      );
+    }
+
+    // Kelebihan pasif memiliki kenderaan berfungsi dengan lesen sah
+    if (!isDetained) {
+      if (hasWorkingLicensedVehicle && (s.job || s.activeSpecialMode) && s.alignment) {
+        s.alignment.stress = Utils.clamp((s.alignment.stress || 0) - Utils.randInt(2, 4), 0, 100);
+      }
+      if (hasLuxuryWorking && window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ fame: Utils.randInt(1, 2) });
       }
     }
 

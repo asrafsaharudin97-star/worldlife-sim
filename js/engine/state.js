@@ -182,6 +182,7 @@ window.GameState = {
       annualExpensesMultiplier: 1,
       criminalRecord: 0,
       hasDriverLicense: false,
+      licenses: { moto: false, car: false },
       generation: 1,
       pastLives: [],
 
@@ -364,6 +365,14 @@ window.GameState = {
     if (typeof s.conceptionAttempts !== 'number') s.conceptionAttempts = 0;
     if (typeof s.infertilityDiagnosed !== 'boolean') s.infertilityDiagnosed = false;
     if (!('maritalStatus' in s)) s.maritalStatus = null;
+    if (!s.licenses || typeof s.licenses !== 'object') {
+      const legacyCar = Boolean(s.hasDriverLicense);
+      s.licenses = { moto: false, car: legacyCar };
+    } else {
+      if (typeof s.licenses.moto !== 'boolean') s.licenses.moto = false;
+      if (typeof s.licenses.car !== 'boolean') s.licenses.car = Boolean(s.hasDriverLicense);
+    }
+    s.hasDriverLicense = Boolean(s.licenses.car || s.licenses.moto);
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);
@@ -567,7 +576,8 @@ window.GameState = {
       retirementFund: 0,
       annualExpensesMultiplier: 1,
       criminalRecord: child.isDelinquent ? 1 : 0,
-      hasDriverLicense: childAge >= 18,
+      hasDriverLicense: false,
+      licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
@@ -900,7 +910,8 @@ window.GameState = {
       retirementFund: 0,
       annualExpensesMultiplier: 1,
       criminalRecord: child.isDelinquent ? 1 : 0,
-      hasDriverLicense: childAge >= 18,
+      hasDriverLicense: false,
+      licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
 
       alignment: {
@@ -1056,7 +1067,8 @@ window.GameState = {
       retirementFund: 0,
       annualExpensesMultiplier: 1,
       criminalRecord: 0,
-      hasDriverLicense: heirAge >= 18,
+      hasDriverLicense: false,
+      licenses: { moto: false, car: false },
       generation: newGen,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 

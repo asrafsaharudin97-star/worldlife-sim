@@ -284,7 +284,8 @@ window.PrisonFugitive = {
     const health = (s.stats && s.stats.health) || 60;
     const heat = (s.alignment && s.alignment.notoriety) || 0;
     const heatPenalty = heat > 80 ? 0.14 : (heat >= 50 ? 0.06 : 0);
-    const runWinChance = Math.max(0.08, Math.min(0.68, 0.14 + (health / 100) * 0.52 - heatPenalty));
+    const fastVehBoost = (window.AssetsEngine && AssetsEngine.hasFastWorkingVehicle && AssetsEngine.hasFastWorkingVehicle(s)) ? 0.08 : 0;
+    const runWinChance = Math.max(0.08, Math.min(0.72, 0.14 + (health / 100) * 0.52 + fastVehBoost - heatPenalty));
     const shotDeathChance = heat > 80 ? 0.34 : (heat >= 50 ? 0.24 : 0.16);
     const secLevel = forcedSecurity || (baseYears >= 6 ? 'maximum' : 'medium');
 
@@ -592,6 +593,13 @@ window.PrisonFugitive = {
     s.prison.respect = Utils.clamp(s.prison.respect || 25, 10, 100);
     s.prison.behavior = Utils.clamp(65 - (effectiveSecurity === 'maximum' ? 15 : 0), 20, 90);
     s.prison.gangName = null;
+
+    if (!isJuv && effectiveYears >= 3 && /kenderaan|kereta|pandu|lumba/i.test(String(crimeName || '')) && s.licenses && (s.licenses.car || s.licenses.moto)) {
+      s.licenses.car = false;
+      s.licenses.moto = false;
+      s.hasDriverLicense = false;
+      GameState.addJournalEntry('🪪🚫 Lesen memandu anda telah DIBATALKAN oleh mahkamah akibat sabitan kesalahan jalan raya atau kenderaan berat!', 'warning');
+    }
 
     GameState.adjustStats({ happiness: -22, health: -5 });
     const placeName = isJuv ? 'Sekolah Juvana' : `Penjara ${this.SECURITY_LABELS[securityLevel].name}`;

@@ -684,7 +684,6 @@ window.Sim = {
       const livingLocal = Math.max(0, Utils.usdToLocal(baseLivingUsd, s.countryId));
       let assetUpkeep = 0;
 
-      for (const v of s.assets.vehicles) assetUpkeep += Math.max(0, v.upkeep || 0);
       for (const p of s.assets.properties) assetUpkeep += Math.max(0, p.upkeep || 0);
 
       if ((inc.grossLocal || 0) > 0 || s.money > livingLocal) {
@@ -2850,7 +2849,8 @@ window.Sim = {
     let lighterPenalty = false;
 
     if (choice === 'run') {
-      const runChance = Math.min(0.82, Math.max(0.18, 0.28 + (health / 220) + (smarts / 320) - (def.severity === 'murder' ? 0.14 : 0)));
+      const fastVehBoost = (window.AssetsEngine && AssetsEngine.hasFastWorkingVehicle && AssetsEngine.hasFastWorkingVehicle(s)) ? 0.08 : 0;
+      const runChance = Math.min(0.86, Math.max(0.18, 0.28 + (health / 220) + (smarts / 320) + fastVehBoost - (def.severity === 'murder' ? 0.14 : 0)));
       if (Utils.chance(runChance)) {
         if (window.KarmaEndings) {
           KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: 20, stress: def.stress + 8 });
@@ -3227,36 +3227,15 @@ window.Sim = {
     return { ok: true, msg: `Berjaya mengeluarkan ${Utils.formatMoney(amt, s.countryId)}!` };
   },
 
-  takeDrivingTest() {
+  takeDrivingTest(type = 'car') {
     const s = GameState.current;
-    const c = Utils.getCountry(s.countryId);
-    if (s.hasDriverLicense) return { ok: false, msg: 'Anda sudah memiliki lesen memandu!' };
-    if (s.age < 17) return { ok: false, msg: 'Tunggu umur 17 tahun untuk ambil lesen memandu!' };
-    if (s.yearlyActions.drivingTest) return { ok: false, msg: 'Ujian memandu sudah diambil tahun ini.' };
-    const fee = Utils.usdToLocal(220, s.countryId);
-    if (s.money < fee && s.age >= 18) return { ok: false, msg: `Wang tidak mencukupi! Yuran ujian memandu ialah ${Utils.formatMoney(fee, s.countryId)}.` };
-    if (s.age >= 18) s.money -= fee;
-    s.yearlyActions.drivingTest = true;
-
-    const passChance = Math.min(0.95, 0.55 + s.stats.smarts * 0.004);
-    const localTestName = c.id === 'MY' ? 'Ujian Bukit & Jalan Raya JPJ'
-      : c.id === 'GB' ? 'Ujian Memandu Praktikal DVSA'
-      : c.id === 'JP' ? 'Ujian Lesen Memandu Menkyo'
-      : c.id === 'SG' ? 'Ujian Praktikal Polis Trafik (BBDC)'
-      : `Ujian Lesen Memandu ${c.name}`;
-
-    if (Utils.chance(passChance)) {
-      s.hasDriverLicense = true;
-      GameState.adjustStats({ happiness: 12, smarts: 2, adaptation: 8 });
-      GameState.addJournalEntry(`🚗 Lulus ${localTestName} di ${c.name} ${c.flag}! Anda kini memiliki lesen memandu sah!`, 'milestone');
-      GameState.save();
-      return { ok: true, msg: `Lulus ${localTestName}!` };
-    } else {
-      GameState.adjustStats({ happiness: -4 });
-      GameState.addJournalEntry(`🚗 Kereta termati enjin di bukit semasa ${localTestName} — cuba lagi nanti!`);
-      GameState.save();
-      return { ok: false, msg: `Gagal ${localTestName}! Cuba lagi tahun hadapan.` };
+    if (s && s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh mengambil ujian memandu semasa dalam tahanan.' };
     }
+    if (window.AssetsEngine && AssetsEngine.submitDrivingLicenseTest) {
+      return AssetsEngine.submitDrivingLicenseTest(type, 2, 2);
+    }
+    return { ok: false, msg: 'Sistem lesen memandu tidak tersedia.' };
   },
 
   doCommunityCharity() {

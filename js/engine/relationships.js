@@ -714,6 +714,9 @@ window.Relationships = {
     if (hasIncomeOrFunds) acceptProb += 0.06;
     else if (s.age >= 23) acceptProb -= 0.14;
     if ((s.money || 0) < 0) acceptProb -= 0.12;
+    if (window.AssetsEngine && AssetsEngine.hasLuxuryWorkingVehicle && AssetsEngine.hasLuxuryWorkingVehicle(s)) {
+      acceptProb += 0.06;
+    }
 
 
     if (ageGap >= 15) acceptProb -= 0.25;

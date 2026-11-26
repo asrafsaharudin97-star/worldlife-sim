@@ -186,6 +186,13 @@ window.AssetModals = {
       html += `<div class="section-heading">🚗 Kenderaan Dimiliki (${s.assets.vehicles.length})</div>`;
       s.assets.vehicles.forEach(v => {
         const showLemon = Boolean(v.isLemon && v.lemonRevealed);
+        const hasLic = AssetsEngine.hasMatchingLicense(s, v);
+        const reqLic = AssetsEngine.getRequiredLicenseType(v);
+        const licBadge = !reqLic
+          ? '<span class="cat-badge synergy">✓ Tanpa Lesen</span>'
+          : hasLic
+            ? `<span class="cat-badge synergy">🪪 Lesen ${reqLic === 'moto' ? 'Motosikal' : 'Kereta'} Sah</span>`
+            : `<span class="cat-badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;">⚠️ Tiada Lesen ${reqLic === 'moto' ? 'Motosikal' : 'Kereta'}</span>`;
         html += `
           <div class="migration-card">
             <div class="mig-head">
@@ -196,13 +203,16 @@ window.AssetModals = {
               </div>
               <strong>${Utils.formatMoney(v.value, s.countryId, true)}</strong>
             </div>
-            <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-              Keadaan: <strong>${v.condition}%</strong> • Usia: ${v.ageYrs || 0} thn • Penyelenggaraan: ${Utils.formatMoney(v.upkeep || 0, s.countryId, true)}/thn
+            <div style="font-size:11.5px;color:#475569;margin-bottom:8px;">
+              ${licBadge} • Kondisi: <strong>${v.condition}%</strong> • Usia: ${v.ageYrs || 0} thn • Kos Tahunan: ${Utils.formatMoney(v.upkeep || 0, s.countryId, true)}/thn
               ${showLemon ? `<br/><span style="color:#b91c1c;font-weight:700;">⚠️ Isu: ${Utils.escapeHtml(v.lemonFlaw || 'Enjin bermasalah')} (Kos senggara tinggi)</span>` : ''}
             </div>
+            <button type="button" class="btn-sm primary veh-detail-btn" data-uid="${v.uid}" style="width:100%;margin-bottom:6px;">
+              🛣️ Pandu &amp; Urus Kenderaan
+            </button>
             <div class="mig-actions">
-              <button type="button" class="btn-sm primary veh-serv-btn" data-uid="${v.uid}">🔧 Servis &amp; Baiki</button>
-              <button type="button" class="btn-sm secondary veh-sell-btn" data-uid="${v.uid}" style="color:#dc2626;">💵 Jual</button>
+              <button type="button" class="btn-sm secondary veh-serv-btn" data-uid="${v.uid}">🔧 Servis &amp; Baiki</button>
+              <button type="button" class="btn-sm secondary veh-sell-btn" data-uid="${v.uid}" style="color:#dc2626;">💰 Jual Kenderaan</button>
             </div>
           </div>
         `;
