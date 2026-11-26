@@ -1571,6 +1571,12 @@ window.Modals = {
     const trustLocked = s.age < 18 || inPrison;
     const setupFee = LegalInheritanceEngine.getTrustSetupFee(s);
     const annualFee = LegalInheritanceEngine.getTrustAnnualFee(s);
+    const trustAssetsVal = LegalInheritanceEngine.getTrustAssetsValue(s);
+    const trustNetWorth = LegalInheritanceEngine.getTrustNetWorth(s);
+    const mgrOffers = LegalInheritanceEngine.getFundManagerOffers(s);
+    const ownedProps = (s.assets && Array.isArray(s.assets.properties)) ? s.assets.properties : [];
+    const ownedVehs = (s.assets && Array.isArray(s.assets.vehicles)) ? s.assets.vehicles : [];
+    const trustAssets = Array.isArray(ft.assets) ? ft.assets : [];
     const trustStatusLabel = !ft.active
       ? 'Tidak Aktif'
       : ft.lapsed
@@ -1578,6 +1584,7 @@ window.Modals = {
         : 'Aktif (Bebas Cukai Pusaka)';
     const trustStatusBg = !ft.active ? '#f1f5f9' : ft.lapsed ? '#fef3c7' : '#dcfce7';
     const trustStatusColor = !ft.active ? '#475569' : ft.lapsed ? '#92400e' : '#166534';
+    const mgrTierLabels = { junior: 'Pengurus Dana Junior', profesional: 'Pengurus Korporat Profesional', elit: 'Pengurus Dana Elit (Padu)' };
 
     this.open({
       icon: '📜',
@@ -1587,19 +1594,20 @@ window.Modals = {
         <div class="info-banner highlight">
           <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
           <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
-          Nilai Harta Bersih Anggaran: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
+          Harta Peribadi Boleh Agih: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
         </div>
 
-        <div class="section-heading">🏛️ Tabung Yayasan Keluarga</div>
+        <div class="section-heading">🏛️ Tabung Yayasan Keluarga (Eksklusif Pewaris Pemain)</div>
         <div class="migration-card" style="border-color:${ft.active && !ft.lapsed ? '#22c55e' : ft.lapsed ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
           <div class="mig-head">
             <div class="mig-title">🏛️ Tabung Yayasan Keluarga</div>
             <span class="cat-badge" style="background:${trustStatusBg};color:${trustStatusColor};">${trustStatusLabel}</span>
           </div>
-          <div style="font-size:12px;color:#475569;line-height:1.55;margin-bottom:10px;">
-            Dana Dalam Yayasan: <strong style="color:#0f172a;">${fmt(ft.balance)}</strong><br/>
-            Anggaran Yuran Pengurusan Tahunan: <strong>${fmt(annualFee)}/thn</strong><br/>
-            <small>Selagi Yayasan Keluarga aktif &amp; tiada tunggakan yuran, 100% harta pusaka anda dipindahkan ke generasi seterusnya dengan <strong>0% cukai pusaka</strong>.</small>
+          <div style="font-size:12px;color:#475569;line-height:1.58;margin-bottom:10px;">
+            Dana Tunai Yayasan: <strong style="color:#0f172a;">${fmt(ft.balance)}</strong> • Aset Yayasan (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
+            Jumlah Kekayaan Dilindungi: <strong style="color:#059669;">${fmt(trustNetWorth)}</strong><br/>
+            Kadar Yuran Semasa: <strong>${ft.feeRate.toFixed(1)}% setahun (Maks 50%)</strong> • Anggaran Yuran: <strong>${fmt(annualFee)}/thn</strong><br/>
+            <small>100% dana &amp; aset dalam Yayasan Keluarga diwarisi eksklusif oleh watak pemain generasi seterusnya (0% kepada NPC &amp; bebas cukai pusaka).</small>
           </div>
           ${trustLocked ? `
             <div class="info-banner" style="font-size:11.5px;margin-bottom:0;">
@@ -1618,17 +1626,81 @@ window.Modals = {
             <div style="display:flex;gap:6px;margin-bottom:8px;">
               <input type="number" id="input-trust-amount" class="form-input" min="1" placeholder="Jumlah (${Utils.getCountry(s.countryId).currency.symbol})" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);" />
             </div>
-            <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <div style="display:flex;gap:6px;margin-bottom:10px;">
               <button type="button" class="btn-sm primary" id="btn-trust-deposit" style="flex:1;">💰 Masukkan Dana ke Yayasan</button>
               <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;">💵 Keluarkan Dana Yayasan</button>
             </div>
+
+            <div class="section-heading" style="margin-top:6px;">👔 Pengurus Dana (Kontrak 5 Tahun)</div>
+            <div class="info-banner" style="font-size:11.5px;margin-bottom:8px;background:${ft.fundManager ? '#f0fdf4' : '#fef2f2'};border-color:${ft.fundManager ? '#86efac' : '#fca5a5'};color:${ft.fundManager ? '#166534' : '#991b1b'};">
+              ${ft.fundManager
+                ? `👔 Aktif: <strong>${Utils.escapeHtml(ft.fundManager.name)}</strong> (${mgrTierLabels[ft.fundManager.tier] || ft.fundManager.tier}) • <strong>Baki Kontrak: ${ft.fundManager.yearsLeft} tahun</strong>`
+                : '⚠️ <strong>Tiada Pengurus Dana Aktif!</strong> Yayasan tanpa pengurus berisiko tinggi menghadapi pecah amanah dan pemantauan kerajaan.'}
+            </div>
+            <div class="action-list" style="margin-bottom:10px;">
+              ${mgrOffers.map(m => `
+                <button type="button" class="action-item btn-hire-trust-mgr" data-tier="${m.tier}">
+                  <span class="ai-icon">${m.icon}</span>
+                  <span class="ai-content">
+                    <span class="ai-title">${Utils.escapeHtml(m.title)}</span>
+                    <span class="ai-desc">${Utils.escapeHtml(m.desc)}</span>
+                  </span>
+                  <span class="ai-right cost">${fmt(m.cost)}</span>
+                </button>
+              `).join('')}
+            </div>
+
+            <div class="section-heading" style="margin-top:6px;">🏠 Pindahkan Aset ke Yayasan</div>
+            ${(ownedProps.length + ownedVehs.length) === 0 ? `
+              <div style="font-size:11.5px;color:#64748b;margin-bottom:8px;">Tiada hartanah atau kenderaan peribadi untuk dipindahkan.</div>
+            ` : `
+              <div class="action-list" style="margin-bottom:10px;">
+                ${ownedProps.map(p => `
+                  <button type="button" class="action-item btn-trust-in-asset" data-atype="property" data-uid="${p.uid}">
+                    <span class="ai-icon">${p.icon || '🏠'}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(p.name)}</span>
+                      <span class="ai-desc">Hartanah • Nilai: ${fmt(p.value || 0)}</span>
+                    </span>
+                    <span class="ai-right free">Pindah →</span>
+                  </button>
+                `).join('')}
+                ${ownedVehs.map(v => `
+                  <button type="button" class="action-item btn-trust-in-asset" data-atype="vehicle" data-uid="${v.uid}">
+                    <span class="ai-icon">${v.icon || '🚗'}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(v.name)}</span>
+                      <span class="ai-desc">Kenderaan • Nilai: ${fmt(v.value || 0)}</span>
+                    </span>
+                    <span class="ai-right free">Pindah →</span>
+                  </button>
+                `).join('')}
+              </div>
+            `}
+
+            ${trustAssets.length > 0 ? `
+              <div class="section-heading" style="margin-top:6px;">📤 Keluarkan Aset daripada Yayasan (${trustAssets.length})</div>
+              <div class="action-list" style="margin-bottom:10px;">
+                ${trustAssets.map(a => `
+                  <button type="button" class="action-item btn-trust-out-asset" data-uid="${a.uid}">
+                    <span class="ai-icon">${a.icon || '🏛️'}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(a.name)}</span>
+                      <span class="ai-desc">${a.trustAssetType === 'property' ? 'Hartanah Yayasan' : 'Kenderaan Yayasan'} • Nilai: ${fmt(a.value || 0)}</span>
+                    </span>
+                    <span class="ai-right cost">Keluarkan</span>
+                  </button>
+                `).join('')}
+              </div>
+            ` : ''}
+
             <button type="button" class="ghost-btn" id="btn-trust-dissolve" style="width:100%;border-color:#fca5a5;color:#dc2626;font-weight:700;">
               ❌ Bubarkan Yayasan
             </button>
           `}
         </div>
 
-        <div class="section-heading">Pilih Mod Pembahagian Wasiat</div>
+        <div class="section-heading">Pilih Mod Pembahagian Wasiat (Harta Peribadi)</div>
         <div class="action-list">
           <button type="button" class="action-item civil-wasiat-btn" data-mode="equal">
             <span class="ai-icon">⚖️</span>
@@ -1641,14 +1713,14 @@ window.Modals = {
             <span class="ai-icon">💍</span>
             <span class="ai-content">
               <span class="ai-title">100% Kepada Pasangan ${curMode === 'spouse_all' ? '✓' : ''}</span>
-              <span class="ai-desc">Seluruh harta pusaka diserahkan kepada pasangan hidup anda</span>
+              <span class="ai-desc">Seluruh harta pusaka peribadi diserahkan kepada pasangan hidup anda</span>
             </span>
           </button>
           <button type="button" class="action-item civil-wasiat-btn" data-mode="charity">
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
               <span class="ai-title">100% Yayasan Kebajikan ${curMode === 'charity' ? '✓' : ''}</span>
-              <span class="ai-desc">Dermakan seluruh harta pusaka kepada tabung kebajikan awam</span>
+              <span class="ai-desc">Dermakan seluruh harta pusaka peribadi kepada tabung kebajikan awam</span>
             </span>
           </button>
         </div>
@@ -1700,6 +1772,33 @@ window.Modals = {
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
       this.showWasiatModal(onBack);
+    });
+
+    document.querySelectorAll('.btn-hire-trust-mgr').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LegalInheritanceEngine.hireFundManager(s, btn.dataset.tier);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showWasiatModal(onBack);
+      });
+    });
+
+    document.querySelectorAll('.btn-trust-in-asset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LegalInheritanceEngine.transferAssetToTrust(s, btn.dataset.atype, btn.dataset.uid);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showWasiatModal(onBack);
+      });
+    });
+
+    document.querySelectorAll('.btn-trust-out-asset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LegalInheritanceEngine.withdrawAssetFromTrust(s, btn.dataset.uid);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showWasiatModal(onBack);
+      });
     });
 
     const disBtn = document.getElementById('btn-trust-dissolve');

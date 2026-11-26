@@ -207,7 +207,7 @@ window.GameState = {
       creditScore: 620,
       loans: [],
       loanBlacklisted: false,
-      familyTrust: { active: false, balance: 0, lapsed: false, lastPaidAge: null },
+      familyTrust: { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null },
       peakSalaryUsd: 0,
 
       assets: {
@@ -506,7 +506,9 @@ window.GameState = {
   getNetWorth() {
     const s = this.current;
     if (!s) return 0;
-    const trustBal = Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
+    const trustBal = (window.LegalInheritanceEngine && LegalInheritanceEngine.getTrustNetWorth)
+      ? LegalInheritanceEngine.getTrustNetWorth(s)
+      : Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
     const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
       ? SpecialModesEngine.getCeoEquityLocal(s)
       : 0;
@@ -716,20 +718,28 @@ window.GameState = {
     }
 
     if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
-      const consolidatedLocal = Math.max(0, shareLocal);
-      state.money = 0;
+      const trustCashLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.balance || 0, parent.countryId, cId)));
+      const transferredAssets = (parent.familyTrust.assets || []).map(a => ({
+        ...JSON.parse(JSON.stringify(a)),
+        value: Math.max(0, Math.round(Utils.convertMoney(a.value || 0, parent.countryId, cId)))
+      }));
       state.familyTrust = {
         active: true,
-        balance: consolidatedLocal,
+        balance: trustCashLocal,
+        assets: transferredAssets,
+        feeRate: parent.familyTrust.feeRate || 2.0,
+        yearsActive: parent.familyTrust.yearsActive || 0,
+        fundManager: parent.familyTrust.fundManager ? { ...parent.familyTrust.fundManager } : null,
+        underAudit: false,
         lapsed: false,
         lastPaidAge: null
       };
       this.addJournalEntry(
-        `🏛️ Pemindahan Harta Bebas Cukai (0%): Seluruh kekayaan bersih berjumlah ${Utils.formatMoney(consolidatedLocal, cId)} dipindahkan dengan selamat melalui Tabung Yayasan Keluarga ke Generasi ${state.generation}!`,
+        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)} & ${transferredAssets.length} aset yayasan dipindahkan terus ke Generasi ${state.generation} (Kadar Yuran: ${state.familyTrust.feeRate.toFixed(1)}%/thn)!`,
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
     }
 
     if (window.Dynasty) {
@@ -1196,20 +1206,25 @@ window.GameState = {
       }
     }
     if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
-      const consolidatedLocal = Math.max(0, netWorth);
-      state.money = 0;
+      const trustCashLocal = Math.max(0, Math.round(parent.familyTrust.balance || 0));
+      const transferredAssets = (parent.familyTrust.assets || []).map(a => JSON.parse(JSON.stringify(a)));
       state.familyTrust = {
         active: true,
-        balance: consolidatedLocal,
+        balance: trustCashLocal,
+        assets: transferredAssets,
+        feeRate: parent.familyTrust.feeRate || 2.0,
+        yearsActive: parent.familyTrust.yearsActive || 0,
+        fundManager: parent.familyTrust.fundManager ? { ...parent.familyTrust.fundManager } : null,
+        underAudit: false,
         lapsed: false,
         lastPaidAge: null
       };
       this.addJournalEntry(
-        `🏛️ Pemindahan Harta Bebas Cukai (0%): Seluruh kekayaan bersih berjumlah ${Utils.formatMoney(consolidatedLocal, cId)} dipindahkan dengan selamat melalui Tabung Yayasan Keluarga ke Generasi ${newGen}!`,
+        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)} & ${transferredAssets.length} aset yayasan dipindahkan terus ke Generasi ${newGen} (Kadar Yuran: ${state.familyTrust.feeRate.toFixed(1)}%/thn)!`,
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
     }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();

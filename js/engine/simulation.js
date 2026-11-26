@@ -368,7 +368,10 @@ window.Sim = {
       }
     }
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.tickYearlyFamilyTrust) {
-      LegalInheritanceEngine.tickYearlyFamilyTrust(s);
+      const trustEv = LegalInheritanceEngine.tickYearlyFamilyTrust(s);
+      if (trustEv && window.Modals && Modals.showEvent) {
+        setTimeout(() => Modals.showEvent(trustEv), 320);
+      }
     }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
