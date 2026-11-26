@@ -448,11 +448,20 @@ window.Modals = {
     const c = Utils.getCountry(s.countryId);
     const living = s.relationships.filter(r => r.alive);
 
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
     const partnerList = living.filter(r => r.id === s.partnerId);
     const friendsList = living.filter(r => r.category === 'friend' && r.id !== s.partnerId);
     const familyList = living.filter(r => r.id !== s.partnerId && r.category !== 'friend' && r.category !== 'ex');
 
     let html = '<div class="action-list">';
+    if (inPrison) {
+      html += `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;line-height:1.55;margin-bottom:8px;">
+          🔒 <strong>Terputus Hubungan — Anda tidak dibenarkan berjumpa keluarga, rakan, atau pasangan sehingga hari dibebaskan.</strong><br/>
+          Segala pertemuan, panggilan, pemberian hadiah dan tindakan luar dikunci sepenuhnya sepanjang tempoh tahanan.
+        </div>
+      `;
+    }
     if (s.pregnancy && s.pregnancy.active) {
       html += `
         <div class="info-banner highlight" style="background:#fdf2f8;border-color:#fbcfe8;">
@@ -470,11 +479,11 @@ window.Modals = {
     if (s.age >= 7) {
       const friendSrc = s.age < 18 || s.education.stage === 'university' ? 'Sekolah / Kampus' : (s.job ? 'Tempat Kerja / Komuniti' : 'Komuniti');
       html += `
-        <button class="action-item" id="btn-meet-friend" ${s.yearlyActions.meetFriend ? 'disabled' : ''}>
+        <button class="action-item" id="btn-meet-friend" ${s.yearlyActions.meetFriend || inPrison ? 'disabled' : ''}>
           <span class="ai-icon">🤝</span>
           <span class="ai-content">
             <span class="ai-title">Kenali Rakan Baru (${friendSrc})</span>
-            <span class="ai-desc">Bina lingkaran sosial untuk sokongan emosi, rujukan kerja &amp; peluang</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Bina lingkaran sosial untuk sokongan emosi, rujukan kerja &amp; peluang'}</span>
           </span>
           <span class="ai-right">Kenali</span>
         </button>
@@ -484,11 +493,11 @@ window.Modals = {
     const minLoveAge = 16;
     if (!s.partnerId && s.age >= minLoveAge) {
       html += `
-        <button class="action-item" id="btn-find-love">
+        <button class="action-item" id="btn-find-love" ${inPrison ? 'disabled' : ''}>
           <span class="ai-icon">💘</span>
           <span class="ai-content">
             <span class="ai-title">Sesi Date (${s.city}, ${c.name} ${c.flag})</span>
-            <span class="ai-desc">Kenali calon pasangan baharu melalui Sesi Date</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Kenali calon pasangan baharu melalui Sesi Date'}</span>
           </span>
           <span class="ai-right">Sesi Date</span>
         </button>
@@ -496,11 +505,11 @@ window.Modals = {
     }
     if (s.partnerId && partnerList.length > 0) {
       html += `
-        <button class="action-item" id="btn-cheat-partner" ${s.yearlyActions.cheatedThisYear ? 'disabled' : ''}>
+        <button class="action-item" id="btn-cheat-partner" ${s.yearlyActions.cheatedThisYear || inPrison ? 'disabled' : ''}>
           <span class="ai-icon">💔</span>
           <span class="ai-content">
             <span class="ai-title">Curang dengan Orang Lain</span>
-            <span class="ai-desc">${s.yearlyActions.cheatedThisYear ? 'Sudah bermain kayu tiga tahun ini' : 'Menjalin hubungan sulit di belakang pasangan'}</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : (s.yearlyActions.cheatedThisYear ? 'Sudah bermain kayu tiga tahun ini' : 'Menjalin hubungan sulit di belakang pasangan')}</span>
           </span>
         </button>
       `;
@@ -508,11 +517,11 @@ window.Modals = {
     if (s.age >= 21) {
       const adoptCost = Utils.usdToLocal(900, s.countryId);
       html += `
-        <button class="action-item" id="btn-adopt-child" ${s.yearlyActions.adoptedChild ? 'disabled' : ''}>
+        <button class="action-item" id="btn-adopt-child" ${s.yearlyActions.adoptedChild || inPrison ? 'disabled' : ''}>
           <span class="ai-icon">🏡</span>
           <span class="ai-content">
             <span class="ai-title">Ambil Anak Angkat</span>
-            <span class="ai-desc">Beri rumah yang penyayang kepada anak angkat baru</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Beri rumah yang penyayang kepada anak angkat baru'}</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(adoptCost, s.countryId)}</span>
         </button>
@@ -520,11 +529,11 @@ window.Modals = {
     }
     if (s.age >= 18 && window.LegalInheritanceEngine) {
       html += `
-        <button class="action-item" id="btn-open-wasiat-rel">
+        <button class="action-item" id="btn-open-wasiat-rel" ${inPrison ? 'disabled' : ''}>
           <span class="ai-icon">📜</span>
           <span class="ai-content">
             <span class="ai-title">Urus Wasiat &amp; Harta Pusaka</span>
-            <span class="ai-desc">Tetapkan Wasiat Sivil ${c.name} (Sama Rata / 1 Waris / Amal)</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : `Tetapkan Wasiat Sivil ${c.name} (Sama Rata / 1 Waris / Amal)`}</span>
           </span>
           <span class="ai-right">Wasiat</span>
         </button>
@@ -712,6 +721,7 @@ window.Modals = {
       ? `${Utils.formatMoney(rel.yearlySchoolFee, s.countryId)}/thn`
       : 'Percuma';
 
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
     const childUpbringingHtml = isMinorChild ? `
       <div class="info-banner ${rel.isDelinquent ? '' : 'highlight'}" style="${rel.isDelinquent ? 'background:#fef2f2;border-color:#fecaca;' : ''}line-height:1.6;">
         <strong>👶 Perkembangan &amp; Persekolahan Anak (Umur ${rel.age}/17)</strong>
@@ -722,6 +732,7 @@ window.Modals = {
         🌟 Akhlak &amp; Moral: <strong>${rel.morals ?? 70}%</strong> • 🔥 Pemberontakan: <strong style="color:${(rel.rebelliousness ?? 10) > 65 ? '#dc2626' : 'inherit'};">${rel.rebelliousness ?? 10}%</strong><br/>
         <small style="opacity:0.8;">Tindakan keibubapaan tahun ini: <strong>${parentCountUsed}/3</strong></small>
       </div>
+      ${!inPrison ? `
       <div class="section-heading">👨‍👩‍👧 Persekolahan &amp; Tindakan Keibubapaan (${parentCountUsed}/3 Tahun Ini)</div>
       <div class="action-list" style="margin-bottom:10px;">
         ${rel.age >= 4 && rel.age <= 17 ? `
@@ -767,6 +778,7 @@ window.Modals = {
           <span class="ai-right">Percuma</span>
         </button>
       </div>
+      ` : ''}
     ` : (isChild && rel.age >= 18 ? `
       <div class="info-banner highlight" style="line-height:1.6;">
         <strong>🎓 Status Pengajian &amp; Kerjaya Anak (${rel.age} Tahun)</strong><br/>
@@ -792,6 +804,11 @@ window.Modals = {
         ` : ''}
         Lokasi: ${rc.flag} ${rc.name}${rel.job ? ` • ${Utils.escapeHtml(rel.job)}` : ''}
       </div>
+      ${inPrison ? `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;line-height:1.55;">
+          🔒 <strong>Terputus Hubungan — Anda tidak dibenarkan berjumpa keluarga, rakan, atau pasangan sehingga hari dibebaskan.</strong>
+        </div>
+      ` : ''}
       ${isPartner && s.pregnancy && s.pregnancy.active ? `
         <div class="info-banner" style="background:#fdf2f8;border-color:#fbcfe8;">
           🤰 <strong>Sedang Hamil:</strong> Cahaya mata dijangka lahir tahun hadapan!
@@ -805,134 +822,132 @@ window.Modals = {
       ${childUpbringingHtml}
       
       <div class="action-list">
-        <button class="action-item rel-act-btn" data-act="spend_time">
+        <button class="action-item rel-act-btn" data-act="spend_time" ${inPrison ? 'disabled' : ''}>
           <span class="ai-icon">${longDist ? '📱' : '☕'}</span>
           <span class="ai-content">
             <span class="ai-title">${longDist ? 'Panggilan Video & Tanya Khabar' : (isPartner && !s.married ? 'Sesi Date' : 'Luangkan Masa Bersama')}</span>
-            <span class="ai-desc">Luangkan masa berkualiti bersama</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Luangkan masa berkualiti bersama'}</span>
           </span>
           <span class="ai-right">Percuma</span>
         </button>
-        <button class="action-item rel-act-btn" data-act="gift">
+        <button class="action-item rel-act-btn" data-act="gift" ${inPrison ? 'disabled' : ''}>
           <span class="ai-icon">🎁</span>
           <span class="ai-content">
             <span class="ai-title">Beri Hadiah Istimewa</span>
-            <span class="ai-desc">Berikan hadiah sebagai tanda ingatan</span>
+            <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Berikan hadiah sebagai tanda ingatan'}</span>
           </span>
           <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(45, s.countryId), s.countryId)}</span>
         </button>
         ${canAskMoney ? `
-          <button class="action-item rel-act-btn" data-act="ask_money" ${askedMoneyThisYear ? 'disabled' : ''}>
+          <button class="action-item rel-act-btn" data-act="ask_money" ${askedMoneyThisYear || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💸</span>
             <span class="ai-content">
               <span class="ai-title">Minta Duit</span>
-              <span class="ai-desc">${askedMoneyThisYear ? 'Sudah meminta bantuan wang tahun ini' : 'Cuba minta bantuan wang tunai'}</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : (askedMoneyThisYear ? 'Sudah meminta bantuan wang tahun ini' : 'Cuba minta bantuan wang tunai')}</span>
             </span>
           </button>
         ` : ''}
         ${canStealMoney ? `
-          <button class="action-item rel-act-btn" data-act="steal_money" ${stoleMoneyThisYear ? 'disabled' : ''}>
+          <button class="action-item rel-act-btn" data-act="steal_money" ${stoleMoneyThisYear || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">🕵️</span>
             <span class="ai-content">
               <span class="ai-title">Curi Duit</span>
-              <span class="ai-desc">${stoleMoneyThisYear ? 'Sudah mencuba mencuri wang daripadanya tahun ini' : 'Cuba ambil wang tunai secara senyap-senyap'}</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : (stoleMoneyThisYear ? 'Sudah mencuba mencuri wang daripadanya tahun ini' : 'Cuba ambil wang tunai secara senyap-senyap')}</span>
             </span>
           </button>
         ` : ''}
 
         ${isFriend && s.age >= 18 ? `
-          <button class="action-item rel-act-btn" data-act="ask_referral">
+          <button class="action-item rel-act-btn" data-act="ask_referral" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💼</span>
             <span class="ai-content">
               <span class="ai-title">Minta Rujukan Kerja / Peluang Projek</span>
-              <span class="ai-desc">Perlukan Kemesraan 70%+ &amp; Kepercayaan 70%+</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Perlukan Kemesraan 70%+ &amp; Kepercayaan 70%+'}</span>
             </span>
             <span class="ai-right">Minta</span>
           </button>
         ` : ''}
 
         ${isFriend && s.age >= 6 ? `
-          <button class="action-item rel-act-btn" data-act="cut_ties">
+          <button class="action-item rel-act-btn" data-act="cut_ties" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💔</span>
             <span class="ai-content">
               <span class="ai-title">Putus Kawan</span>
-              <span class="ai-desc">Tamatkan persahabatan ini secara muktamad</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Tamatkan persahabatan ini secara muktamad'}</span>
             </span>
           </button>
         ` : ''}
 
-        
-
         ${isPartner && !s.married && rel.stage !== 'cohabiting' ? `
-          <button class="action-item rel-act-btn" data-act="cohabit">
+          <button class="action-item rel-act-btn" data-act="cohabit" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">🏠</span>
             <span class="ai-content">
               <span class="ai-title">Tinggal Bersama</span>
-              <span class="ai-desc">Tinggal sebumbung bersama pasangan (perlu kemesraan 65%+)</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Tinggal sebumbung bersama pasangan (perlu kemesraan 65%+)'}</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
         ` : ''}
 
         ${isPartner && !s.married && rel.stage !== 'engaged' ? `
-          <button class="action-item rel-act-btn" data-act="engage">
+          <button class="action-item rel-act-btn" data-act="engage" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💐</span>
             <span class="ai-content">
               <span class="ai-title">Bertunang</span>
-              <span class="ai-desc">Langkah rasmi menuju perkahwinan (perlu kemesraan 60%+)</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Langkah rasmi menuju perkahwinan (perlu kemesraan 60%+)'}</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(350, s.countryId), s.countryId)}</span>
           </button>
         ` : ''}
 
         ${isPartner && !s.married ? `
-          <button class="action-item rel-act-btn" data-act="propose">
+          <button class="action-item rel-act-btn" data-act="propose" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💍</span>
             <span class="ai-content">
               <span class="ai-title">Lamar &amp; Majlis Perkahwinan</span>
-              <span class="ai-desc">Sah bergelar suami isteri (perlu kemesraan 70%+)</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Sah bergelar suami isteri (perlu kemesraan 70%+)'}</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(1800, s.countryId), s.countryId)}</span>
           </button>
         ` : ''}
 
         ${isPartner && s.married ? `
-          <button class="action-item rel-act-btn" data-act="family_trip">
+          <button class="action-item rel-act-btn" data-act="family_trip" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">✈️</span>
             <span class="ai-content">
               <span class="ai-title">Percutian Harmoni Rumah Tangga</span>
-              <span class="ai-desc">Luangkan masa bercuti bersama pasangan</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Luangkan masa bercuti bersama pasangan'}</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(450, s.countryId), s.countryId)}</span>
           </button>
         ` : ''}
 
         ${isPartner && s.age >= 18 ? `
-          <button class="action-item rel-act-btn" data-act="have_kid">
+          <button class="action-item rel-act-btn" data-act="have_kid" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">👶</span>
             <span class="ai-content">
               <span class="ai-title">Timang Cahaya Mata</span>
-              <span class="ai-desc">Anak akan lahir di ${Utils.getCountry(s.countryId).name} ${Utils.getCountry(s.countryId).flag}</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : `Anak akan lahir di ${Utils.getCountry(s.countryId).name} ${Utils.getCountry(s.countryId).flag}`}</span>
             </span>
             <span class="ai-right">Rancang</span>
           </button>
         ` : ''}
 
         ${isPartner ? `
-          <button class="action-item rel-act-btn" data-act="breakup">
+          <button class="action-item rel-act-btn" data-act="breakup" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💔</span>
             <span class="ai-content">
               <span class="ai-title">${s.married ? 'Cerai' : 'Putus Pasangan'}</span>
-              <span class="ai-desc">Bawa haluan masing-masing</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Bawa haluan masing-masing'}</span>
             </span>
           </button>
         ` : ''}
         ${isChild && rel.alive ? `
-          <button class="action-item" id="btn-switch-to-child" style="background:#f5f3ff;border-color:#c4b5fd;">
+          <button class="action-item" id="btn-switch-to-child" style="background:#f5f3ff;border-color:#c4b5fd;" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">🔄</span>
             <span class="ai-content">
               <span class="ai-title">Teruskan Sebagai Anak Ini</span>
-              <span class="ai-desc">Serah legasi semasa hidup — kawalan berpindah ke Gen ${(s.generation || 1) + 1} sambil anda kekal hidup sebagai NPC</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : `Serah legasi semasa hidup — kawalan berpindah ke Gen ${(s.generation || 1) + 1} sambil anda kekal hidup sebagai NPC`}</span>
             </span>
             <span class="ai-right" style="color:#6d28d9;">Tukar →</span>
           </button>
@@ -2928,6 +2943,7 @@ window.Modals = {
     const activeSlotNum = GameState.getActiveSlotId().replace('slot_', '');
     const isCloudLoggedIn = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
     const toddlerLocked = Boolean(window.App && App._isToddlerLocked && App._isToddlerLocked());
+    const inPrison = Boolean(GameState.current && GameState.current.prison && GameState.current.prison.inPrison);
 
     this.open({
       icon: '🌍',
@@ -2959,27 +2975,27 @@ window.Modals = {
           ${(GameState.current && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo(GameState.current)) ? (() => {
             const info = SpecialModesEngine.getActiveInfo(GameState.current);
             return `
-              <button class="action-item" id="menu-open-active-special">
+              <button class="action-item" id="menu-open-active-special" ${inPrison ? 'disabled' : ''}>
                 <span class="ai-icon">${info.def.icon}</span>
                 <span class="ai-content">
                   <span class="ai-title">Mod Khas Aktif: ${Utils.escapeHtml(info.def.title)}</span>
-                  <span class="ai-desc">Pangkat: ${Utils.escapeHtml(info.rank.title)} — Klik untuk buka Papan Pemuka</span>
+                  <span class="ai-desc">${inPrison ? 'Digantung sepanjang tempoh tahanan' : `Pangkat: ${Utils.escapeHtml(info.rank.title)} — Klik untuk buka Papan Pemuka`}</span>
                 </span>
               </button>
             `;
           })() : ''}
-          <button class="action-item" id="menu-open-social" ${toddlerLocked ? 'disabled' : ''}>
+          <button class="action-item" id="menu-open-social" ${toddlerLocked || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">📱</span>
             <span class="ai-content">
               <span class="ai-title">Laman Sosial, Viral &amp; Sesi Date</span>
-              <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Bina pengikut, kerjaya viral &amp; cari pasangan'}</span>
+              <span class="ai-desc">${inPrison ? 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' : (toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Bina pengikut, kerjaya viral &amp; cari pasangan')}</span>
             </span>
           </button>
-          <button class="action-item" id="menu-open-passport" ${toddlerLocked ? 'disabled' : ''}>
+          <button class="action-item" id="menu-open-passport" ${toddlerLocked || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">🛂</span>
             <span class="ai-content">
               <span class="ai-title">Lihat Pasport &amp; Profil</span>
-              <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Semak negara, cop pasport &amp; biodata'}</span>
+              <span class="ai-desc">${inPrison ? 'Pasport ditahan sehingga hari pembebasan' : (toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Semak negara, cop pasport &amp; biodata')}</span>
             </span>
           </button>
           <button class="action-item" id="menu-new-life">

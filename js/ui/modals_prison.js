@@ -195,7 +195,7 @@ window.PrisonModals = {
             <span class="ai-icon">🔓</span>
             <span class="ai-content">
               <span class="ai-title">Mohon Pembebasan Parol</span>
-              <span class="ai-desc">${paroleReady ? `Layak memohon parol (${p.yearsServed}/${reqParole} thn)` : `Dibuka selepas 50% hukuman (${p.yearsServed}/${reqParole} thn)`}</span>
+              <span class="ai-desc">${paroleReady ? `Layak memohon parol (${p.yearsServed}/${reqParole} thn)` : `Dibuka selepas separuh tempoh hukuman (${p.yearsServed}/${reqParole} thn)`}</span>
             </span>
             <span class="ai-right">${paroleReady ? 'Mohon' : '🔒 Kunci'}</span>
           </button>

@@ -22,6 +22,21 @@ window.ModeModals = {
     const s = GameState.current;
     GameState.ensureUpgradedState();
 
+    if (s.prison && s.prison.inPrison) {
+      Modals.open({
+        icon: '🔒',
+        title: 'Akses Diharamkan Dalam Tahanan',
+        subtitle: s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara',
+        bodyHtml: `
+          <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;line-height:1.55;">
+            🔒 <strong>Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.</strong><br/>
+            Segala akaun media sosial, kerjaya tular dan aplikasi janji temu dikunci sepenuhnya sehingga anda tamat menjalani hukuman atau berjaya meloloskan diri.
+          </div>
+        `
+      });
+      return;
+    }
+
     const tabsHtml = `
       <div class="tab-pills">
         <button class="tab-pill soc-tab ${activeTab === 'social' ? 'active' : ''}" data-stab="social">📱 Laman Sosial</button>

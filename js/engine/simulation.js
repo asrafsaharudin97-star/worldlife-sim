@@ -602,7 +602,18 @@ window.Sim = {
       s.job.years = (s.job.years || 0) + 1;
       s.yearsInCurrentJob = s.job.years;
       s.totalYearsWorked = (s.totalYearsWorked || 0) + 1;
-      const retireContrib = Math.round(s.job.salary * 0.12);
+
+      if (s.job.isUnderground) {
+        const meta = s.job.undergroundMeta || { stressGain: 4, healthDrop: 1, fameDrop: 2 };
+        if (meta.healthDrop > 0) GameState.adjustStats({ health: -meta.healthDrop });
+        if (window.KarmaEndings) {
+          KarmaEndings.adjustAlignment({ stress: meta.stressGain || 4, fame: -(meta.fameDrop || 2) });
+        } else if (s.alignment) {
+          s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + (meta.stressGain || 4), 0, 100);
+          s.alignment.fame = Utils.clamp((s.alignment.fame || 0) - (meta.fameDrop || 2), 0, 100);
+        }
+      } else {
+        const retireContrib = Math.round(s.job.salary * 0.12);
 
       // Risiko diberhentikan kerja (syarikat muflis/pengecilan) atau pemotongan gaji akibat kemelesetan ekonomi
       if (Utils.chance(0.07)) {
@@ -642,6 +653,7 @@ window.Sim = {
           );
         }
         s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(-4, 3), 20, 100);
+      }
       }
     }
 
@@ -858,6 +870,7 @@ window.Sim = {
         if (s.prison.transferAt18) {
           s.prison.detentionType = 'prison';
           s.prison.transferAt18 = false;
+          s.hasCriminalRecord = true;
           GameState.addJournalEntry(
             `⚖️ PEMINDAHAN KE PENJARA DEWASA: Setelah mencecah umur 18 tahun, anda dipindahkan daripada Sekolah Juvana ke Penjara dewasa untuk menyambung baki hukuman ${s.prison.yearsLeft} tahun.`,
             'warning'
@@ -869,22 +882,93 @@ window.Sim = {
         }
       }
 
+      // Pastikan sebarang kerja aktif terlucut sepenuhnya sepanjang tahanan
+      if (s.job) s.job = null;
+
       if (s.prison.yearsLeft <= 0) {
-        const releasedFrom = s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
+        const wasJuvenile = s.prison.detentionType === 'juvenile';
+        const releasedFrom = wasJuvenile ? 'Sekolah Juvana' : 'Penjara';
+        const servedYrs = Math.max(1, s.prison.yearsServed || s.prison.originalSentence || 1);
+        if (!wasJuvenile) s.hasCriminalRecord = true;
         s.prison.inPrison = false;
         s.prison.isDeathPenalty = false;
         s.prison.isLife = false;
+        if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
         s.alignment.notoriety = Math.max(0, s.alignment.notoriety - 20);
-        GameState.adjustStats({ happiness: 14 });
+        GameState.adjustStats({ happiness: 16 });
         GameState.addJournalEntry(
-          `🔓 Anda tamat menjalani tempoh tahanan di ${releasedFrom} dan dibebaskan hari ini! Masa untuk memulakan lembaran baharu.`,
+          wasJuvenile
+            ? `🔓🌅 HARI PEMBEBASAN: Pintu besi ${releasedFrom} akhirnya terbuka selepas ${servedYrs} tahun! Anda melangkah keluar menghirup udara bebas dengan rekod juvana yang dirahsiakan — peluang kedua menanti di dunia luar.`
+            : `🔓🌅 HARI PEMBEBASAN: Selepas ${servedYrs} tahun terkurung di sebalik tirai besi ${releasedFrom}, anda akhirnya melangkah keluar sebagai insan bebas! Namun parut rekod jenayah dewasa masih membayangi pencarian kerja anda.`,
           'milestone'
         );
       } else {
         const placeName = s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
-        GameState.adjustStats({ happiness: -4, health: -2 });
+        const hapDrop = Utils.randInt(8, 15);
+        const healthDrop = Utils.randInt(3, 7);
+        const stressGain = Utils.randInt(10, 18);
+        const fameDrop = Utils.randInt(3, 7);
+
+        GameState.adjustStats({ happiness: -hapDrop, health: -healthDrop });
+        if (window.KarmaEndings) {
+          KarmaEndings.adjustAlignment({ stress: stressGain, fame: -fameDrop });
+        } else if (s.alignment) {
+          s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + stressGain, 0, 100);
+          s.alignment.fame = Utils.clamp((s.alignment.fame || 0) - fameDrop, 0, 100);
+        }
+        if (window.Dynasty) Dynasty.adjustReputation(-2);
+
+        // Kemerosotan hubungan keluarga, rakan & pasangan kerana terputus hubungan (-6 hingga -14 setahun)
+        for (const rel of (s.relationships || [])) {
+          if (!rel || !rel.alive) continue;
+          const clDrop = Utils.randInt(6, 14);
+          const trDrop = Utils.randInt(6, 12);
+          rel.closeness = Utils.clamp((rel.closeness ?? 65) - clDrop, 0, 100);
+          if (typeof rel.trust === 'number') {
+            rel.trust = Utils.clamp(rel.trust - trDrop, 0, 100);
+          } else {
+            rel.trust = Utils.clamp(65 - trDrop, 0, 100);
+          }
+        }
+
+        // Risiko pasangan / suami / isteri tidak sanggup menunggu lagi & menghantar surat putus / cerai
+        if (s.partnerId) {
+          const partner = (s.relationships || []).find(r => r.id === s.partnerId && r.alive);
+          if (partner) {
+            const pCloseness = partner.closeness ?? 50;
+            const served = s.prison.yearsServed || 1;
+            const abandonChance = Utils.clamp(
+              0.24 + (served * 0.07) + ((60 - pCloseness) * 0.005),
+              0.18,
+              0.68
+            );
+            if (Utils.chance(abandonChance)) {
+              const wasMarried = Boolean(s.married);
+              const partnerName = partner.name;
+              s.partnerId = null;
+              s.married = false;
+              s.marriageMeta = null;
+              if (wasMarried) {
+                s.maritalStatus = s.gender === 'male' ? 'Duda (Bercerai)' : 'Janda (Bercerai)';
+              }
+              partner.category = 'ex';
+              partner.role = wasMarried ? 'Bekas Pasangan' : 'Bekas Kekasih';
+              partner.closeness = Math.min(partner.closeness ?? 20, 15);
+              GameState.adjustStats({ happiness: -22 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 18 });
+              GameState.recordCrisis('heartbreak');
+              GameState.addJournalEntry(
+                wasMarried
+                  ? `✉️💔 SURAT PERCERAIAN DI SEL TAHANAN: Pengawal menyerahkan sepucuk surat rasmi — ${partnerName} tidak sanggup lagi menunggu di luar sana dan telah memfailkan perceraian daripada anda!`
+                  : `✉️💔 DITINGGALKAN PASANGAN: Anda menerima sepucuk surat ringkas daripada ${partnerName} yang memutuskan hubungan kerana tidak tahan lagi menanggung malu dan penantian sepanjang anda di dalam tahanan.`,
+                'warning'
+              );
+            }
+          }
+        }
+
         GameState.addJournalEntry(
-          `🔒 Menjalani tahanan di ${placeName} (baki ${s.prison.yearsLeft} tahun). Klik bar ${placeName.toUpperCase()} untuk aktiviti tahanan atau rayuan.`,
+          `🔒 Tahun ke-${s.prison.yearsServed} di sebalik tembok ${placeName} (baki ${s.prison.yearsLeft} tahun): Kesunyian sel menghakis mental dan fizikal anda, manakala hubungan dengan insan di luar semakin renggang.`,
           'warning'
         );
       }
@@ -1034,6 +1118,12 @@ window.Sim = {
     if (s.age < 5) return null;
     if (s.prison && s.prison.inPrison) {
       return (window.PrisonFugitive && PrisonFugitive.pickPrisonEvent) ? PrisonFugitive.pickPrisonEvent(s) : null;
+    }
+
+    // 0000. Serbuan Polis / Majikan Belot bagi pelarian yang bekerja di bawah tanah
+    if (window.EduCareerEngine && EduCareerEngine.maybeTriggerUndergroundRaidEvent) {
+      const ugRaidEv = EduCareerEngine.maybeTriggerUndergroundRaidEvent(s);
+      if (ugRaidEv) return ugRaidEv;
     }
 
     // 000. Gesaan Persaraan Wajib (Umur 60–65 bagi pekerjaan standard)
@@ -2417,7 +2507,7 @@ window.Sim = {
       } else if (s.fugitive.fakeIdentityTier !== 'pro') {
         return {
           ok: false,
-          msg: '🚨 Status PELARIAN: Anda disenarai hitam daripada pekerjaan rasmi! Beli Identiti Palsu Gred Profesional di Pasaran Gelap.'
+          msg: '🚨 Majikan sah menolak permohonan anda kerana status buruan polis.'
         };
       }
     }
@@ -2426,8 +2516,14 @@ window.Sim = {
     if (jobDef.reqSmarts && s.stats.smarts < jobDef.reqSmarts) {
       return { ok: false, msg: `Memerlukan sekurang-kurangnya ${jobDef.reqSmarts}% Kepintaran.` };
     }
-    if (s.criminalRecord > 0 && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast)) && jobDef.reqDegree && Utils.chance(0.5)) {
-      return { ok: false, msg: 'Semakan latar belakang mengesan rekod jenayah anda.' };
+    const hasAdultRecord = Boolean(s.hasCriminalRecord || ((s.criminalRecord || 0) > 0 && s.age >= 18));
+    if (hasAdultRecord && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast)) && (jobDef.reqDegree || (jobDef.reqSmarts && jobDef.reqSmarts >= 65)) && Utils.chance(0.75)) {
+      GameState.addJournalEntry(
+        `📄 Permohonan jawatan "${jobDef.title}" ditolak selepas semakan latar belakang mengesan rekod jenayah dewasa anda.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, msg: 'Semakan latar belakang mengesan rekod jenayah dewasa anda.' };
     }
     const jobHeat = (s.alignment && s.alignment.notoriety) || 0;
     if (jobHeat >= 40 && !(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast))) {

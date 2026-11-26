@@ -349,7 +349,7 @@ window.App = {
     document.getElementById('btn-open-social').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
       if (isDetainedNow()) {
-        this.toast('⛓️ Akses Laman Sosial & Aplikasi Janji Temu disekat semasa berada di dalam penjara.', 'error');
+        this.toast('🔒 Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.', 'error');
         return;
       }
       if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
@@ -991,6 +991,7 @@ window.App = {
 
   _syncToddlerLockUI(s) {
     const locked = Boolean(s && s.age <= 4);
+    const inPrison = Boolean(s && s.prison && s.prison.inPrison && s.prison.yearsLeft > 0);
     document.querySelectorAll('.dock-btn').forEach(btn => {
       btn.disabled = locked;
       btn.setAttribute('aria-disabled', String(locked));
@@ -998,8 +999,9 @@ window.App = {
     ['btn-passport', 'btn-open-legacy', 'btn-open-modes', 'btn-open-social'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
-        el.disabled = locked;
-        el.setAttribute('aria-disabled', String(locked));
+        const isPrisonBlocked = inPrison && (id === 'btn-open-social' || id === 'btn-open-modes');
+        el.disabled = locked || isPrisonBlocked;
+        el.setAttribute('aria-disabled', String(locked || isPrisonBlocked));
       }
     });
     const avatar = document.getElementById('char-avatar');

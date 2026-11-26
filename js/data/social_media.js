@@ -56,6 +56,7 @@ window.SocialMedia = {
   joinPlatform(platformId) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     if (s.age < 13) return { ok: false, msg: 'Tunggu umur 13 tahun untuk mendaftar akaun Laman Sosial!' };
     const plat = this.PLATFORMS.find(p => p.id === platformId);
     if (!plat) return { ok: false, msg: 'Platform tidak ditemui.' };
@@ -74,7 +75,7 @@ window.SocialMedia = {
   postContent(strategyId) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    if (s.prison.inPrison) return { ok: false, msg: 'Anda tidak boleh memuat naik konten dari dalam penjara!' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     if (!s.socialMedia.platforms.length) return { ok: false, msg: 'Daftar sekurang-kurangnya satu platform Laman Sosial dahulu!' };
     if (s.yearlyActions.socialPost) return { ok: false, msg: 'Anda sudah memuat naik kempen konten utama tahun ini.' };
 
@@ -140,7 +141,7 @@ window.SocialMedia = {
   takeSponsorship() {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    if (s.prison.inPrison) return { ok: false, msg: 'Tidak boleh terima tajaan semasa di penjara.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     if (s.socialMedia.followers < 3000) return { ok: false, msg: 'Perlukan sekurang-kurangnya 3,000 pengikut untuk tajaan jenama!' };
     if (s.yearlyActions.socialSponsor) return { ok: false, msg: 'Anda sudah melengkapkan tajaan jenama tahun ini.' };
 
@@ -161,7 +162,7 @@ window.SocialMedia = {
   joinViralCareer(careerId) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    if (s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menyertai kerjaya ketika di penjara.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     if (s.age < 16) return { ok: false, msg: 'Tunggu umur 16 tahun untuk kerjaya viral sepenuh masa!' };
     const def = this.VIRAL_CAREERS.find(c => c.id === careerId);
     if (!def) return { ok: false, msg: 'Kerjaya tidak ditemui.' };
@@ -258,6 +259,7 @@ window.SocialMedia = {
   skipCandidate(uid) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     const used = s.yearlyActions.datingSearches || 0;
     if (used >= this.MAX_DATING_SEARCHES_YEAR) {
       return { ok: false, msg: `Had carian pasangan tahun ini (${this.MAX_DATING_SEARCHES_YEAR}x) telah tamat. Cuba lagi tahun hadapan.` };
@@ -271,7 +273,7 @@ window.SocialMedia = {
   matchCandidate(uid) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
-    if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh menggunakan Aplikasi Janji Temu semasa di dalam penjara.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Akses telefon dan media sosial diharamkan sepenuhnya di dalam tahanan.' };
     const minAge = 18;
     if (s.age < minAge) return { ok: false, msg: `Aplikasi Janji Temu dibuka pada umur ${minAge}+ tahun!` };
     if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan aktif!' };

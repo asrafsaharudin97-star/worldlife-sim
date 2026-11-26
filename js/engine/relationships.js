@@ -977,6 +977,9 @@ window.Relationships = {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: '🔒 Terputus Hubungan — Anda tidak dibenarkan berjumpa keluarga, rakan, atau pasangan sehingga hari dibebaskan.' };
+    }
 
     const rel = s.relationships.find(r => r.id === relId);
     if (!rel || !rel.alive) return { ok: false, msg: 'Tidak dapat berinteraksi.' };
@@ -1690,6 +1693,7 @@ window.Relationships = {
 
   attemptCheat() {
     const s = GameState.current;
+    if (s && s.prison && s.prison.inPrison) return { ok: false, msg: '🔒 Terputus Hubungan — Anda sedang berada di dalam tahanan.' };
     if (!s || !s.partnerId) return { ok: false, msg: 'Anda tidak mempunyai pasangan buat masa ini.' };
     if (s.yearlyActions.cheatedThisYear) return { ok: false, msg: 'Anda sudah bermain kayu tiga tahun ini.' };
     const partner = s.relationships.find(r => r.id === s.partnerId && r.alive);
@@ -1997,6 +2001,9 @@ window.Relationships = {
     const s = GameState.current;
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: '🔒 Terputus Hubungan — Anda tidak dapat menguruskan anak secara langsung dari dalam tahanan.' };
+    }
 
     const child = (s.relationships || []).find(r => r.id === childId && r.alive);
     if (!child) return { ok: false, msg: 'Anak tidak ditemui.' };

@@ -245,6 +245,40 @@ window.CareerModals = {
       `;
     }
 
+    const isFugitiveNow = Boolean(s.fugitive && s.fugitive.isFugitive);
+    const hasCrimNoJob = Boolean((s.hasCriminalRecord || (s.criminalRecord || 0) > 0) && !s.job);
+    const showUnderground = (isFugitiveNow || hasCrimNoJob) && !(s.prison && s.prison.inPrison);
+
+    if (showUnderground && Array.isArray(EduCareerEngine.UNDERGROUND_JOBS)) {
+      html += `
+        <div class="section-heading">🕶️ Kerja Bawah Tanah (Tanpa Dokumen)</div>
+        <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;color:#334155;margin-bottom:8px;">
+          ${isFugitiveNow
+            ? '🚨 <strong>Status Buruan Polis:</strong> Majikan sah menolak permohonan anda. Kerja bawah tanah menawarkan upah kecil sekadar bertahan hidup tanpa semakan dokumen, namun berisiko serbuan polis.'
+            : '🕶️ <strong>Pilihan Alternatif Tanpa Semakan:</strong> Kerja bawah tanah terbuka tanpa syarat kelayakan atau semakan latar belakang, dengan upah sekadar sara hidup.'}
+        </div>
+        <div class="action-list" style="margin-bottom:12px;">
+          ${EduCareerEngine.UNDERGROUND_JOBS.map(ug => {
+            const ugSal = EduCareerEngine.getUndergroundSalaryLocal(s, ug);
+            return `
+              <button type="button" class="action-item ug-apply-btn" data-ug-id="${ug.id}" ${roleLock.locked ? 'disabled' : ''}>
+                <span class="ai-icon">${ug.icon}</span>
+                <span class="ai-content">
+                  <span class="ai-title">${Utils.escapeHtml(ug.title)}</span>
+                  <span class="ai-desc">${Utils.escapeHtml(ug.desc)}</span>
+                </span>
+                <span class="ai-right">
+                  <span class="act-status-pill ${roleLock.locked ? 'cost' : 'free'}">
+                    ${roleLock.locked ? '🔒 Dikunci' : `${Utils.formatMoney(ugSal, s.countryId)}/thn`}
+                  </span>
+                </span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
     html += `
       <div class="act-engine-header" style="margin-top:4px;">
         <div class="aeh-top">
@@ -749,6 +783,16 @@ window.CareerModals = {
       document.querySelectorAll('.ind-filter-pill').forEach(pill => {
         pill.addEventListener('click', () => {
           this._industryFilter = pill.dataset.ind || 'ALL';
+          this.showHub('jobs');
+        });
+      });
+
+      document.querySelectorAll('.ug-apply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const res = EduCareerEngine.takeUndergroundJob(btn.dataset.ugId);
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          App.renderAll();
+          if (res.ok) this._browsingNewJob = false;
           this.showHub('jobs');
         });
       });

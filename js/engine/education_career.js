@@ -1113,16 +1113,26 @@ window.EduCareerEngine = {
       mod -= 15;
     }
 
-    // 5) Reputasi Keluarga Tercemar atau Rekod Jenayah (-15% hingga -40%)
+    // 5) Stigma Rekod Jenayah Dewasa & Reputasi Keluarga Tercemar (Rekod juvana kekal dirahsiakan/ringan)
     const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
+    const hasAdultRecord = Boolean(s.hasCriminalRecord || ((s.criminalRecord || 0) > 0 && s.age >= 18));
+    const isHighTierOrGov = Boolean(
+      career.isRare ||
+      career.baseSalary >= 45000 ||
+      ['government', 'law', 'finance', 'healthcare', 'education'].includes(career.industry) ||
+      ['bachelor', 'master', 'phd'].includes(career.minEducation)
+    );
     let penalty = 0;
-    if ((s.criminalRecord || 0) > 0 && !hasCleanId) {
-      penalty += Math.min(35, 15 + (s.criminalRecord * 8));
+    if (hasAdultRecord && !hasCleanId) {
+      const recCount = Math.max(1, s.criminalRecord || 1);
+      penalty += isHighTierOrGov
+        ? Math.min(58, 34 + (recCount * 8))
+        : Math.min(24, 12 + (recCount * 5));
     }
     if (window.Dynasty && Dynasty.getFamilyReputation && Dynasty.getFamilyReputation() < 30) {
       penalty += 15;
     }
-    mod -= Math.min(40, penalty);
+    mod -= Math.min(62, penalty);
 
     // 6) Penalti Stres Tinggi (50–74%: -10% peluang; >= 75% Burnout: -15% peluang)
     const curStress = (s.alignment && s.alignment.stress) || 0;
@@ -1158,7 +1168,7 @@ window.EduCareerEngine = {
       } else if (s.fugitive.fakeIdentityTier !== 'pro') {
         return {
           ok: false,
-          msg: '🚨 Status PELARIAN: Anda disenarai hitam daripada pekerjaan rasmi! Beli Identiti Palsu Gred Profesional di Pasaran Gelap.'
+          msg: '🚨 Majikan sah menolak permohonan anda kerana status buruan polis.'
         };
       }
     }
@@ -1189,6 +1199,184 @@ window.EduCareerEngine = {
     return { ok: true, msg: '' };
   },
 
+  // --------------------------------------------------------------------------
+  // 4B. KERJA BAWAH TANAH / TANPA DOKUMEN (KHAS PELARIAN & REKOD JENAYAH)
+  // --------------------------------------------------------------------------
+  UNDERGROUND_JOBS: [
+    {
+      id: 'ug_dishwasher',
+      icon: '🍽️',
+      title: 'Tukang Cuci Pinggan Dapur Belakang',
+      payRatio: 0.15,
+      raidChance: 0.14,
+      stressGain: 4,
+      healthDrop: 0,
+      fameDrop: 2,
+      desc: 'Menyorok di dapur lorong belakang mencuci timbunan pinggan dengan upah sekadar lepas makan.'
+    },
+    {
+      id: 'ug_warehouse',
+      icon: '📦',
+      title: 'Buruh Angkat Barang Stor Gelap',
+      payRatio: 0.20,
+      raidChance: 0.18,
+      stressGain: 6,
+      healthDrop: 3,
+      fameDrop: 2,
+      desc: 'Kerja berat mengangkat kotak di gudang haram waktu malam tanpa sebarang dokumen pengenalan.'
+    },
+    {
+      id: 'ug_chopshop',
+      icon: '🔧',
+      title: 'Pembantu Bengkel Haram / Besi Buruk',
+      payRatio: 0.25,
+      raidChance: 0.24,
+      stressGain: 5,
+      healthDrop: 1,
+      fameDrop: 4,
+      desc: 'Membantu meleraikan komponen besi buruk di bengkel tersembunyi dengan bayaran tunai harian.'
+    }
+  ],
+
+  getUndergroundSalaryLocal(s, ugJob) {
+    const c = Utils.getCountry(s.countryId);
+    const entryBaseUsd = 12000 * Math.max(0.25, c.salaryMultiplier || 0.5);
+    const ratio = (ugJob && ugJob.payRatio) || 0.18;
+    return Math.max(50, Utils.usdToLocal(Math.round(entryBaseUsd * ratio), s.countryId));
+  },
+
+  takeUndergroundJob(ugId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh mengambil kerja bawah tanah semasa berada dalam tahanan.' };
+    }
+    const roleLock = this.getActiveRoleLock(s);
+    if (roleLock.locked) {
+      return { ok: false, msg: `Anda sedang memegang jawatan ${roleLock.roleName}. Letak jawatan dahulu sebelum bertukar kerja.` };
+    }
+    if (s.age < 16) {
+      return { ok: false, msg: 'Umur minimum untuk kerja bawah tanah ialah 16 tahun.' };
+    }
+    const ug = this.UNDERGROUND_JOBS.find(x => x.id === ugId);
+    if (!ug) return { ok: false, msg: 'Kerja bawah tanah tidak ditemui.' };
+
+    const salary = this.getUndergroundSalaryLocal(s, ug);
+    s.job = {
+      id: ug.id,
+      title: ug.title,
+      icon: ug.icon,
+      salary,
+      years: 0,
+      performance: 65,
+      countryId: s.countryId,
+      isUnderground: true,
+      undergroundMeta: {
+        raidChance: ug.raidChance,
+        stressGain: ug.stressGain,
+        healthDrop: ug.healthDrop,
+        fameDrop: ug.fameDrop
+      },
+      ladder: null
+    };
+    GameState.addJournalEntry(
+      `🕶️ Anda mula bekerja secara senyap tanpa dokumen sebagai ${ug.icon} ${ug.title} dengan upah sekadar sara hidup (${Utils.formatMoney(salary, s.countryId)}/thn).`,
+      'warning'
+    );
+    GameState.save();
+    return { ok: true, msg: `Anda mula bekerja sebagai ${ug.title}!` };
+  },
+
+  maybeTriggerUndergroundRaidEvent(s) {
+    if (!s || !s.job || !s.job.isUnderground) return null;
+    if (s.prison && s.prison.inPrison) return null;
+    if (!(s.fugitive && s.fugitive.isFugitive)) return null;
+
+    const meta = s.job.undergroundMeta || { raidChance: 0.18 };
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+    const chance = Math.min(0.45, (meta.raidChance || 0.18) + (heat > 70 ? 0.08 : 0));
+    if (!Utils.chance(chance)) return null;
+
+    const c = Utils.getCountry(s.countryId);
+    const bribeCost = Math.max(Utils.usdToLocal(450, s.countryId), Math.round((s.job.salary || 1000) * 0.45));
+    const jobTitle = s.job.title;
+
+    return {
+      id: `ug_raid_${s.age}_${Date.now()}`,
+      icon: '🚨',
+      title: 'Serbuan Polis & Majikan Belot!',
+      text: `Lampu biru polis berkelip di lorong belakang tempat anda bekerja sebagai ${jobTitle}! Majikan anda kelihatan cemas dan sedia menyerahkan anda kepada pihak berkuasa demi menyelamatkan dirinya sendiri.`,
+      choices: [
+        {
+          label: '🏃 Lari Tinggalkan Tempat Kerja',
+          journalType: 'warning',
+          customAction: (st) => {
+            const health = (st.stats && st.stats.health) || 55;
+            const curHeat = (st.alignment && st.alignment.notoriety) || 0;
+            const fastVeh = (window.AssetsEngine && AssetsEngine.hasFastWorkingVehicle && AssetsEngine.hasFastWorkingVehicle(st)) ? 0.10 : 0;
+            const escapeChance = Math.max(0.18, Math.min(0.78, 0.34 + (health / 240) + fastVeh - (curHeat * 0.0025)));
+
+            if (Utils.chance(escapeChance)) {
+              st.job = null;
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 14 });
+              GameState.adjustStats({ happiness: -6 });
+              GameState.save();
+              return {
+                outcome: 'Anda merempuh pintu belakang dan berjaya meloloskan diri ke lorong gelap! Anda kehilangan kerja bawah tanah itu dan buruan polis semakin ketat.',
+                toastType: 'culture'
+              };
+            }
+
+            const extraYears = Utils.randInt(4, 8);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula (Serbuan Tempat Kerja Haram)', extraYears, 'maximum');
+            }
+            GameState.save();
+            return {
+              outcome: `Anda dikepung di hujung lorong dan diberkas semula! Mahkamah menjatuhkan hukuman penjara tambahan selama ${extraYears} tahun.`,
+              toastType: 'error'
+            };
+          }
+        },
+        {
+          label: `💵 Rasuah Majikan / Pegawai (${Utils.formatMoney(bribeCost, s.countryId)})`,
+          journalType: 'warning',
+          customAction: (st) => {
+            if ((st.money || 0) < bribeCost) {
+              const extraYears = Utils.randInt(3, 6);
+              if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+                PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula (Gagal Rasuah)', extraYears, 'maximum');
+              }
+              GameState.save();
+              return {
+                outcome: `Wang tunai tidak mencukupi untuk menutup mulut mereka — majikan terus menyerahkan anda kepada polis dan anda dipenjara ${extraYears} tahun!`,
+                toastType: 'error'
+              };
+            }
+            st.money -= bribeCost;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -8, stress: 8 });
+            if (Utils.chance(0.72)) {
+              GameState.save();
+              return {
+                outcome: `Wang ${Utils.formatMoney(bribeCost, st.countryId)} bertukar tangan di belakang stor — mereka mengalihkan perhatian serbuan dan anda kekal bersembunyi buat setahun lagi.`,
+                toastType: 'culture'
+              };
+            }
+            const extraYears = Utils.randInt(4, 7);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula + Cubaan Rasuah', extraYears, 'maximum');
+            }
+            GameState.save();
+            return {
+              outcome: `Wang ${Utils.formatMoney(bribeCost, st.countryId)} lesap dan pegawai tersebut tetap menggari anda! Anda dihantar semula ke penjara selama ${extraYears} tahun.`,
+              toastType: 'error'
+            };
+          }
+        }
+      ]
+    };
+  },
+
   applyForCareer(careerId) {
     const s = GameState.current;
     this.ensureFields(s);
@@ -1210,9 +1398,19 @@ window.EduCareerEngine = {
       if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
         s.careerMarket.appliedJobIdsThisYear.push(career.id);
       }
-      const reason = (cgpa !== null && cgpa < 3.0 && Utils.chance(0.75))
-        ? `PNGK bawah 3.00 (${cgpa.toFixed(2)}) tidak melepasi saringan majikan.`
-        : Utils.pick(this.REJECTION_SCENARIOS);
+      const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
+      const hasAdultRecord = Boolean(s.hasCriminalRecord || ((s.criminalRecord || 0) > 0 && s.age >= 18));
+      const isHighTierOrGov = Boolean(
+        career.isRare ||
+        career.baseSalary >= 45000 ||
+        ['government', 'law', 'finance', 'healthcare', 'education'].includes(career.industry) ||
+        ['bachelor', 'master', 'phd'].includes(career.minEducation)
+      );
+      const reason = (hasAdultRecord && !hasCleanId && isHighTierOrGov && Utils.chance(0.80))
+        ? 'Semakan latar belakang mengesan rekod jenayah dewasa anda — permohonan bagi jawatan korporat/kerajaan ini ditolak.'
+        : (cgpa !== null && cgpa < 3.0 && Utils.chance(0.75))
+          ? `PNGK bawah 3.00 (${cgpa.toFixed(2)}) tidak melepasi saringan majikan.`
+          : Utils.pick(this.REJECTION_SCENARIOS);
       const hapDip = Utils.randInt(2, 4);
       GameState.adjustStats({ happiness: -hapDip });
       GameState.addJournalEntry(

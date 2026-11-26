@@ -149,6 +149,10 @@ window.PrisonFugitive = {
       if (typeof s.prison.lastAppealYear !== 'number') s.prison.lastAppealYear = -99;
     }
 
+    if (typeof s.hasCriminalRecord !== 'boolean') {
+      s.hasCriminalRecord = Boolean((s.criminalRecord || 0) > 0 && s.age >= 18);
+    }
+
     if (!s.fugitive || typeof s.fugitive !== 'object') {
       s.fugitive = {
         isFugitive: false, hiddenPast: false, recaptureRisk: 0,
@@ -567,13 +571,14 @@ window.PrisonFugitive = {
     if (!isJuv && window.AssetsEngine && (effectiveYears >= 5 || effectiveSecurity === 'maximum')) {
       AssetsEngine.handleCrimeAssetFreeze(s);
     }
-    s.criminalRecord = (s.criminalRecord || 0) + 1;
     if (!isJuv) {
-      s.job = null;
-      if (s.education && (s.education.stage === 'university' || s.education.isStudying)) {
-        s.education.isStudying = false;
-        s.education.stage = 'done';
-      }
+      s.criminalRecord = (s.criminalRecord || 0) + 1;
+      s.hasCriminalRecord = true;
+    }
+    s.job = null;
+    if (!isJuv && s.education && (s.education.stage === 'university' || s.education.isStudying)) {
+      s.education.isStudying = false;
+      s.education.stage = 'done';
     }
     s.fugitive.isFugitive = false;
     s.fugitive.recaptureRisk = 0;
@@ -650,9 +655,10 @@ window.PrisonFugitive = {
         }
         p.inPrison = false;
         p.yearsLeft = 0;
+        if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
         GameState.adjustStats({ happiness: 24 });
         if (window.KarmaEndings) KarmaEndings.addHighlight('⚖️', 'Berjaya memenangi rayuan dan dibebaskan daripada tahanan');
-        GameState.addJournalEntry('⚖️ RAYUAN BERJAYA! Mahkamah Rayuan membatalkan sabitan anda dan anda dibebaskan hari ini!', 'milestone');
+        GameState.addJournalEntry('🔓🌅 HARI PEMBEBASAN (RAYUAN BERJAYA): Mahkamah Rayuan membatalkan sabitan anda! Pintu besi terbuka dan anda kembali menikmati kebebasan di dunia luar.', 'milestone');
         GameState.save();
         return { ok: true, msg: 'Rayuan DILULUSKAN! Anda dibebaskan serta-merta!' };
       }
@@ -665,16 +671,18 @@ window.PrisonFugitive = {
     if (action === 'parole') {
       const reqServed = Math.max(1, Math.ceil((p.originalSentence || 2) * 0.5));
       if ((p.yearsServed || 0) < reqServed) {
-        return { ok: false, msg: `Parol hanya dibuka selepas menjalani sekurang-kurangnya 50% hukuman (${p.yearsServed}/${reqServed} tahun).` };
+        return { ok: false, msg: `Parol hanya dibuka selepas menjalani separuh tempoh hukuman (${p.yearsServed}/${reqServed} tahun).` };
       }
       if (s.yearlyActions.prisonParole) return { ok: false, msg: 'Anda sudah memohon parol tahun ini.' };
       s.yearlyActions.prisonParole = true;
       const chance = Math.min(0.90, Math.max(0.10, (p.behavior / 115) + (Math.max(0, s.alignment.karma) / 350)));
       if (Utils.chance(chance)) {
+        if (!isJuv) s.hasCriminalRecord = true;
         p.inPrison = false;
         p.yearsLeft = 0;
+        if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
         GameState.adjustStats({ happiness: 20 });
-        GameState.addJournalEntry('🔓 PAROL DILULUSKAN! Rekod kelakuan baik anda meyakinkan lembaga parol untuk membebaskan anda lebih awal.', 'milestone');
+        GameState.addJournalEntry('🔓🌅 HARI PEMBEBASAN (PAROL): Lembaga parol meluluskan pembebasan awal anda! Anda melangkah keluar menghirup udara bebas semula.', 'milestone');
         GameState.save();
         return { ok: true, msg: 'Parol DILULUSKAN! Anda kini bebas!' };
       }
@@ -813,81 +821,225 @@ window.PrisonFugitive = {
   // Bersihkan keadaan tahanan dan pulihkan akses dunia luar
   releaseFromDetention(s, journalMsg) {
     if (!s || !s.prison) return;
+    const wasJuv = s.prison.detentionType === 'juvenile';
+    if (!wasJuv && (s.prison.yearsServed || 0) > 0) {
+      s.hasCriminalRecord = true;
+    }
     s.prison.inPrison = false;
     s.prison.yearsLeft = 0;
     if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
     GameState.adjustStats({ happiness: 18 });
-    if (journalMsg) GameState.addJournalEntry(journalMsg, 'milestone');
+    const defaultMsg = wasJuv
+      ? '🔓🌅 HARI PEMBEBASAN: Anda melangkah keluar dari Sekolah Juvana menghirup udara bebas — rekod juvana anda dirahsiakan untuk peluang kedua.'
+      : '🔓🌅 HARI PEMBEBASAN: Pintu besi penjara akhirnya terbuka! Anda kembali ke dunia luar, namun stigma rekod jenayah dewasa menanti.';
+    GameState.addJournalEntry(journalMsg || defaultMsg, 'milestone');
     GameState.save();
   },
 
-  // Peristiwa tahunan rawak di dalam penjara
+  // Peristiwa tahunan rawak yang keras & perit di dalam penjara / tahanan
   pickPrisonEvent(s) {
-    if (!s.prison || !s.prison.inPrison || !Utils.chance(0.55)) return null;
+    if (!s.prison || !s.prison.inPrison || !Utils.chance(0.78)) return null;
     const p = s.prison;
+    const isJuv = p.detentionType === 'juvenile';
+    const placeLbl = isJuv ? 'Sekolah Juvana' : 'Penjara';
+    const extortAmt = Math.max(Utils.usdToLocal(180, s.countryId), Math.min(Math.max(0, Math.round((s.money || 0) * 0.15)), Utils.usdToLocal(1800, s.countryId)));
+
     const events = [
       {
-        id: 'pris_fight_' + s.age,
-        icon: '🥊',
-        title: 'Pergaduhan Di Dewan Makan Penjara!',
-        text: 'Seorang banduan samseng merampas dulang makanan anda dan mencabar anda bergaduh di hadapan puluhan banduan lain!',
+        id: 'pris_extort_' + s.age,
+        icon: '🔪',
+        title: `Peras Ugut Penghuni Senior!`,
+        text: `Sekumpulan penghuni senior mengepung anda di sudut blok ${placeLbl} dan menuntut wang perlindungan atau memaksa anda tunduk menjadi suruhan mereka.`,
         choices: [
           {
-            label: 'Lawan balik habis-habisan demi maruah!',
-            hint: 'Hormat ++, Kelakuan --, risiko cedera',
+            label: `Bayar wang perlindungan (${Utils.formatMoney(extortAmt, s.countryId)})`,
             journalType: 'warning',
-            customAction: () => {
-              const win = Utils.chance(0.45 + (s.stats.health / 250) + (p.gangName ? 0.18 : 0));
-              p.behavior = Utils.clamp(p.behavior - 14, 0, 100);
-              if (win) {
-                p.respect = Utils.clamp(p.respect + 18, 0, 100);
-                GameState.adjustStats({ health: -8, happiness: 6 });
-                return { outcome: 'Anda menumbangkannya! Seluruh blok kini menghormati anda (Hormat +18%).' };
+            customAction: (st) => {
+              if ((st.money || 0) >= extortAmt && extortAmt > 0) {
+                st.money -= extortAmt;
+                p.respect = Utils.clamp(p.respect - 8, 0, 100);
+                GameState.adjustStats({ happiness: -10 });
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
+                return { outcome: `Anda terpaksa menyerahkan ${Utils.formatMoney(extortAmt, st.countryId)} demi mengelakkan diri daripada dibelasah.` };
               }
-              GameState.adjustStats({ health: -18, happiness: -10 });
-              return { outcome: 'Anda dibelasah teruk sebelum pengawal meleraikan pergaduhan (-18% Kesihatan).' };
+              p.respect = Utils.clamp(p.respect - 14, 0, 100);
+              GameState.adjustStats({ health: -14, happiness: -16 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 16 });
+              return { outcome: 'Anda tiada wang mencukupi untuk membayar mereka lalu dipukul di lorong belakang blok!' };
             }
           },
           {
-            label: 'Bertenang & laporkan kepada pengawal penjara',
-            hint: 'Kelakuan +, Hormat -- (dicop pembelot)',
-            journalType: 'dilemma',
+            label: 'Tunduk akur & serahkan catuan makanan anda',
+            journalType: 'warning',
             customAction: () => {
-              p.behavior = Utils.clamp(p.behavior + 10, 0, 100);
               p.respect = Utils.clamp(p.respect - 15, 0, 100);
-              return { outcome: 'Pengawal memuji disiplin anda, tetapi beberapa banduan mula memandang sinis.' };
+              GameState.adjustStats({ happiness: -16, health: -6 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 14 });
+              return { outcome: 'Maruah anda tercalar teruk dan perut berkeroncong kelaparan selepas catuan anda dirampas.' };
+            }
+          },
+          {
+            label: 'Lawan semula sekuat hati!',
+            journalType: 'warning',
+            customAction: () => {
+              const win = Utils.chance(0.36 + ((s.stats && s.stats.health || 50) / 260) + (p.gangName ? 0.18 : 0));
+              p.behavior = Utils.clamp(p.behavior - 16, 0, 100);
+              if (win) {
+                p.respect = Utils.clamp(p.respect + 16, 0, 100);
+                GameState.adjustStats({ health: -9, happiness: 4 });
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8 });
+                return { outcome: 'Walaupun lebam di muka, tumbukan balas anda membuatkan ketua mereka berundur dan tidak lagi berani mengganggu anda!' };
+              }
+              const extraYr = Utils.chance(0.45) ? 1 : 0;
+              if (extraYr > 0) {
+                p.yearsLeft += extraYr;
+                p.totalServed = (p.totalServed || 0) + extraYr;
+              }
+              GameState.adjustStats({ health: -20, happiness: -14 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 18 });
+              return {
+                outcome: extraYr > 0
+                  ? 'Anda dibelasah teruk sehingga rebah, malah warden menambah hukuman anda sebanyak 1 tahun kerana bergaduh!'
+                  : 'Anda tewas dibelasah beramai-ramai dan terpaksa dirawat di klinik tahanan dengan kecederaan serius.'
+              };
             }
           }
         ]
       },
       {
-        id: 'pris_shakedown_' + s.age,
-        icon: '🔦',
-        title: 'Pemeriksaan Sel Mengejut (Shakedown)!',
-        text: 'Warden mengarahkan pemeriksaan sel secara mengejut! Rakan sel anda merayu agar anda menyorokkan telefon seludup miliknya buat sementara.',
+        id: 'pris_solitary_' + s.age,
+        icon: '🕳️',
+        title: 'Dikurung Di Dalam Sel Isolasi!',
+        text: `Selepas kekecohan di blok tahanan malam tadi, warden mengheret anda masuk ke dalam Sel Isolasi yang gelap, sempit dan sejuk selama berminggu-minggu tanpa sebarang cahaya matahari.`,
         choices: [
           {
-            label: 'Tolong sorokkan barang seludup itu',
-            hint: 'Hormat +, risiko hukuman tambahan jika kantoi',
+            label: 'Cuba bertahan dalam kesunyian dan kawal pernafasan',
             journalType: 'warning',
             customAction: () => {
-              if (Utils.chance(0.42)) {
-                p.yearsLeft += 1;
-                p.behavior = Utils.clamp(p.behavior - 18, 0, 100);
-                return { outcome: 'KANTOI! Warden menemui telefon itu di bawah tilam anda — hukuman ditambah +1 tahun!' };
-              }
-              p.respect = Utils.clamp(p.respect + 14, 0, 100);
-              return { outcome: 'Selamat! Pengawal tidak menjumpainya dan rakan sel anda terhutang budi besar.' };
+              GameState.adjustStats({ happiness: -18, health: -6 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 22 });
+              return { outcome: 'Minggu-minggu di dalam kegelapan sel isolasi meninggalkan tekanan emosi yang amat mendalam terhadap jiwa anda.' };
             }
           },
           {
-            label: 'Enggan terlibat & jaga rekod bersih sendiri',
-            hint: 'Selamat, Kelakuan +',
-            journalType: 'normal',
+            label: 'Menjerit dan menendang pintu besi membantah warden',
+            journalType: 'warning',
             customAction: () => {
-              p.behavior = Utils.clamp(p.behavior + 8, 0, 100);
-              p.respect = Utils.clamp(p.respect - 6, 0, 100);
-              return { outcome: 'Sel anda disahkan bersih tanpa barang larangan. Peluang parol kekal cerah.' };
+              p.behavior = Utils.clamp(p.behavior - 18, 0, 100);
+              const addYr = Utils.chance(0.35) ? 1 : 0;
+              if (addYr > 0) {
+                p.yearsLeft += 1;
+                p.totalServed = (p.totalServed || 0) + 1;
+              }
+              GameState.adjustStats({ happiness: -24, health: -10 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 28 });
+              return {
+                outcome: addYr > 0
+                  ? 'Warden memanjangkan tempoh kurungan gelap dan menambah 1 tahun pada hukuman anda atas kesalahan ingkar arahan!'
+                  : 'Suara anda serak dan tangan luka-luka tanpa sesiapa pun mempedulikan jeritan anda di sel gelap itu.'
+              };
+            }
+          },
+          {
+            label: 'Bersenam ringan di ruang sempit agar tidak hilang kewarasan',
+            journalType: 'dilemma',
+            customAction: () => {
+              GameState.adjustStats({ happiness: -14, health: -2 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 18 });
+              return { outcome: 'Senaman di lantai konkrit sejuk menyelamatkan fizikal anda, namun kesunyian sel isolasi tetap menyeksa fikiran.' };
+            }
+          }
+        ]
+      },
+      {
+        id: 'pris_spoiled_food_' + s.age,
+        icon: '🤢',
+        title: 'Makanan Basi & Wabak Penyakit Sel!',
+        text: `Hidangan kantin ${placeLbl} minggu ini berbau masam dan berlendir, manakala wabak jangkitan perut serta demam mula merebak pantas di blok sel yang sesak.`,
+        choices: [
+          {
+            label: 'Terpaksa telan makanan itu kerana terlalu lapar',
+            journalType: 'warning',
+            customAction: () => {
+              GameState.adjustStats({ health: -Utils.randInt(12, 20), happiness: -12 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+              return { outcome: 'Anda mengalami keracunan makanan yang teruk dan muntah-muntah di dalam sel sepanjang minggu!' };
+            }
+          },
+          {
+            label: 'Berlapar dan hanya minum air paip selama beberapa hari',
+            journalType: 'warning',
+            customAction: () => {
+              GameState.adjustStats({ health: -Utils.randInt(7, 12), happiness: -14 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 14 });
+              return { outcome: 'Tubuh anda menjadi lemah dan susut berat badan akibat kelaparan, namun anda terselamat daripada keracunan teruk.' };
+            }
+          },
+          {
+            label: 'Beli roti kering secara gelap daripada pekerja dapur',
+            journalType: 'dilemma',
+            customAction: (st) => {
+              const cost = Utils.usdToLocal(90, st.countryId);
+              if ((st.money || 0) >= cost) {
+                st.money -= cost;
+                GameState.adjustStats({ health: -3, happiness: -5 });
+                return { outcome: `Anda berbelanja ${Utils.formatMoney(cost, st.countryId)} secara senyap untuk mendapatkan bekalan roti bersih sehingga wabak reda.` };
+              }
+              GameState.adjustStats({ health: -14, happiness: -12 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+              return { outcome: 'Tiada wang untuk membeli makanan luar — anda tetap dijangkiti wabak penyakit sel yang perit!' };
+            }
+          }
+        ]
+      },
+      {
+        id: 'pris_yard_riot_' + s.age,
+        icon: '🚨',
+        title: 'Pergaduhan Besar Di Kantin & Halaman!',
+        text: `Dua kumpulan besar bertembung menggunakan dulang besi di tengah halaman ${placeLbl}! Anda terperangkap betul-betul di tengah kekecohan ketika siren kecemasan berbunyi.`,
+        choices: [
+          {
+            label: 'Menunduk berlindung di tepi dinding dan jangan melawan',
+            journalType: 'warning',
+            customAction: () => {
+              if (Utils.chance(0.45)) {
+                GameState.adjustStats({ health: -12, happiness: -10 });
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 14 });
+                return { outcome: 'Anda terkena pukulan sesat dan semburan lada pengawal ketika kekecohan dileraikan!' };
+              }
+              p.behavior = Utils.clamp(p.behavior + 5, 0, 100);
+              GameState.adjustStats({ happiness: -6 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
+              return { outcome: 'Anda sempat menyelamatkan diri daripada kecederaan parah dan disahkan tidak terlibat oleh pengawal.' };
+            }
+          },
+          {
+            label: 'Pertahankan diri apabila diserang secara rambang',
+            journalType: 'warning',
+            customAction: () => {
+              const blamed = Utils.chance(0.38);
+              if (blamed) {
+                p.yearsLeft += 1;
+                p.totalServed = (p.totalServed || 0) + 1;
+                p.behavior = Utils.clamp(p.behavior - 20, 0, 100);
+                GameState.adjustStats({ health: -15, happiness: -18 });
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 20 });
+                return { outcome: 'Pengawal menuduh anda menjadi punca pergaduhan! Anda cedera parah dan hukuman ditambah 1 tahun lagi!' };
+              }
+              p.respect = Utils.clamp(p.respect + 12, 0, 100);
+              GameState.adjustStats({ health: -11, happiness: -6 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+              return { outcome: 'Anda berjaya menepis serangan dan bertahan sehingga pengawal tiba walaupun mengalami luka-luka di badan.' };
+            }
+          },
+          {
+            label: 'Bantu heret penghuni yang pengsan keluar dari kawasan rusuhan',
+            journalType: 'dilemma',
+            customAction: () => {
+              p.behavior = Utils.clamp(p.behavior + 10, 0, 100);
+              GameState.adjustStats({ health: -10, happiness: -4 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 6, stress: 10 });
+              return { outcome: 'Bahu anda cedera terkena kerusi terbang ketika menyelamatkan mangsa, namun warden mencatat tindakan berani anda.' };
             }
           }
         ]

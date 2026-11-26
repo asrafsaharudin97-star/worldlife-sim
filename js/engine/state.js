@@ -181,6 +181,7 @@ window.GameState = {
       retirementFund: 0,
       annualExpensesMultiplier: 1,
       criminalRecord: 0,
+      hasCriminalRecord: false,
       hasDriverLicense: false,
       licenses: { moto: false, car: false },
       generation: 1,
@@ -373,6 +374,9 @@ window.GameState = {
       if (typeof s.licenses.car !== 'boolean') s.licenses.car = Boolean(s.hasDriverLicense);
     }
     s.hasDriverLicense = Boolean(s.licenses.car || s.licenses.moto);
+    if (typeof s.hasCriminalRecord !== 'boolean') {
+      s.hasCriminalRecord = Boolean((s.criminalRecord || 0) > 0 && s.age >= 18);
+    }
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);
