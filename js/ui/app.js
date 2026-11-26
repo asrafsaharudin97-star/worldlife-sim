@@ -962,7 +962,8 @@ window.App = {
     }
     const modesBtn = document.getElementById('btn-open-modes');
     if (modesBtn && window.SpecialModesEngine) {
-      const spInfo = SpecialModesEngine.getActiveInfo(s);
+      const inPrisonNow = Boolean(s.prison && s.prison.inPrison);
+      const spInfo = !inPrisonNow ? SpecialModesEngine.getActiveInfo(s) : null;
       if (spInfo) {
         modesBtn.classList.remove('hidden');
         modesBtn.textContent = `${spInfo.def.icon} ${spInfo.def.shortLabel}`;

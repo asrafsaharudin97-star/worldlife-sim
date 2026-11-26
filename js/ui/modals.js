@@ -2972,14 +2972,14 @@ window.Modals = {
               <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Salasilah, Reputasi Keluarga, Status Legasi &amp; Generasi Perdana'}</span>
             </span>
           </button>
-          ${(GameState.current && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo(GameState.current)) ? (() => {
+          ${(!inPrison && GameState.current && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo(GameState.current)) ? (() => {
             const info = SpecialModesEngine.getActiveInfo(GameState.current);
             return `
-              <button class="action-item" id="menu-open-active-special" ${inPrison ? 'disabled' : ''}>
+              <button class="action-item" id="menu-open-active-special">
                 <span class="ai-icon">${info.def.icon}</span>
                 <span class="ai-content">
                   <span class="ai-title">Mod Khas Aktif: ${Utils.escapeHtml(info.def.title)}</span>
-                  <span class="ai-desc">${inPrison ? 'Digantung sepanjang tempoh tahanan' : `Pangkat: ${Utils.escapeHtml(info.rank.title)} — Klik untuk buka Papan Pemuka`}</span>
+                  <span class="ai-desc">Pangkat: ${Utils.escapeHtml(info.rank.title)} — Klik untuk buka Papan Pemuka</span>
                 </span>
               </button>
             `;

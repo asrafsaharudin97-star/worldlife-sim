@@ -4,12 +4,16 @@
    ========================================================================== */
 
 window.SpecialModeModals = {
-  showDashboard() {
+  showDashboard(opts = {}) {
     const s = GameState.current;
     if (!s || !window.SpecialModesEngine) return;
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
     const info = SpecialModesEngine.getActiveInfo(s);
-    if (!info) {
-      App.toast('Tiada Mod Khas aktif sekarang — teruskan hidup untuk menanti Peluang Sekali Seumur Hidup!', 'culture');
+    if (inPrison || !info) {
+      if (window.Modals && Modals.close) Modals.close(true);
+      if (!opts.silent && !inPrison) {
+        App.toast('Tiada Mod Khas aktif sekarang — teruskan hidup untuk menanti Peluang Sekali Seumur Hidup!', 'culture');
+      }
       return;
     }
 
@@ -29,10 +33,12 @@ window.SpecialModeModals = {
       ? (am.metric2 >= 50 ? '#dc2626' : am.metric2 >= 30 ? '#f59e0b' : '#22c55e')
       : (am.metric2 >= 65 ? '#22c55e' : '#f59e0b');
 
-    const aLeft = am.actionsLeftThisYear ?? 3;
+    const maxActs = SpecialModesEngine.MAX_ACTIONS_YEAR || 3;
+    const aLeft = Math.max(0, am.actionsLeftThisYear ?? maxActs);
+    const usedActs = Math.min(maxActs, Math.max(0, maxActs - aLeft));
     const rLeft = am.rerollsLeft ?? 1;
-    const pips = Array.from({ length: SpecialModesEngine.MAX_ACTIONS_YEAR }, (_, i) =>
-      `<span class="energy-pip ${i < aLeft ? 'full' : 'empty'}">⚡</span>`
+    const pips = Array.from({ length: maxActs }, (_, i) =>
+      `<span class="energy-pip ${i < usedActs ? 'full' : 'empty'}">⚡</span>`
     ).join('');
 
     const boardItems = (am.currentBoard || [])
@@ -42,7 +48,7 @@ window.SpecialModeModals = {
     const actionsHtml = boardItems.map(act => {
       const done = Boolean(s.yearlyActions[`sp_${def.id}_${act.id}`]);
       const cd = (am.cooldowns && am.cooldowns[act.id]) || 0;
-      const disabled = done || cd > 0 || aLeft <= 0 || Boolean(s.prison && s.prison.inPrison);
+      const disabled = done || cd > 0 || aLeft <= 0 || inPrison;
       return `
         <button type="button" class="action-item sp-mode-act-btn ${act.isRare ? 'rare-activity' : ''} ${done ? 'act-done-card' : ''}" data-act-id="${act.id}" ${disabled ? 'disabled' : ''}>
           <span class="ai-icon">${act.icon}</span>
@@ -111,7 +117,7 @@ window.SpecialModeModals = {
             </button>
           </div>
           <div class="aeh-energy-bar">
-            <span class="aeh-energy-lbl">Tindakan Tahun Ini: <strong>${aLeft}/${SpecialModesEngine.MAX_ACTIONS_YEAR}</strong></span>
+            <span class="aeh-energy-lbl">Tindakan Tahun Ini: <strong>${usedActs}/${maxActs}</strong></span>
             <span class="aeh-energy-pips">${pips}</span>
           </div>
         </div>
@@ -119,11 +125,11 @@ window.SpecialModeModals = {
         <div class="action-list" style="margin-bottom:12px;">${actionsHtml}</div>
 
         ${def.id === 'mafia' ? `
-          <button type="button" class="action-item" id="btn-mafia-tribute" style="margin-bottom:10px;" ${s.yearlyActions.mafiaTribute || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+          <button type="button" class="action-item" id="btn-mafia-tribute" style="margin-bottom:10px;" ${s.yearlyActions.mafiaTribute || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💼</span>
             <span class="ai-content">
               <span class="ai-title">Sumbang Wang Besar Kepada Ketua Sindiket</span>
-              <span class="ai-desc">Naikkan Reputasi dengan Ketua (+14% Hormat) untuk peluang naik pangkat • Risiko Haba Polis tinggi!</span>
+              <span class="ai-desc">Naikkan reputasi anda di mata Ketua untuk peluang naik pangkat • Risiko Haba Polis tinggi!</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(Utils.usdToLocal(15000 * (am.rankIndex + 1), s.countryId), s.countryId, true)}</span>
           </button>
@@ -140,8 +146,13 @@ window.SpecialModeModals = {
       tributeBtn.addEventListener('click', () => {
         const res = SpecialModesEngine.contributeMafiaTribute();
         App.renderAll();
+        if ((s.prison && s.prison.inPrison) || !SpecialModesEngine.getActiveInfo(s)) {
+          Modals.close(true);
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          return;
+        }
         App.toast(res.msg, res.ok ? 'success' : 'error');
-        this.showDashboard();
+        this.showDashboard({ silent: true });
       });
     }
 
@@ -149,8 +160,13 @@ window.SpecialModeModals = {
     if (rerollBtn) {
       rerollBtn.addEventListener('click', () => {
         const res = SpecialModesEngine.rerollBoard();
+        if ((s.prison && s.prison.inPrison) || !SpecialModesEngine.getActiveInfo(s)) {
+          Modals.close(true);
+          App.renderAll();
+          return;
+        }
         App.toast(res.msg, res.ok ? 'culture' : 'error');
-        this.showDashboard();
+        this.showDashboard({ silent: true });
       });
     }
 
@@ -163,13 +179,18 @@ window.SpecialModeModals = {
           if (window.ModeModals && ModeModals.showLegacyObituary) ModeModals.showLegacyObituary();
           return;
         }
+        if ((s.prison && s.prison.inPrison) || !SpecialModesEngine.getActiveInfo(s)) {
+          Modals.close(true);
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          return;
+        }
         if (res.dilemmaEvent) {
           Modals.showEvent(res.dilemmaEvent);
           return;
         }
         const tType = res.outcomeTier === 'partial' ? 'culture' : (res.ok ? 'success' : 'error');
         App.toast(res.msg, tType);
-        this.showDashboard();
+        this.showDashboard({ silent: true });
       });
     });
 

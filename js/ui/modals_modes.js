@@ -8,11 +8,15 @@ window.ModeModals = {
   // 1. ALIH HALUAN MOD KHAS (Jika dipanggil dari mana-mana rujukan lama)
   // --------------------------------------------------------------------------
   showLifeModes() {
-    if (window.SpecialModeModals && GameState.current && GameState.current.activeSpecialMode) {
+    const s = GameState.current;
+    if (!s || (s.prison && s.prison.inPrison) || !s.activeSpecialMode) {
+      if (window.Modals && Modals.close) Modals.close(true);
+      return;
+    }
+    if (window.SpecialModeModals) {
       SpecialModeModals.showDashboard();
       return;
     }
-    App.toast('Tiada Mod Khas aktif buat masa ini. Peluang Sekali Seumur Hidup muncul secara rawak apabila umur meningkat!', 'info');
   },
 
   // --------------------------------------------------------------------------
