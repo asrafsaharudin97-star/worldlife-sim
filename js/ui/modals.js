@@ -3212,6 +3212,18 @@ window.Modals = {
             </span>
             <span class="ai-right">${isMuted ? 'Hidupkan' : 'Senyapkan'}</span>
           </button>
+          ${window.AINarrator ? (() => {
+            const aiOn = AINarrator.isEnabled();
+            return `
+          <button class="action-item" id="menu-toggle-ai">
+            <span class="ai-icon">🤖</span>
+            <span class="ai-content">
+              <span class="ai-title">Dialog AI Dinamik (+Umur): ${aiOn ? 'Aktif' : 'Dimatikan'}</span>
+              <span class="ai-desc">Jana dialog ringkas NPC secara automatik setiap kali umur meningkat</span>
+            </span>
+            <span class="ai-right">${aiOn ? 'Aktif' : 'Dimatikan'}</span>
+          </button>`;
+          })() : ''}
           <button class="action-item" id="menu-export-save">
             <span class="ai-icon">💾</span>
             <span class="ai-content">
@@ -3277,6 +3289,15 @@ window.Modals = {
       App.toast(nextMuted ? '🔇 Kesan bunyi dimatikan.' : '🔊 Kesan bunyi diaktifkan!', 'culture');
       this.showMenu();
     });
+
+    const toggleAiBtn = document.getElementById('menu-toggle-ai');
+    if (toggleAiBtn && window.AINarrator) {
+      toggleAiBtn.addEventListener('click', () => {
+        const next = AINarrator.setEnabled(!AINarrator.isEnabled());
+        App.toast(next ? '🤖 Dialog AI Dinamik diaktifkan!' : '🤖 Dialog AI Dinamik dimatikan.', 'culture');
+        this.showMenu();
+      });
+    }
 
     document.getElementById('menu-export-save').addEventListener('click', () => {
       const bundle = GameState.buildExportBundle();

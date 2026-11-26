@@ -801,6 +801,38 @@ window.App = {
     GameState.syncActiveSlotToCloud(died ? 'death' : 'age_up');
     this.renderAll();
 
+    // Dialog AI Dinamik tanpa sekat (+Umur kekal serta-merta)
+    if (!died && window.AINarrator && GameState.current && GameState.current.alive) {
+      const sNow = GameState.current;
+      const targetAge = sNow.age;
+      const targetName = sNow.name;
+      const targetGen = sNow.generation || 1;
+      const curBlock = (Array.isArray(sNow.journal) && sNow.journal.length > 0)
+        ? sNow.journal[sNow.journal.length - 1]
+        : null;
+      const latestLogs = curBlock && Array.isArray(curBlock.entries) ? curBlock.entries.slice(-3) : [];
+      AINarrator.generateDialogue(sNow, latestLogs).then((res) => {
+        if (!res || !res.dialog) return;
+        const cur = GameState.current;
+        if (!cur || !cur.alive) return;
+        if (cur.age !== targetAge || cur.name !== targetName || (cur.generation || 1) !== targetGen) return;
+        const blk = (Array.isArray(cur.journal) && cur.journal.length > 0)
+          ? cur.journal[cur.journal.length - 1]
+          : null;
+        if (!blk || blk.age !== targetAge) return;
+        if (!Array.isArray(blk.entries)) blk.entries = [];
+        blk.entries.push({
+          type: 'ai-dialogue',
+          speaker: res.penutur,
+          dialog: res.dialog,
+          text: `💬 ${res.penutur}: "${res.dialog}"`
+        });
+        GameState.save();
+        this._feedSig = '';
+        this._renderJournal(cur, { keepScroll: true });
+      });
+    }
+
     if (died) {
       setTimeout(() => Modals.showDeathSummary(), 260);
       return;
@@ -1109,9 +1141,10 @@ window.App = {
             <span class="year-location">${bc.flag} ${Utils.escapeHtml(block.city)}, ${bc.name}</span>
           </div>
           <div class="year-entries">
-            ${entries.map(e => `
-              <div class="feed-entry ${e.type || 'normal'}">${Utils.escapeHtml(e.text)}</div>
-            `).join('')}
+            ${entries.map(e => e.type === 'ai-dialogue' && e.speaker && e.dialog
+              ? `<div class="feed-entry ai-dialogue" style="font-style:italic;border-left:3px solid #6366f1;background:rgba(99,102,241,0.06);padding:6px 10px;border-radius:6px;">💬 <strong style="font-style:normal;">${Utils.escapeHtml(e.speaker)}:</strong> “${Utils.escapeHtml(e.dialog)}”</div>`
+              : `<div class="feed-entry ${e.type || 'normal'}">${Utils.escapeHtml(e.text)}</div>`
+            ).join('')}
           </div>
         </article>
       `;
