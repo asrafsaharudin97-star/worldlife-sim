@@ -266,12 +266,40 @@ window.AssetsEngine = {
     return warnMsg;
   },
 
+  getPropertyResalePrice(p) {
+    if (!p) return 0;
+    const marketVal = Math.max(0, Math.round(p.value || 0));
+    const cond = Utils.clamp(typeof p.condition === 'number' ? p.condition : 80, 0, 100);
+    let mult = 1.0;
+    if (cond >= 80) {
+      mult = 1.0;
+    } else if (cond >= 51) {
+      mult = 0.80 + ((cond - 51) / 28) * 0.16; // 80%–96%
+    } else {
+      mult = 0.40 + (cond / 50) * 0.30; // 40%–70%
+    }
+    return Math.max(0, Math.round(marketVal * mult));
+  },
+
+  getPropertyRepairCost(s, p) {
+    if (!s || !p) return 0;
+    const cond = Utils.clamp(typeof p.condition === 'number' ? p.condition : 80, 0, 100);
+    if (cond >= 100) return 0;
+    const damageRatio = (100 - cond) / 100;
+    return Math.max(
+      Utils.usdToLocal(200, s.countryId),
+      Math.round((p.value || 0) * (0.015 + damageRatio * 0.08))
+    );
+  },
+
   previewAssetSale(s, assetType, uidOrInstId, sellFraction = 1) {
     this.ensureFields(s);
     if (assetType === 'property') {
       const p = s.assets.properties.find(x => x.uid === uidOrInstId);
       if (!p) return null;
-      const grossPrice = Math.max(0, Math.round(p.value || 0));
+      const marketValue = Math.max(0, Math.round(p.value || 0));
+      const cond = Utils.clamp(typeof p.condition === 'number' ? p.condition : 80, 0, 100);
+      const grossPrice = this.getPropertyResalePrice(p);
       const yearsHeld = Math.max(0, typeof p.yearsHeld === 'number' ? p.yearsHeld : ((s.year || 2026) - (p.purchasedYear || s.year || 2026)));
       const legalFeePct = 2.0;
       const ckhtPct = yearsHeld < 5 ? 5.0 : 3.5;
@@ -289,6 +317,9 @@ window.AssetsEngine = {
         isLemon: Boolean(p.isLemon && p.lemonRevealed),
         lemonFlaw: p.lemonFlaw || null,
         yearsHeld,
+        condition: cond,
+        marketValue,
+        poorConditionDiscount: cond <= 50,
         grossPrice,
         legalFeePct,
         legalFee,
@@ -480,10 +511,13 @@ window.AssetsEngine = {
   toggleRentProperty(uid) {
     const s = GameState.current;
     this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh menguruskan penyewaan hartanah semasa dalam tahanan.' };
+    }
     const p = s.assets.properties.find(x => x.uid === uid);
     if (!p) return { ok: false, msg: 'Hartanah tidak ditemui.' };
-    if (!p.rented && p.condition < 40) {
-      return { ok: false, msg: 'Keadaan hartanah terlalu usang (<40%)! Baiki atau Ubah Suai dahulu sebelum disewakan.' };
+    if (!p.rented && (p.condition ?? 80) <= 50) {
+      return { ok: false, msg: 'Keadaan rumah terlalu daif (≤50%). Sila baik pulih dahulu sebelum disewakan.' };
     }
     p.rented = !p.rented;
     const estRent = Math.round(p.value * ((p.yieldPct || 5.5) / 100));
@@ -516,14 +550,21 @@ window.AssetsEngine = {
   maintainProperty(uid) {
     const s = GameState.current;
     this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh membaik pulih hartanah semasa dalam tahanan.' };
+    }
     const p = s.assets.properties.find(x => x.uid === uid);
     if (!p) return { ok: false, msg: 'Hartanah tidak ditemui.' };
-    const cost = Math.max(Utils.usdToLocal(250, s.countryId), Math.round(p.value * 0.03));
-    if (s.money < cost) return { ok: false, msg: `Kos penyelenggaraan ialah ${Utils.formatMoney(cost, s.countryId)}.` };
+    if ((p.condition ?? 80) >= 100) {
+      return { ok: false, msg: 'Hartanah sudah berada dalam keadaan terbaik (100%).' };
+    }
+    const cost = this.getPropertyRepairCost(s, p);
+    if (s.money < cost) return { ok: false, msg: `Baki tidak mencukupi — kos baik pulih ialah ${Utils.formatMoney(cost, s.countryId)}.` };
     s.money -= cost;
-    p.condition = Utils.clamp(p.condition + Utils.randInt(14, 24), 0, 100);
+    p.condition = 100;
+    GameState.addJournalEntry(`🔧 Anda membaik pulih dan menyelenggara ${p.name} dengan kos ${Utils.formatMoney(cost, s.countryId)}. Keadaan rumah kini pulih sepenuhnya (100%)!`);
     GameState.save();
-    return { ok: true, msg: `Hartanah diselenggara (Keadaan kini ${p.condition}%).` };
+    return { ok: true, msg: `${p.name} selesai dibaik pulih (Kondisi kini 100%)!` };
   },
 
   sellProperty(uid) {
@@ -1268,9 +1309,21 @@ window.AssetsEngine = {
 
       // Aset Busuk naik nilai lebih perlahan (-4% penalti pertumbuhan setiap tahun)
       const lemonPenalty = p.isLemon ? -0.04 : 0;
-      const condFactor = p.condition >= 80 ? 1.02 : (p.condition < 45 ? 0.96 : 1.0);
+      const condFactor = p.condition >= 80 ? 1.02 : (p.condition <= 50 ? 0.96 : 1.0);
       p.value = Math.max(1000, Math.round(p.value * (1 + propShift + lemonPenalty) * condFactor));
-      p.condition = Utils.clamp(p.condition - Utils.randInt(p.isLemon ? 4 : 2, p.isLemon ? 8 : 5), 10, 100);
+      const wearDrop = p.rented ? Utils.randInt(6, 12) : Utils.randInt(4, 9);
+      p.condition = Utils.clamp((typeof p.condition === 'number' ? p.condition : 80) - wearDrop - (p.isLemon ? 2 : 0), 0, 100);
+
+      // Penyewa mengadu & terus keluar jika kondisi rumah jatuh <= 50%
+      if (p.rented && p.condition <= 50) {
+        p.rented = false;
+        GameState.adjustStats({ happiness: -Utils.randInt(5, 8) });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: Utils.randInt(6, 10) });
+        GameState.addJournalEntry(
+          `🏠⚠️ Penyewa di ${p.name} mengadu keadaan rumah terlalu uzur dan terus keluar berpindah. Anda kehilangan pendapatan sewa!`,
+          'warning'
+        );
+      }
 
       // Bil pembaikan mengejut bagi Aset Busuk (30% peluang setahun)
       if (p.isLemon && Utils.chance(0.30)) {

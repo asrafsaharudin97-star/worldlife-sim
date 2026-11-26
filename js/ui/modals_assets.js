@@ -130,18 +130,36 @@ window.AssetModals = {
               </div>
               <strong style="color:#16a34a;">${Utils.formatMoney(p.value, s.countryId, true)}</strong>
             </div>
+            ${(() => {
+              const cond = Utils.clamp(typeof p.condition === 'number' ? p.condition : 80, 0, 100);
+              const barColor = cond > 65 ? '#22c55e' : cond > 50 ? '#eab308' : '#ef4444';
+              const repairCost = AssetsEngine.getPropertyRepairCost(s, p);
+              const resaleVal = AssetsEngine.getPropertyResalePrice(p);
+              const inPrison = Boolean(s.prison && s.prison.inPrison);
+              return `
+            <div style="margin:6px 0;">
+              <div class="ph-bar-lbl" style="font-size:11.5px;">
+                <span>Kondisi Rumah</span>
+                <strong style="color:${barColor};">${cond}%</strong>
+              </div>
+              <div class="mini-track" style="height:6px;"><div class="mini-fill" style="width:${cond}%;background:${barColor};"></div></div>
+            </div>
+            ${p.rented && cond >= 51 && cond <= 60 ? `<div style="font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:4px 7px;margin-bottom:6px;">⚠️ Penyewa mula mengadu — perlu diselenggara</div>` : ''}
+            ${cond <= 50 ? `<div style="font-size:11px;font-weight:700;color:#991b1b;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:4px 7px;margin-bottom:6px;">🚨 Keadaan rumah teruk (≤50%) — tidak boleh disewakan &amp; harga jualan jatuh!</div>` : ''}
             <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-              Keadaan: <strong>${p.condition}%</strong> • Sewa: <strong>${Utils.formatMoney(estRent, s.countryId, true)}/thn</strong> • Pegangan: ${p.yearsHeld || 0} thn<br/>
+              Nilai Pasaran: <strong>${Utils.formatMoney(p.value, s.countryId, true)}</strong> • Harga Jualan Sebenar: <strong style="color:${cond <= 50 ? '#dc2626' : '#0f172a'};">${Utils.formatMoney(resaleVal, s.countryId, true)}</strong><br/>
+              Sewa: <strong>${p.rented ? `${Utils.formatMoney(estRent, s.countryId, true)}/thn` : 'Tidak Disewakan'}</strong> • Pegangan: ${p.yearsHeld || 0} thn<br/>
               🏛️ Cukai Pintu (0.35%): <strong>${Utils.formatMoney(cukaiPintu, s.countryId)}/thn</strong> • Cukai Tanah (0.15%): <strong>${Utils.formatMoney(cukaiTanah, s.countryId)}/thn</strong>
               ${showLemon ? `<br/><span style="color:#b91c1c;font-weight:700;">⚠️ Isu: ${Utils.escapeHtml(p.lemonFlaw || 'Kerosakan tersembunyi')} (Kos senggara tinggi)</span>` : ''}
               ${p.mortgage > 0 ? `<br/>🏦 Baki Pinjaman Bank: <strong style="color:#dc2626;">${Utils.formatMoney(p.mortgage, s.countryId, true)}</strong> (Ansuran ${Utils.formatMoney(p.annualMortgage, s.countryId, true)}/thn)` : ' • ✅ Bebas Hutang'}
             </div>
-            <div class="mig-actions" style="grid-template-columns:repeat(4,1fr);">
-              <button type="button" class="btn-sm primary prop-rent-btn" data-uid="${p.uid}">${p.rented ? 'Henti Sewa' : '🔑 Sewakan'}</button>
-              <button type="button" class="btn-sm secondary prop-reno-btn" data-uid="${p.uid}">🔨 Ubah Suai</button>
-              <button type="button" class="btn-sm secondary prop-maint-btn" data-uid="${p.uid}">🔧 Baiki</button>
-              <button type="button" class="btn-sm secondary prop-sell-btn" data-uid="${p.uid}" style="color:#dc2626;">💵 Jual</button>
-            </div>
+            <div class="mig-actions" style="grid-template-columns:repeat(2,1fr);gap:6px;">
+              <button type="button" class="btn-sm primary prop-rent-btn" data-uid="${p.uid}" ${inPrison ? 'disabled' : ''}>${p.rented ? 'Henti Sewa' : '🔑 Sewakan'}</button>
+              <button type="button" class="btn-sm secondary prop-maint-btn" data-uid="${p.uid}" ${inPrison || cond >= 100 ? 'disabled' : ''}>🔧 Baik Pulih &amp; Selenggara${cond < 100 ? ` (${Utils.formatMoney(repairCost, s.countryId, true)})` : ''}</button>
+              <button type="button" class="btn-sm secondary prop-reno-btn" data-uid="${p.uid}" ${inPrison ? 'disabled' : ''}>🔨 Ubah Suai</button>
+              <button type="button" class="btn-sm secondary prop-sell-btn" data-uid="${p.uid}" style="color:#dc2626;" ${inPrison ? 'disabled' : ''}>💵 Jual</button>
+            </div>`;
+            })()}
           </div>
         `;
       });
@@ -491,7 +509,9 @@ window.AssetModals = {
       bodyHtml: `
         <div class="info-banner highlight" style="line-height:1.75;">
           <strong>🧾 Penyata Terperinci Jualan (${Utils.escapeHtml(prev.name)})</strong><br/>
-          Harga Jualan Kasar: <strong>${fmt(prev.grossPrice)}</strong><br/>
+          ${prev.assetType === 'property' ? `Nilai Pasaran: <strong>${fmt(prev.marketValue)}</strong> (Kondisi: <strong>${prev.condition}%</strong>)<br/>` : ''}
+          ${prev.assetType === 'property' ? 'Harga Jualan Sebenar' : 'Harga Jualan Kasar'}: <strong style="color:${prev.poorConditionDiscount ? '#dc2626' : 'inherit'};">${fmt(prev.grossPrice)}</strong><br/>
+          ${prev.poorConditionDiscount ? `<span style="color:#b91c1c;font-size:11.5px;font-weight:700;">⚠️ Harga jatuh kerana keadaan rumah teruk (≤50%)</span><br/>` : ''}
           ${prev.legalFee > 0 ? `Potongan Yuran Guaman &amp; S&amp;P (${prev.legalFeePct.toFixed(1)}%): <strong style="color:#dc2626;">-${fmt(prev.legalFee)}</strong><br/>` : ''}
           Potongan ${Utils.escapeHtml(prev.taxLabel)}: <strong style="color:#dc2626;">-${fmt(prev.saleTax)}</strong><br/>
           ${prev.mortgagePayoff > 0 ? `Pelunasan Baki Pinjaman Bank: <strong style="color:#dc2626;">-${fmt(prev.mortgagePayoff)}</strong><br/>` : ''}
