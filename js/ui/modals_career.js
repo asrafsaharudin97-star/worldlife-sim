@@ -175,6 +175,15 @@ window.CareerModals = {
             <span class="ai-right" ${doneRaise ? 'style="color:#64748b;"' : ''}>${doneRaise ? 'Selesai Tahun Ini' : 'Rundingan'}</span>
           </button>`;
           })()}
+          ${(window.HealthMedicalEngine && HealthMedicalEngine.hasLegitimateJob(s) && Array.isArray(s.illnesses) && s.illnesses.length > 0) ? `
+          <button type="button" class="action-item" id="act-request-mc" ${(s.mcCountThisYear || 0) >= HealthMedicalEngine.MAX_MC_PER_YEAR ? 'disabled' : ''}>
+            <span class="ai-icon">📄</span>
+            <span class="ai-content">
+              <span class="ai-title">Minta Sijil Cuti Sakit (MC)</span>
+              <span class="ai-desc">Berehat daripada kerja untuk pulihkan kesihatan (MC tahun ini: ${s.mcCountThisYear || 0}/${HealthMedicalEngine.MAX_MC_PER_YEAR})</span>
+            </span>
+            <span class="ai-right">${(s.mcCountThisYear || 0) >= HealthMedicalEngine.MAX_MC_PER_YEAR ? 'Had Tamat' : 'Mohon MC'}</span>
+          </button>` : ''}
           <button type="button" class="action-item" id="act-retire-job" ${retElig.ok || s.job.isContract ? '' : 'style="opacity:0.75;"'}>
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
@@ -793,11 +802,20 @@ window.CareerModals = {
         this.showHub('jobs');
       });
 
+      const mcBtn = document.getElementById('act-request-mc');
+      if (mcBtn && window.HealthMedicalEngine) mcBtn.addEventListener('click', () => {
+        const res = HealthMedicalEngine.requestMedicalLeave(s);
+        App.toast(res.msg, res.fired ? 'error' : res.warning ? 'culture' : (res.ok ? 'success' : 'error'));
+        App.renderAll();
+        this.showHub('jobs');
+      });
+
       const retireBtn = document.getElementById('act-retire-job');
       if (retireBtn) retireBtn.addEventListener('click', () => {
         const res = EduCareerEngine.retireFromJob(s);
         App.toast(res.msg, res.ok ? 'gold' : 'error');
         if (res.ok) {
+          if (window.HealthMedicalEngine) HealthMedicalEngine.resetJobMcStats(s);
           this._browsingNewJob = false;
           App.renderAll();
           this.showHub('jobs');

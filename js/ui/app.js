@@ -882,7 +882,10 @@ window.App = {
       : { title: s.job ? s.job.title : 'Tiada Pekerjaan', secondaryRole: null };
     const roleText = occ.secondaryRole ? `${occ.title} (${occ.secondaryRole})` : occ.title;
 
-    document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}`;
+    const sickSuffix = (Array.isArray(s.illnesses) && s.illnesses.length > 0)
+      ? ` • 🤒 Sakit (${s.illnesses.length})`
+      : '';
+    document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}${sickSuffix}`;
 
     const genPrefix = (s.generation && s.generation > 1) ? `Gen ${s.generation} • ` : '';
     const cultureTag = s.countryId === s.birthCountryId

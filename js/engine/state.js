@@ -200,6 +200,10 @@ window.GameState = {
       partTimeJob: null,
       jobAppsThisYear: 0,
       jobActionsUsedThisYear: [],
+      illnesses: [],
+      mcCountThisYear: 0,
+      mcTotalInJob: 0,
+      mcWarnings: 0,
       peakSalaryUsd: 0,
 
       assets: {
@@ -383,6 +387,10 @@ window.GameState = {
     if (!('partTimeJob' in s)) s.partTimeJob = null;
     if (typeof s.jobAppsThisYear !== 'number') s.jobAppsThisYear = 0;
     if (!Array.isArray(s.jobActionsUsedThisYear)) s.jobActionsUsedThisYear = [];
+    if (!Array.isArray(s.illnesses)) s.illnesses = [];
+    if (typeof s.mcCountThisYear !== 'number') s.mcCountThisYear = 0;
+    if (typeof s.mcTotalInJob !== 'number') s.mcTotalInJob = 0;
+    if (typeof s.mcWarnings !== 'number') s.mcWarnings = 0;
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);

@@ -358,6 +358,9 @@ window.Sim = {
     if (window.SpecialModesEngine && SpecialModesEngine.tickYearlySpecialMode) {
       SpecialModesEngine.tickYearlySpecialMode(s);
     }
+    if (window.HealthMedicalEngine && HealthMedicalEngine.tickYearlyHealth) {
+      HealthMedicalEngine.tickYearlyHealth(s, c);
+    }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
     }

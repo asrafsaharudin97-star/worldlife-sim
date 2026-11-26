@@ -2114,6 +2114,14 @@ window.Modals = {
           ${activeStressIllnesses}
         </div>
         <div class="action-list">
+          <button class="action-item" id="btn-open-hospital" style="border-color:${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? '#ef4444' : '#3b82f6'};">
+            <span class="ai-icon">🏥</span>
+            <span class="ai-content">
+              <span class="ai-title">Hospital &amp; Klinik${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? ` (${s.illnesses.length} Penyakit Aktif)` : ''}</span>
+              <span class="ai-desc">${(s.prison && s.prison.inPrison) ? 'Klinik Penjara — rawatan asas semasa dalam tahanan' : 'Rawatan penyakit, Hospital Pakar Swasta, pemeriksaan kesihatan &amp; Cuti Sakit (MC)'}</span>
+            </span>
+            <span class="ai-right">${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? 'Rawat →' : 'Buka →'}</span>
+          </button>
           <button class="action-item" id="act-doc-pub" ${docPubDone || !canAffordPub ? 'disabled' : ''}>
             <span class="ai-icon">🏥</span>
             <span class="ai-content">
@@ -2414,6 +2422,11 @@ window.Modals = {
         this.showActivities('passport');
       });
     }
+
+    const openHospitalBtn = document.getElementById('btn-open-hospital');
+    if (openHospitalBtn) openHospitalBtn.addEventListener('click', () => {
+      this.showHospitalModal();
+    });
 
     const docPub = document.getElementById('act-doc-pub');
     if (docPub) docPub.addEventListener('click', () => {
@@ -3392,6 +3405,147 @@ window.Modals = {
           App.renderAll();
           this.showActivities('migrate');
         }
+      });
+    }
+  },
+
+  // ==========================================================================
+  // HOSPITAL & KLINIK (PENYAKIT RAWAK, RAWATAN & CUTI SAKIT MC)
+  // ==========================================================================
+  showHospitalModal() {
+    const s = GameState.current;
+    if (!s || !window.HealthMedicalEngine) return;
+    HealthMedicalEngine.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    const illnesses = Array.isArray(s.illnesses) ? s.illnesses : [];
+    const pubCostInfo = HealthMedicalEngine.getTreatmentCost(s, inPrison ? 'prison' : 'public');
+    const privCostInfo = HealthMedicalEngine.getTreatmentCost(s, 'private');
+    const checkupCostInfo = HealthMedicalEngine.getTreatmentCost(s, inPrison ? 'prison' : 'checkup');
+    const checkupDone = Boolean(s.yearlyActions && s.yearlyActions.healthCheckup);
+    const canTakeMc = HealthMedicalEngine.hasLegitimateJob(s) && illnesses.length > 0;
+    const mcLeft = Math.max(0, HealthMedicalEngine.MAX_MC_PER_YEAR - (s.mcCountThisYear || 0));
+
+    const fmtCost = (info) => info.parentCovers
+      ? 'Mak Ayah Bayar'
+      : (info.cost <= 0 ? 'PERCUMA' : Utils.formatMoney(info.cost, s.countryId));
+
+    const illnessHtml = illnesses.length === 0
+      ? `<div class="info-banner" style="background:#ecfdf5;border-color:#6ee7b7;color:#065f46;margin-bottom:10px;">
+           🌿 <strong>Anda sedang sihat!</strong> Tiada penyakit aktif dikesan buat masa ini.
+         </div>`
+      : illnesses.map(ill => {
+          const sev = HealthMedicalEngine.SEVERITY_META[ill.severity] || HealthMedicalEngine.SEVERITY_META.ringan;
+          return `
+            <div class="migration-card" style="border-color:${sev.border};margin-bottom:10px;">
+              <div class="mig-head">
+                <div class="mig-title">${ill.icon || '🤒'} ${Utils.escapeHtml(ill.name)}</div>
+                <span class="cat-badge" style="background:${sev.bg};color:${sev.color};border:1px solid ${sev.border};">${sev.label}</span>
+              </div>
+              <div style="font-size:11.5px;color:#475569;margin-bottom:8px;">
+                Tempoh dihidapi: <strong>${ill.yearsActive || 0} tahun</strong>
+              </div>
+              <div class="action-list">
+                ${inPrison ? `
+                  <button type="button" class="action-item hosp-treat-btn" data-ill-id="${ill.id}" data-tier="prison">
+                    <span class="ai-icon">🏥</span>
+                    <span class="ai-content">
+                      <span class="ai-title">Rawatan Klinik Penjara</span>
+                      <span class="ai-desc">Pemeriksaan asas dan ubat tahan sakit daripada pegawai perubatan penjara</span>
+                    </span>
+                    <span class="ai-right free">PERCUMA</span>
+                  </button>
+                ` : `
+                  <button type="button" class="action-item hosp-treat-btn" data-ill-id="${ill.id}" data-tier="public">
+                    <span class="ai-icon">🏥</span>
+                    <span class="ai-content">
+                      <span class="ai-title">Rawatan Klinik / Hospital Kerajaan</span>
+                      <span class="ai-desc">Rawatan bersubsidi oleh doktor bertauliah dengan kos mampu milik</span>
+                    </span>
+                    <span class="ai-right cost">${fmtCost(pubCostInfo)}</span>
+                  </button>
+                  <button type="button" class="action-item hosp-treat-btn" data-ill-id="${ill.id}" data-tier="private">
+                    <span class="ai-icon">🩺</span>
+                    <span class="ai-content">
+                      <span class="ai-title">Hospital Pakar Swasta</span>
+                      <span class="ai-desc">Rawatan pakar menyeluruh dengan peralatan moden untuk penyakit sederhana &amp; kritikal</span>
+                    </span>
+                    <span class="ai-right cost">${fmtCost(privCostInfo)}</span>
+                  </button>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+    this.open({
+      icon: '🏥',
+      title: inPrison ? 'Klinik Penjara' : 'Hospital & Klinik',
+      subtitle: inPrison ? 'Rawatan asas semasa dalam tahanan' : `${c.name} • Kesihatan: ${Math.round(s.stats.health)}%`,
+      bodyHtml: `
+        ${inPrison ? `
+          <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:10px;">
+            🔒 <strong>Akses Hospital Luar Disekat:</strong> Anda hanya boleh menggunakan Klinik Penjara sehingga dibebaskan.
+          </div>
+        ` : ''}
+
+        <div class="section-heading">🤒 Status Penyakit Aktif (${illnesses.length})</div>
+        ${illnessHtml}
+
+        ${canTakeMc ? `
+          <div class="section-heading">📄 Cuti Sakit (MC) Pekerjaan</div>
+          <div class="action-list" style="margin-bottom:12px;">
+            <button type="button" class="action-item" id="hosp-request-mc" ${mcLeft <= 0 ? 'disabled' : ''}>
+              <span class="ai-icon">📄</span>
+              <span class="ai-content">
+                <span class="ai-title">Minta Sijil Cuti Sakit (MC)</span>
+                <span class="ai-desc">Rehatkan diri daripada tugas kerja (MC tahun ini: ${s.mcCountThisYear || 0}/${HealthMedicalEngine.MAX_MC_PER_YEAR}${s.mcWarnings > 0 ? ` • Amaran HR: ${s.mcWarnings}` : ''})</span>
+              </span>
+              <span class="ai-right">${mcLeft <= 0 ? 'Had Tamat' : 'Mohon MC'}</span>
+            </button>
+          </div>
+        ` : ''}
+
+        <div class="section-heading">🩺 Penjagaan Kesihatan Berkala</div>
+        <div class="action-list">
+          <button type="button" class="action-item ${checkupDone ? 'act-done-card' : ''}" id="hosp-checkup-btn" ${checkupDone ? 'disabled' : ''}>
+            <span class="ai-icon">🩺</span>
+            <span class="ai-content">
+              <span class="ai-title">Pemeriksaan Kesihatan</span>
+              <span class="ai-desc">${checkupDone ? 'Selesai tahun ini' : 'Jalani pemeriksaan berkala untuk mengekalkan tahap kesihatan badan'}</span>
+            </span>
+            <span class="ai-right cost">${checkupDone ? 'Selesai Tahun Ini' : fmtCost(checkupCostInfo)}</span>
+          </button>
+        </div>
+      `
+    });
+
+    document.querySelectorAll('.hosp-treat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = HealthMedicalEngine.treatIllness(s, btn.dataset.illId, btn.dataset.tier);
+        App.toast(res.msg, res.ok ? (res.cured ? 'success' : 'culture') : 'error');
+        App.renderAll();
+        this.showHospitalModal();
+      });
+    });
+
+    const hospMcBtn = document.getElementById('hosp-request-mc');
+    if (hospMcBtn) {
+      hospMcBtn.addEventListener('click', () => {
+        const res = HealthMedicalEngine.requestMedicalLeave(s);
+        App.toast(res.msg, res.fired ? 'error' : res.warning ? 'culture' : (res.ok ? 'success' : 'error'));
+        App.renderAll();
+        this.showHospitalModal();
+      });
+    }
+
+    const checkupBtn = document.getElementById('hosp-checkup-btn');
+    if (checkupBtn) {
+      checkupBtn.addEventListener('click', () => {
+        const res = HealthMedicalEngine.doHealthCheckup(s);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHospitalModal();
       });
     }
   }
