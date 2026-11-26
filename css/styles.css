@@ -224,6 +224,20 @@ html, body {
 .residency-badge.pr { background: #dbeafe; color: #1e40af; }
 .residency-badge.visa { background: #fef3c7; color: #92400e; }
 
+.honor-title-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
+  white-space: nowrap;
+}
+
 .char-subtitle {
   margin: 2px 0 0;
   font-size: 12px;

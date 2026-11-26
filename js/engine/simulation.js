@@ -414,8 +414,19 @@ window.Sim = {
       );
     }
 
+    const royalHonorOffer = (window.CharacterStatus && CharacterStatus.checkRoyalHonorEligibility)
+      ? CharacterStatus.checkRoyalHonorEligibility(s)
+      : null;
+
     GameState.save();
-    return { event, died: false, babyBirth, childMilestoneQueue, secondarySchoolChoice: Boolean(s.education && s.education.pendingSecondaryChoice) };
+    return {
+      event,
+      died: false,
+      babyBirth,
+      childMilestoneQueue,
+      secondarySchoolChoice: Boolean(s.education && s.education.pendingSecondaryChoice),
+      royalHonorOffer
+    };
   },
 
   triggerDeath(cause) {

@@ -1548,9 +1548,11 @@ window.Modals = {
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
     const curMode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
     const curSoleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
+    const isSoleActive = curMode === 'sole_heir' || curMode === 'single_child';
     const livingHeirs = LegalInheritanceEngine._getLivingFamilyHeirs
       ? LegalInheritanceEngine._getLivingFamilyHeirs(s)
       : (s.relationships || []).filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
+    const chosenHeirObj = curSoleId ? livingHeirs.find(h => h.id === curSoleId) : null;
 
     this.open({
       icon: '📜',
@@ -1559,6 +1561,7 @@ window.Modals = {
       bodyHtml: `
         <div class="info-banner highlight">
           <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
+          <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
           Nilai Harta Bersih Anggaran: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (Bebas Cukai Pusaka)'}
         </div>
 
@@ -1585,25 +1588,37 @@ window.Modals = {
               <span class="ai-desc">Dermakan seluruh harta pusaka kepada tabung kebajikan awam</span>
             </span>
           </button>
+          <button type="button" class="action-item" id="btn-wasiat-pick-heir">
+            <span class="ai-icon">👑</span>
+            <span class="ai-content">
+              <span class="ai-title">100% Kepada Ahli Waris Pilihan ${isSoleActive ? `✓${chosenHeirObj ? ` (${Utils.escapeHtml(chosenHeirObj.name)})` : ''}` : ''}</span>
+              <span class="ai-desc">Serahkan 100% seluruh harta pusaka kepada seorang ahli waris yang anda pilih</span>
+            </span>
+          </button>
         </div>
 
-        ${livingHeirs.length > 0 ? `
-          <div class="section-heading" style="margin-top:12px;">👑 Serah Semua Harta (100%) kepada Seorang Pewaris</div>
-          <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-bottom:8px;">
-            ⚠️ Amaran: Memilih seorang pewaris tunggal akan mencetuskan kemarahan ahli keluarga lain yang masih hidup (-Kepercayaan, -Kemesraan &amp; +Stres).
-          </div>
-          <div class="action-list">
-            ${livingHeirs.map(h => `
-              <button type="button" class="action-item civil-wasiat-btn" data-mode="sole_heir" data-target="${h.id}">
-                <span class="ai-icon">👑</span>
-                <span class="ai-content">
-                  <span class="ai-title">100% Kepada ${Utils.escapeHtml(h.name)} ${(curMode === 'sole_heir' || curMode === 'single_child') && curSoleId === h.id ? '✓' : ''}</span>
-                  <span class="ai-desc">${Utils.escapeHtml(h.isAdopted ? `${h.role} (Angkat)` : (h.role || 'Keluarga'))} • Umur ${h.age} tahun</span>
-                </span>
-              </button>
-            `).join('')}
-          </div>
-        ` : ''}
+        <div id="wasiat-sole-heir-box" style="margin-top:12px;">
+          <div class="section-heading">👑 Pilih Ahli Waris Tunggal (100% Harta)</div>
+          ${livingHeirs.length > 0 ? `
+            <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-bottom:8px;">
+              ⚠️ Amaran: Memilih seorang ahli waris tunggal (100%) akan mencetuskan kemarahan ahli keluarga lain yang masih hidup (-Kepercayaan, -Kemesraan &amp; +Stres).
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+              <select id="select-wasiat-heir" class="form-input" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);">
+                ${livingHeirs.map(h => `
+                  <option value="${h.id}" ${curSoleId === h.id ? 'selected' : ''}>
+                    ${Utils.escapeHtml(h.name)} (${Utils.escapeHtml(h.isAdopted ? `${h.role} (Angkat)` : (h.role || 'Keluarga'))} • ${h.age} thn)
+                  </option>
+                `).join('')}
+              </select>
+              <button type="button" class="primary-btn" id="btn-confirm-sole-heir" style="white-space:nowrap;">Tetapkan 100%</button>
+            </div>
+          ` : `
+            <div class="info-banner" style="font-size:12px;">
+              Tiada ahli waris hidup ditemui buat masa ini. Bina keluarga (pasangan atau anak) terlebih dahulu untuk memilih ahli waris tunggal.
+            </div>
+          `}
+        </div>
 
         <button type="button" class="secondary-btn" id="btn-wasiat-back" style="width:100%;margin-top:8px;">← Kembali</button>
       `
@@ -1617,9 +1632,89 @@ window.Modals = {
       });
     });
 
+    const pickHeirBtn = document.getElementById('btn-wasiat-pick-heir');
+    if (pickHeirBtn) {
+      pickHeirBtn.addEventListener('click', () => {
+        const box = document.getElementById('wasiat-sole-heir-box');
+        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const sel = document.getElementById('select-wasiat-heir');
+        if (sel) sel.focus();
+      });
+    }
+
+    const confirmSoleBtn = document.getElementById('btn-confirm-sole-heir');
+    if (confirmSoleBtn) {
+      confirmSoleBtn.addEventListener('click', () => {
+        const sel = document.getElementById('select-wasiat-heir');
+        const targetId = sel ? sel.value : null;
+        const res = LegalInheritanceEngine.setCivilWasiat(s, 'sole_heir', targetId);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        this.showWasiatModal(onBack);
+      });
+    }
+
     document.getElementById('btn-wasiat-back').addEventListener('click', () => {
       if (typeof onBack === 'function') onBack();
       else this.close();
+    });
+  },
+
+  showRoyalHonorOfferModal(offer, onDone = null) {
+    const s = GameState.current;
+    if (!s || !offer || !window.CharacterStatus) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const a = s.alignment || {};
+    const stats = s.stats || {};
+    const netWorth = (window.GameState && GameState.getNetWorth) ? GameState.getNetWorth() : (s.money || 0);
+    const wealth = Math.max(s.money || 0, netWorth || 0);
+
+    this.open({
+      icon: offer.icon || '🏅',
+      title: 'Istiadat Pengurniaan Darjah Kebesaran',
+      subtitle: `Tawaran Gelaran "${offer.title}"`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#f59e0b;color:#78350f;">
+          <div style="font-size:15px;font-weight:800;margin-bottom:4px;">${offer.icon} Tahniah! Anda Layak Dianugerahkan Gelaran "${Utils.escapeHtml(offer.title)}"</div>
+          <div style="font-size:13px;line-height:1.45;">${Utils.escapeHtml(offer.desc)}</div>
+        </div>
+
+        <div class="section-heading">Syarat Kelayakan Yang Dipenuhi</div>
+        <div class="info-banner" style="font-size:12.5px;line-height:1.6;">
+          ⭐ Populariti: <strong>${a.fame || 0}%</strong> (&gt; 70%) ✓<br/>
+          ✨ Penampilan: <strong>${stats.looks || 0}%</strong> (&gt; 50%) ✓<br/>
+          🚔 Haba Polis: <strong>${a.notoriety || 0}%</strong> (= 0%) ✓<br/>
+          ⚖️ Karma: <strong>${(a.karma || 0) >= 0 ? '+' : ''}${a.karma || 0}</strong> (Baik) ✓<br/>
+          💰 Harta Semasa: <strong>${fmt(wealth)}</strong> (${Utils.escapeHtml(offer.wealthLabel)}) ✓
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+          <button type="button" class="primary-btn" id="btn-accept-royal-honor" style="width:100%;">
+            ${offer.icon} Terima Gelaran ${Utils.escapeHtml(offer.title)}
+          </button>
+          <button type="button" class="secondary-btn" id="btn-decline-royal-honor" style="width:100%;">
+            🙏 Tolak Pangkat Ini
+          </button>
+        </div>
+      `
+    });
+
+    document.getElementById('btn-accept-royal-honor').addEventListener('click', () => {
+      CharacterStatus.acceptRoyalHonor(s, offer);
+      App.toast(`Tahniah! Gelaran ${offer.title} kini terpapar di dashboard anda!`, 'success');
+      App.renderAll();
+      this.close();
+      if (typeof onDone === 'function') onDone();
+    });
+
+    document.getElementById('btn-decline-royal-honor').addEventListener('click', () => {
+      CharacterStatus.declineRoyalHonor(s, offer);
+      App.toast(`Anda menolak pangkat ${offer.title} dengan penuh rendah diri.`, 'info');
+      App.renderAll();
+      this.close();
+      if (typeof onDone === 'function') onDone();
     });
   },
 
@@ -1900,7 +1995,9 @@ window.Modals = {
         ? `<br/><small style="opacity:0.85;">Sumber: ${inc.breakdown.map(b => `${b.icon} ${Utils.escapeHtml(b.label)} (${Utils.formatMoney(b.gross, s.countryId)}/thn)`).join(' • ')}</small>`
         : '';
 
-      const wasiatSummary = (s.legal && s.legal.wasiat && s.legal.wasiat.mode) ? `Mod Wasiat: ${s.legal.wasiat.mode}` : 'Pembahagian Sama Rata';
+      const wasiatSummary = (window.LegalInheritanceEngine && LegalInheritanceEngine.getWasiatSummary)
+        ? LegalInheritanceEngine.getWasiatSummary(s)
+        : ((s.legal && s.legal.wasiat && s.legal.wasiat.mode) ? `Mod Wasiat: ${s.legal.wasiat.mode}` : 'Pembahagian Sama Rata');
 
       const edObj = s.education || {};
       const edLvlInfo = (window.EducationData && EducationData.LEVEL_INFO[edObj.educationLevel || 'none']) || { icon: '📄', label: 'Tiada/Sekolah' };

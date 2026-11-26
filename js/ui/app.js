@@ -664,7 +664,7 @@ window.App = {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
-    const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice } = Sim.ageUp();
+    const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice, royalHonorOffer } = Sim.ageUp();
     GameState.syncActiveSlotToCloud('age_up');
     this.renderAll();
 
@@ -672,6 +672,20 @@ window.App = {
       setTimeout(() => Modals.showDeathSummary(), 260);
       return;
     }
+
+    const runEventStep = () => {
+      if (event) {
+        setTimeout(() => Modals.showEvent(event), 160);
+      }
+    };
+
+    const runHonorThenEvent = () => {
+      if (royalHonorOffer && Modals.showRoyalHonorOfferModal) {
+        setTimeout(() => Modals.showRoyalHonorOfferModal(royalHonorOffer, () => runEventStep()), 160);
+      } else {
+        runEventStep();
+      }
+    };
 
     const queue = Array.isArray(childMilestoneQueue) ? [...childMilestoneQueue] : [];
     const runNextMilestone = () => {
@@ -690,9 +704,7 @@ window.App = {
         }, 160);
         return;
       }
-      if (event) {
-        setTimeout(() => Modals.showEvent(event), 160);
-      }
+      runHonorThenEvent();
     };
 
     const runAfterSecondary = () => {
@@ -740,6 +752,22 @@ window.App = {
     document.getElementById('char-name').textContent = window.CharacterStatus
       ? CharacterStatus.getDisplayNameWithTitles(s)
       : (window.EduCareerEngine ? EduCareerEngine.getDisplayName(s) : s.name);
+
+    const honorBadge = document.getElementById('honor-title-badge');
+    if (honorBadge) {
+      const activeHonor = (s.honors && s.honors.currentTitle && !(s.prison && s.prison.inPrison))
+        ? s.honors.currentTitle
+        : null;
+      if (activeHonor) {
+        const icon = activeHonor === 'Tun' ? '👑' : '🏅';
+        honorBadge.textContent = `${icon} ${activeHonor}`;
+        honorBadge.title = `Gelaran Rasmi: ${activeHonor}`;
+        honorBadge.classList.remove('hidden');
+      } else {
+        honorBadge.textContent = '';
+        honorBadge.classList.add('hidden');
+      }
+    }
 
     const badge = document.getElementById('residency-badge');
     badge.textContent = this._residencyLabel(s.residencyStatus);

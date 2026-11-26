@@ -273,10 +273,118 @@ window.CharacterStatus = {
     return award;
   },
 
+  ROYAL_HONOR_TIERS: [
+    {
+      id: 'datuk',
+      rank: 1,
+      title: 'Datuk',
+      icon: '🏅',
+      minWealth: 1000000,
+      strictGreater: true,
+      wealthLabel: 'Melebihi 1 Juta',
+      desc: 'Anugerah Darjah Kebesaran yang membawa gelaran "Datuk" atas sumbangan cemerlang, imej bersih dan kejayaan luar biasa anda.'
+    },
+    {
+      id: 'datuk_seri',
+      rank: 2,
+      title: 'Datuk Seri',
+      icon: '🏅',
+      minWealth: 10000000,
+      strictGreater: false,
+      wealthLabel: '10 Juta ke atas',
+      desc: 'Anugerah Darjah Kebesaran Utama yang membawa gelaran "Datuk Seri" sebagai pengiktirafan terhadap ketokohan dan kekayaan anda.'
+    },
+    {
+      id: 'tun',
+      rank: 3,
+      title: 'Tun',
+      icon: '👑',
+      minWealth: 100000000,
+      strictGreater: false,
+      wealthLabel: '100 Juta ke atas',
+      desc: 'Anugerah Tertinggi Negara yang membawa gelaran "Tun" — penghormatan paling eksklusif untuk tokoh negarawan dan bilionair berintegriti.'
+    }
+  ],
+
+  checkRoyalHonorEligibility(s) {
+    if (!s || !s.alive || s.age < 18) return null;
+    if (s.prison && s.prison.inPrison) return null;
+    const a = s.alignment || {};
+    const stats = s.stats || {};
+    const fame = a.fame || 0;
+    const looks = stats.looks || 0;
+    const heat = a.notoriety || 0;
+    const karma = a.karma || 0;
+
+    // Syarat sama untuk setiap pangkat: Populariti > 70%, Penampilan > 50%, Haba Polis = 0%, Karma >= 0
+    if (fame <= 70 || looks <= 50 || heat !== 0 || karma < 0) return null;
+
+    const netWorth = (window.GameState && GameState.getNetWorth) ? GameState.getNetWorth() : (s.money || 0);
+    const wealth = Math.max(s.money || 0, netWorth || 0);
+    const honors = s.honors || { currentRank: 0, declinedTitles: [] };
+    const currentRank = honors.currentRank || 0;
+    const declined = Array.isArray(honors.declinedTitles) ? honors.declinedTitles : [];
+
+    // Semak dari pangkat tertinggi ke terendah
+    const sorted = [...this.ROYAL_HONOR_TIERS].sort((x, y) => y.rank - x.rank);
+    for (const tier of sorted) {
+      if (tier.rank <= currentRank) continue;
+      if (declined.includes(tier.title)) continue;
+      const meetsWealth = tier.strictGreater ? wealth > tier.minWealth : wealth >= tier.minWealth;
+      if (meetsWealth) return tier;
+    }
+    return null;
+  },
+
+  acceptRoyalHonor(s, tier) {
+    if (!s || !tier) return { ok: false };
+    if (!s.honors || typeof s.honors !== 'object') {
+      s.honors = { currentTitle: null, currentRank: 0, acceptedTitles: [], declinedTitles: [], awardedYear: null };
+    }
+    s.honors.currentTitle = tier.title;
+    s.honors.currentRank = tier.rank;
+    s.honors.awardedYear = s.year;
+    if (!s.honors.acceptedTitles.includes(tier.title)) {
+      s.honors.acceptedTitles.push(tier.title);
+    }
+    if (window.GameState) {
+      GameState.adjustStats({ happiness: 15 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: 5, karma: 5 });
+      GameState.addJournalEntry(
+        `${tier.icon} ISTIADAT PENGURNIAAN: Anda secara rasmi dianugerahkan dan menerima gelaran "${tier.title}"! Nama anda kini dikenali sebagai ${this.getDisplayNameWithTitles(s)}.`,
+        'milestone'
+      );
+      GameState.save();
+    }
+    return { ok: true, title: tier.title };
+  },
+
+  declineRoyalHonor(s, tier) {
+    if (!s || !tier) return { ok: false };
+    if (!s.honors || typeof s.honors !== 'object') {
+      s.honors = { currentTitle: null, currentRank: 0, acceptedTitles: [], declinedTitles: [], awardedYear: null };
+    }
+    if (!s.honors.declinedTitles.includes(tier.title)) {
+      s.honors.declinedTitles.push(tier.title);
+    }
+    if (window.GameState) {
+      GameState.addJournalEntry(
+        `🙏 PENGURNIAAN DITOLAK: Anda ditawarkan gelaran "${tier.title}", namun anda memilih untuk menolaknya dengan penuh rendah diri.`,
+        'info'
+      );
+      GameState.save();
+    }
+    return { ok: true, title: tier.title };
+  },
+
   getDisplayNameWithTitles(s) {
     if (!s) return '';
     let baseName = s.name || '';
     const prefixes = [];
+
+    if (s.honors && s.honors.currentTitle && !(s.prison && s.prison.inPrison)) {
+      prefixes.push(s.honors.currentTitle);
+    }
 
     if (s.activeSpecialMode && window.SpecialModesEngine && !(s.prison && s.prison.inPrison)) {
       const info = SpecialModesEngine.getActiveInfo(s);

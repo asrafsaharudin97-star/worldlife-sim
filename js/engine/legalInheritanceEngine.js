@@ -180,10 +180,33 @@ window.LegalInheritanceEngine = {
         r.id === s.partnerId ||
         r.category === 'family' ||
         r.category === 'spouse' ||
+        r.category === 'partner' ||
+        r.type === 'sibling' ||
         this._isChildRel(r) ||
         this._isParentRel(r)
       )
     );
+  },
+
+  getWasiatSummary(s) {
+    this.ensureLegalFields(s);
+    const mode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
+    const soleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
+    if ((mode === 'sole_heir' || mode === 'single_child') && soleId) {
+      const livingFamily = this._getLivingFamilyHeirs(s);
+      const chosen = livingFamily.find(rel => rel.id === soleId);
+      return chosen
+        ? `100% Kepada ${chosen.name} (Ahli Waris Pilihan)`
+        : '100% Kepada Ahli Waris Pilihan';
+    }
+    const labels = {
+      equal: 'Pembahagian Sama Rata',
+      spouse_all: '100% Kepada Pasangan',
+      charity: '100% Yayasan Kebajikan',
+      sole_heir: '100% Kepada Ahli Waris Pilihan',
+      single_child: '100% Kepada Ahli Waris Pilihan'
+    };
+    return labels[mode] || labels.equal;
   },
 
   // --------------------------------------------------------------------------
@@ -385,7 +408,7 @@ window.LegalInheritanceEngine = {
       distributable,
       distributableEstate: distributable,
       wasiatMode: mode,
-      wasiatLabel: wasiatLabels[mode] || wasiatLabels.equal,
+      wasiatLabel: this.getWasiatSummary(s),
       heirlooms,
       shares,
       getHeirAmount(heirId) {

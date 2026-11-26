@@ -383,6 +383,21 @@ window.GameState = {
     if (window.SpecialModesEngine && SpecialModesEngine.ensureFields) {
       SpecialModesEngine.ensureFields(s);
     }
+    if (!s.honors || typeof s.honors !== 'object') {
+      s.honors = {
+        currentTitle: null,
+        currentRank: 0,
+        acceptedTitles: [],
+        declinedTitles: [],
+        awardedYear: null
+      };
+    } else {
+      if (!('currentTitle' in s.honors)) s.honors.currentTitle = null;
+      if (typeof s.honors.currentRank !== 'number') s.honors.currentRank = 0;
+      if (!Array.isArray(s.honors.acceptedTitles)) s.honors.acceptedTitles = [];
+      if (!Array.isArray(s.honors.declinedTitles)) s.honors.declinedTitles = [];
+      if (!('awardedYear' in s.honors)) s.honors.awardedYear = null;
+    }
     if (window.CharacterStatus && CharacterStatus.reconcileCharacterState) {
       CharacterStatus.reconcileCharacterState(s);
     }
