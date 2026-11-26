@@ -602,33 +602,64 @@ window.Sim = {
       s.totalYearsWorked = (s.totalYearsWorked || 0) + 1;
       const retireContrib = Math.round(s.job.salary * 0.12);
 
-      let promoted = false;
-      const curStress = (s.alignment && s.alignment.stress) || 0;
-      const promoChance = curStress >= 50 ? 0.35 : 0.45; // -10% peluang naik pangkat jika Stres >= 50%
-      if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(promoChance)) {
-        const pRes = EduCareerEngine.tryPromote(s, false);
-        promoted = Boolean(pRes && pRes.ok);
-      }
-
-      const raiseChance = curStress >= 50 ? 0.45 : 0.55; // -10% peluang naik gaji automatik jika Stres >= 50%
-      if (!promoted && s.job.performance >= 72 && Utils.chance(raiseChance)) {
-        const bump = Utils.randInt(4, 10);
-        s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
+      // Risiko diberhentikan kerja (syarikat muflis/pengecilan) atau pemotongan gaji akibat kemelesetan ekonomi
+      if (Utils.chance(0.07)) {
+        const lostTitle = s.job.title;
+        s.job = null;
+        GameState.adjustStats({ happiness: -18 });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 18 });
         GameState.addJournalEntry(
-          `💼 Prestasi cemerlang sebagai ${s.job.title}! Gaji anda naik ${bump}% kepada ${Utils.formatMoney(s.job.salary, s.countryId)}/thn (+${Utils.formatMoney(retireContrib, s.countryId)} ke ${c.retirementScheme}).`,
-          'milestone'
+          `📉 DIBERHENTIKAN KERJA! Syarikat tempat anda bekerja mengalami krisis kewangan dan jawatan anda sebagai ${lostTitle} ditamatkan serta-merta.`,
+          'warning'
         );
+      } else if (Utils.chance(0.08)) {
+        const cutPct = Utils.randInt(15, 30);
+        s.job.salary = Math.max(Utils.usdToLocal(4000, s.countryId), Math.round(s.job.salary * (1 - cutPct / 100)));
+        GameState.adjustStats({ happiness: -10 });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
+        GameState.addJournalEntry(
+          `📉 PEMOTONGAN GAJI! Akibat kemelesetan ekonomi, gaji anda sebagai ${s.job.title} dipotong ${cutPct}% kepada ${Utils.formatMoney(s.job.salary, s.countryId)}/thn.`,
+          'warning'
+        );
+      } else {
+        let promoted = false;
+        const curStress = (s.alignment && s.alignment.stress) || 0;
+        const promoChance = curStress >= 50 ? 0.25 : 0.35; // -10% peluang naik pangkat jika Stres >= 50%
+        if (window.EduCareerEngine && Array.isArray(s.job.ladder) && s.job.performance >= 78 && Utils.chance(promoChance)) {
+          const pRes = EduCareerEngine.tryPromote(s, false);
+          promoted = Boolean(pRes && pRes.ok);
+        }
+
+        const raiseChance = curStress >= 50 ? 0.30 : 0.42; // -12% peluang naik gaji automatik jika Stres >= 50%
+        if (!promoted && s.job.performance >= 72 && Utils.chance(raiseChance)) {
+          const bump = Utils.randInt(3, 8);
+          s.job.salary = Math.round(s.job.salary * (1 + bump / 100));
+          GameState.addJournalEntry(
+            `💼 Prestasi cemerlang sebagai ${s.job.title}! Gaji anda naik ${bump}% kepada ${Utils.formatMoney(s.job.salary, s.countryId)}/thn (+${Utils.formatMoney(retireContrib, s.countryId)} ke ${c.retirementScheme}).`,
+            'milestone'
+          );
+        }
+        s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(-4, 3), 20, 100);
       }
-      s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(-3, 3), 20, 100);
     }
 
     if (s.investments > 0) {
       const inv = (window.COUNTRY_INVESTMENTS && window.COUNTRY_INVESTMENTS[s.countryId]) || { name: 'Pasaran Tempatan', minYield: 4, maxYield: 10 };
-      const dip = Utils.chance(0.14);
-      const ratePct = dip ? -Utils.randInt(2, 6) : Utils.randInt(inv.minYield, inv.maxYield);
+      const crash = Utils.chance(0.07);
+      const dip = !crash && Utils.chance(0.22);
+      const ratePct = crash
+        ? -Utils.randInt(25, 55)
+        : (dip ? -Utils.randInt(4, 12) : Utils.randInt(inv.minYield, inv.maxYield));
       const gain = Math.round(s.investments * (ratePct / 100));
       s.investments = Math.max(0, s.investments + gain);
-      if (Math.abs(gain) > Utils.usdToLocal(200, s.countryId)) {
+      if (crash) {
+        GameState.adjustStats({ happiness: -16 });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 16 });
+        GameState.addJournalEntry(
+          `💥 KEJATUHAN PASARAN SAHAM! Portfolio ${inv.name} anda menjunam ${ratePct}% (${Utils.formatMoney(gain, s.countryId)}) akibat krisis ekonomi!`,
+          'warning'
+        );
+      } else if (Math.abs(gain) > Utils.usdToLocal(200, s.countryId)) {
         GameState.addJournalEntry(
           `📈 Portfolio ${inv.name} anda ${gain >= 0 ? 'meningkat' : 'menurun'} sebanyak ${ratePct >= 0 ? '+' : ''}${ratePct}% (${gain >= 0 ? '+' : ''}${Utils.formatMoney(gain, s.countryId)}).`
         );
@@ -667,9 +698,81 @@ window.Sim = {
       AssetsEngine.tickYearlyAssets(s, c);
     }
 
+    // Risiko nasib malang / bencana kewangan tahunan (boleh menyebabkan pemain kaya jatuh miskin)
+    if (s.age >= 18 && !(s.prison && s.prison.inPrison)) {
+      this._processFinancialHardship(s, c);
+    }
+
+    // Faedah hutang tahunan (12%) jika baki tunai negatif — tekanan kemiskinan & muflis
+    if (s.age >= 18 && s.money < 0) {
+      const debtInterest = Math.round(Math.abs(s.money) * 0.12);
+      if (debtInterest > 0) {
+        s.money -= debtInterest;
+        GameState.adjustStats({ happiness: -8 });
+        if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
+        GameState.addJournalEntry(
+          `💸 BEBAN HUTANG & KEMISKINAN: Anda menanggung faedah hutang ${Utils.formatMoney(debtInterest, s.countryId)} tahun ini. Baki akaun kini ${Utils.formatMoney(s.money, s.countryId)}.`,
+          'warning'
+        );
+      }
+    }
+
     if (s.age >= 8 && s.age <= 17 && Utils.chance(0.7)) {
       const allowance = Utils.usdToLocal(Utils.randInt(40, 140), s.countryId);
       s.money += allowance;
+    }
+  },
+
+  _processFinancialHardship(s, c) {
+    // Peluang ~12% setahun mengalami nasib malang kewangan besar
+    if (!Utils.chance(0.12)) return;
+
+    const cash = Math.max(0, s.money || 0);
+    const econBase = Utils.usdToLocal(Math.round(8000 * (c.costOfLivingIndex || 1)), s.countryId);
+    const roll = Math.random();
+
+    if (roll < 0.25 && cash > econBase) {
+      // 1. Ditipu sindiket pelaburan / scammer (hilang 35% - 70% wang tunai)
+      const lossPct = Utils.randInt(35, 70);
+      const loss = Math.round(cash * (lossPct / 100));
+      s.money -= loss;
+      GameState.adjustStats({ happiness: -22 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 22 });
+      GameState.addJournalEntry(
+        `🚨 DITIPU SKIM PENIPUAN! Anda menjadi mangsa sindiket pelaburan palsu dan kehilangan ${lossPct}% wang tunai anda (${Utils.formatMoney(loss, s.countryId)})!`,
+        'warning'
+      );
+    } else if (roll < 0.50) {
+      // 2. Bil perubatan kecemasan / pembedahan mahal (boleh menyebabkan berhutang)
+      const bill = Math.round(econBase * Utils.randFloat(1.2, 2.8) + cash * 0.20);
+      s.money -= bill;
+      GameState.adjustStats({ health: -12, happiness: -14 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 16 });
+      GameState.addJournalEntry(
+        `🏥 BIL PERUBATAN KECEMASAN! Anda terpaksa menjalani rawatan kecemasan mahal berjumlah ${Utils.formatMoney(bill, s.countryId)}.`,
+        'warning'
+      );
+    } else if (roll < 0.75 && cash > econBase * 0.5) {
+      // 3. Saman sivil / audit cukai mengejut (hilang 25% - 55% wang tunai)
+      const lossPct = Utils.randInt(25, 55);
+      const penalty = Math.round(cash * (lossPct / 100));
+      s.money -= penalty;
+      GameState.adjustStats({ happiness: -16 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 18 });
+      GameState.addJournalEntry(
+        `⚖️ SAMAN & AUDIT CUKAI! Anda dikenakan penalti dan kos guaman mengejut sebanyak ${Utils.formatMoney(penalty, s.countryId)} (${lossPct}% simpanan tunai).`,
+        'warning'
+      );
+    } else {
+      // 4. Bencana / kemalangan harta benda & inflasi melampau
+      const drain = Math.round(econBase * Utils.randFloat(0.9, 2.2) + cash * 0.25);
+      s.money -= drain;
+      GameState.adjustStats({ happiness: -15 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 15 });
+      GameState.addJournalEntry(
+        `🔥 MUSIBAH KEWANGAN! Kerosakan harta benda & kos inflasi melampau memaksa anda membelanjakan ${Utils.formatMoney(drain, s.countryId)}.`,
+        'warning'
+      );
     }
   },
 

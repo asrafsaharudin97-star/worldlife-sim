@@ -622,6 +622,74 @@ window.App = {
     }
   },
 
+  async handleSaveCurrentToSlot(targetSlotId, existingSlotItem = null) {
+    if (!window.GameState || GameState.isGuestMode || !window.FirebaseService || !FirebaseService.isLoggedIn()) {
+      this.toast('Log masuk dengan Google untuk menyimpan salinan permainan ke Cloud.', 'error');
+      return { ok: false, guest: true };
+    }
+    if (!GameState.current) {
+      this.toast('Tiada watak aktif untuk disimpan buat masa ini.', 'error');
+      return { ok: false };
+    }
+    if (!GameState.SLOT_IDS.includes(targetSlotId)) {
+      this.toast('Slot simpanan tidak sah.', 'error');
+      return { ok: false };
+    }
+
+    const slotNum = targetSlotId.replace('slot_', '');
+    const activeSlotId = GameState.getActiveSlotId();
+    if (existingSlotItem && targetSlotId !== activeSlotId) {
+      const existingName = existingSlotItem.characterName || 'Watak Sedia Ada';
+      const confirmed = window.confirm(
+        `Slot ${slotNum} sudah mempunyai simpanan (${existingName}). Anda pasti mahu menimpanya dengan permainan semasa?`
+      );
+      if (!confirmed) {
+        return { ok: false, cancelled: true };
+      }
+    }
+
+    let res = null;
+    try {
+      res = await this.runWithCloudProgress('save', async () => {
+        const deepCopyState = JSON.parse(JSON.stringify(GameState.current));
+        const now = Date.now();
+        const payload = GameState.buildSlotPayload(targetSlotId, deepCopyState);
+        if (!payload) return { ok: false, msg: 'Gagal membina data simpanan.' };
+        payload.slotId = targetSlotId;
+        payload.savedAt = now;
+        payload.updatedAt = now;
+        payload.gameState = deepCopyState;
+        if (window.Dynasty && !payload.dynasty) {
+          payload.dynasty = JSON.parse(JSON.stringify(Dynasty.getData()));
+        }
+        if (window.KarmaEndings && !payload.unlocked) {
+          payload.unlocked = JSON.parse(JSON.stringify(KarmaEndings.getUnlocked()));
+        }
+
+        // Simpan salinan tempatan & Cloud ke targetSlotId tanpa menukar activeSlotId
+        GameState.saveLocalSlot(targetSlotId, deepCopyState);
+        return await GameState.syncSlotToCloud(targetSlotId, payload);
+      });
+
+      if (res && res.busy) return res;
+      if (res && res.ok) {
+        this.toast(`Permainan semasa berjaya disimpan ke Slot ${slotNum}!`, 'success');
+      } else {
+        this.toast((res && res.msg) || `Gagal menyimpan permainan ke Slot ${slotNum}.`, 'error');
+      }
+      return res || { ok: false };
+    } catch (err) {
+      console.error('[App] handleSaveCurrentToSlot error:', err);
+      this.toast(`Gagal menyimpan permainan ke Slot ${slotNum}.`, 'error');
+      return { ok: false };
+    } finally {
+      if (this.cloudProgress && this.cloudProgress.active) {
+        this.cloudProgress.active = false;
+        this.renderCloudProgressOverlay();
+      }
+    }
+  },
+
   showStartScreen(opts = {}) {
     const wasInGame = !document.getElementById('game-header').classList.contains('hidden');
     if (wasInGame && GameState.current && !(opts && opts.skipSave)) {

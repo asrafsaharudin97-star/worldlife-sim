@@ -2589,6 +2589,8 @@ window.Modals = {
       </div>
     ` : '';
 
+    const canSaveCurrentHere = Boolean(isCloud && !GameState.isGuestMode && GameState.current);
+
     const slotsHtml = GameState.SLOT_IDS.map((slotId, idx) => {
       const slotNum = idx + 1;
       const item = slots[slotId];
@@ -2600,9 +2602,16 @@ window.Modals = {
               <div class="mig-title">📂 Slot ${slotNum} ${isActive ? '<span class="cat-badge synergy">Aktif</span>' : ''}</div>
               <span style="font-size:11.5px;color:#64748b;">Kosong</span>
             </div>
-            <button type="button" class="btn-sm primary slot-new-btn" data-slot="${slotId}" style="width:100%;margin-top:6px;">
-              ➕ Mula Kehidupan Baru di Slot Ini
-            </button>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+              ${canSaveCurrentHere ? `
+                <button type="button" class="btn-sm primary slot-save-current-btn" data-slot="${slotId}" style="width:100%;">
+                  💾 Simpan Permainan Semasa di Sini
+                </button>
+              ` : ''}
+              <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-new-btn" data-slot="${slotId}" style="width:100%;">
+                ➕ Mula Kehidupan Baru di Slot Ini
+              </button>
+            </div>
           </div>
         `;
       }
@@ -2635,9 +2644,14 @@ window.Modals = {
               </div>
             </div>
           ` : `
-            <div class="mig-actions" style="grid-template-columns:${isCloud ? 'repeat(3,1fr)' : 'repeat(2,1fr)'};">
-              <button type="button" class="btn-sm primary slot-load-btn" data-slot="${slotId}">▶ Sambung</button>
-              ${isCloud ? `<button type="button" class="btn-sm secondary slot-sync-btn" data-slot="${slotId}">☁️ Sync</button>` : ''}
+            ${canSaveCurrentHere ? `
+              <button type="button" class="btn-sm primary slot-save-current-btn" data-slot="${slotId}" style="width:100%;margin-bottom:6px;">
+                ${isActive ? '💾 Kemas Kini Simpanan' : '💾 Timpa dengan Permainan Semasa'}
+              </button>
+            ` : ''}
+            <div class="mig-actions" style="grid-template-columns:${isCloud && !canSaveCurrentHere ? 'repeat(3,1fr)' : 'repeat(2,1fr)'};">
+              <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-load-btn" data-slot="${slotId}">▶ Muatkan</button>
+              ${isCloud && !canSaveCurrentHere ? `<button type="button" class="btn-sm secondary slot-sync-btn" data-slot="${slotId}">☁️ Sync</button>` : ''}
               <button type="button" class="btn-sm secondary slot-del-btn" data-slot="${slotId}" style="color:#dc2626;">🗑️ Padam</button>
             </div>
           `}
@@ -2744,6 +2758,16 @@ window.Modals = {
           }
           if (!res || !res.busy) this.showSaveSlotsModal();
         }
+      });
+    });
+
+    document.querySelectorAll('.slot-save-current-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const sid = btn.dataset.slot;
+        if (!sid) return;
+        const res = await App.handleSaveCurrentToSlot(sid, slots[sid] || null);
+        if (res && (res.busy || res.cancelled)) return;
+        this.showSaveSlotsModal();
       });
     });
 
