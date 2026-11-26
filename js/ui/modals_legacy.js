@@ -285,32 +285,52 @@ window.LegacyModals = {
       `;
     })();
 
-    return `
-      <div class="act-engine-header">
-        <div class="aeh-top">
-          <div>
-            <div class="aeh-title">🌍 Aktiviti Tahun ${s.year} • ${Utils.escapeHtml(stageLbl)}</div>
-            <div class="aeh-sub">${c.flag} ${Utils.escapeHtml(s.city)}, ${Utils.escapeHtml(c.name)} • ${deckActivities.length} Idea Segar</div>
+      const licShortcutHtml = s.age >= 16 ? (() => {
+        const hasMoto = Boolean(s.licenses && s.licenses.moto);
+        const hasCar = Boolean(s.licenses && s.licenses.car);
+        const bothDone = hasMoto && hasCar;
+        const inPrison = Boolean(s.prison && s.prison.inPrison);
+        return `
+          <div style="margin-bottom:10px;">
+            <button type="button" class="action-item" id="deck-open-license-hub" ${bothDone || inPrison ? 'disabled' : ''}>
+              <span class="ai-icon">🪪</span>
+              <span class="ai-content">
+                <span class="ai-title">Ambil Lesen Memandu</span>
+                <span class="ai-desc">🛵 Motosikal: ${hasMoto ? '✓ Lulus' : 'Belum Ada'} • 🚗 Kereta: ${hasCar ? '✓ Lulus' : 'Belum Ada'}</span>
+              </span>
+              <span class="ai-right"><span class="act-status-pill ${bothDone ? 'done' : 'free'}">${bothDone ? '✓ Lengkap' : 'Ujian →'}</span></span>
+            </button>
           </div>
-          <button type="button" class="reroll-idea-btn" id="btn-reroll-activities" ${rLeft <= 0 || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
-            🎲 Cari Idea Lain (${rLeft}/2)
-          </button>
-        </div>
-        <div class="aeh-energy-bar">
-          <span class="aeh-energy-lbl">Tenaga Tahun Ini: <strong>${eLeft}/${eMax}</strong></span>
-          <span class="aeh-energy-pips">${energyDots}</span>
-        </div>
-        <div class="traits-row" style="margin-top:6px;">${traitsHtml}</div>
-      </div>
+        `;
+      })() : '';
 
-      <div class="tab-pills act-filter-bar" style="margin-bottom:10px;">
-        ${filterPillsHtml}
-      </div>
+      return `
+        <div class="act-engine-header">
+          <div class="aeh-top">
+            <div>
+              <div class="aeh-title">🌍 Aktiviti Tahun ${s.year} • ${Utils.escapeHtml(stageLbl)}</div>
+              <div class="aeh-sub">${c.flag} ${Utils.escapeHtml(s.city)}, ${Utils.escapeHtml(c.name)} • ${deckActivities.length} Idea Segar</div>
+            </div>
+            <button type="button" class="reroll-idea-btn" id="btn-reroll-activities" ${rLeft <= 0 || (s.prison && s.prison.inPrison) ? 'disabled' : ''}>
+              🎲 Cari Idea Lain (${rLeft}/2)
+            </button>
+          </div>
+          <div class="aeh-energy-bar">
+            <span class="aeh-energy-lbl">Tenaga Tahun Ini: <strong>${eLeft}/${eMax}</strong></span>
+            <span class="aeh-energy-pips">${energyDots}</span>
+          </div>
+          <div class="traits-row" style="margin-top:6px;">${traitsHtml}</div>
+        </div>
 
-      <div class="action-list">${cardsHtml || emptyMsg}</div>
-      ${darkSectionHtml}
-    `;
-  },
+        <div class="tab-pills act-filter-bar" style="margin-bottom:10px;">
+          ${filterPillsHtml}
+        </div>
+
+        ${licShortcutHtml}
+        <div class="action-list">${cardsHtml || emptyMsg}</div>
+        ${darkSectionHtml}
+      `;
+    },
 
   bindDynamicActivities(onRefresh) {
     document.querySelectorAll('.act-cat-filter').forEach(pill => {
@@ -348,6 +368,15 @@ window.LegacyModals = {
     if (deckOpenMafia) {
       deckOpenMafia.addEventListener('click', () => {
         if (window.SpecialModeModals) SpecialModeModals.showDashboard();
+      });
+    }
+
+    const deckOpenLic = document.getElementById('deck-open-license-hub');
+    if (deckOpenLic) {
+      deckOpenLic.addEventListener('click', () => {
+        if (window.AssetModals && AssetModals.showLicenseHubModal) {
+          AssetModals.showLicenseHubModal(() => Modals.showActivities('deck'));
+        }
       });
     }
 

@@ -277,10 +277,43 @@ window.AssetModals = {
   // TAB 3: PENGEDAR KENDERAAN (BAHARU & TERPAKAI)
   // --------------------------------------------------------------------------
   _renderVehiclesTab(s, c) {
+    AssetsEngine.ensureFields(s);
     const isUsed = this._vehSubTab === 'used';
     const list = isUsed ? (s.assetMarket.vehiclesUsed || []) : (s.assetMarket.vehiclesNew || []);
+    const hasMoto = Boolean(s.licenses && s.licenses.moto);
+    const hasCar = Boolean(s.licenses && s.licenses.car);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
 
     let html = `
+      <div class="info-banner highlight" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="font-size:12px;line-height:1.5;">
+          <strong>🪪 Status Lesen Memandu</strong><br/>
+          🛵 Motosikal: <strong>${hasMoto ? '✓ Lulus Sah' : 'Belum Ada'}</strong> • 🚗 Kereta: <strong>${hasCar ? '✓ Lulus Sah' : 'Belum Ada'}</strong>
+        </div>
+        <button type="button" class="btn-sm primary open-license-hub-btn" ${inPrison || (hasMoto && hasCar) ? 'disabled' : ''}>
+          ${hasMoto && hasCar ? '✓ Lesen Lengkap' : '🪪 Ambil Lesen Memandu'}
+        </button>
+      </div>
+
+      ${s.assets.vehicles.length > 0 ? `
+        <div class="section-heading">🚘 Garaj Saya (${s.assets.vehicles.length} Kenderaan)</div>
+        ${s.assets.vehicles.map(v => `
+          <div class="migration-card" style="padding:10px 12px;margin-bottom:8px;">
+            <div class="mig-head">
+              <div class="mig-title">${v.icon} ${Utils.escapeHtml(v.name)}</div>
+              <strong>${Utils.formatMoney(v.value, s.countryId, true)}</strong>
+            </div>
+            <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
+              Kondisi: <strong>${v.condition}%</strong> • Kos Tahunan: ${Utils.formatMoney(v.upkeep || 0, s.countryId, true)}/thn
+            </div>
+            <button type="button" class="btn-sm primary veh-detail-btn" data-uid="${v.uid}" style="width:100%;">
+              🛣️ Pandu &amp; Urus Kenderaan
+            </button>
+          </div>
+        `).join('')}
+        <div class="section-heading">🏪 Pengedar Kenderaan</div>
+      ` : ''}
+
       <div class="tab-pills" style="margin-bottom:8px;">
         <button type="button" class="tab-pill veh-sub-pill ${!isUsed ? 'active' : ''}" data-vsub="new">✨ Kenderaan Baharu</button>
         <button type="button" class="tab-pill veh-sub-pill ${isUsed ? 'active' : ''}" data-vsub="used">🏷️ Terpakai (Used)</button>
@@ -489,6 +522,317 @@ window.AssetModals = {
   },
 
   // --------------------------------------------------------------------------
+  // MODAL SISTEM LESEN MEMANDU & INTERAKSI KENDERAAN
+  // --------------------------------------------------------------------------
+  showLicenseHubModal(returnFn = null) {
+    const s = GameState.current;
+    if (!s) return;
+    AssetsEngine.ensureFields(s);
+    const c = Utils.getCountry(s.countryId);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+
+    const motoElig = AssetsEngine.checkLicenseTestEligibility(s, 'moto');
+    const carElig = AssetsEngine.checkLicenseTestEligibility(s, 'car');
+    const motoFee = AssetsEngine.getLicenseFee(s, 'moto');
+    const carFee = AssetsEngine.getLicenseFee(s, 'car');
+    const hasMoto = Boolean(s.licenses && s.licenses.moto);
+    const hasCar = Boolean(s.licenses && s.licenses.car);
+
+    Modals.open({
+      icon: '🪪',
+      title: 'Institut Memandu & Ujian Lesen',
+      subtitle: `Tunai: ${Utils.formatMoney(s.money, s.countryId, true)} • ${c.flag} ${c.name}`,
+      bodyHtml: `
+        <div class="info-banner highlight">
+          <strong>🪪 Ambil Lesen Memandu Sah</strong><br/>
+          Jawab soalan peraturan jalan raya dan lulus ujian praktikal untuk mendapatkan lesen memandu kekal. Memandu tanpa lesen mengundang risiko sekatan jalan raya, saman berat dan kenderaan disita!
+        </div>
+
+        <div class="action-list">
+          <button type="button" class="action-item start-lic-test-btn ${hasMoto ? 'act-done-card' : ''}" data-ltype="moto" ${!motoElig.ok || inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">🛵</span>
+            <span class="ai-content">
+              <span class="ai-title">Lesen Motosikal</span>
+              <span class="ai-desc">
+                ${hasMoto
+                  ? '<span class="cat-badge synergy">✓ Lesen Motosikal Dimiliki</span>'
+                  : motoElig.ok
+                    ? '<span class="cat-badge synergy">✓ Layak Menduduki Ujian (Umur 16+)</span>'
+                    : `<span class="cat-badge">🔒 ${Utils.escapeHtml(motoElig.reason)}</span>`}
+                <br/>Melayakkan anda menunggang motosikal secara sah dan bekerja sambilan sebagai penghantar.
+              </span>
+            </span>
+            <span class="ai-right">
+              <span class="act-status-pill ${hasMoto ? 'done' : 'cost'}">${hasMoto ? '✓ Sah' : Utils.formatMoney(motoFee, s.countryId)}</span>
+            </span>
+          </button>
+
+          <button type="button" class="action-item start-lic-test-btn ${hasCar ? 'act-done-card' : ''}" data-ltype="car" ${!carElig.ok || inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">🚗</span>
+            <span class="ai-content">
+              <span class="ai-title">Lesen Kereta</span>
+              <span class="ai-desc">
+                ${hasCar
+                  ? '<span class="cat-badge synergy">✓ Lesen Kereta Dimiliki</span>'
+                  : carElig.ok
+                    ? '<span class="cat-badge synergy">✓ Layak Menduduki Ujian (Umur 17+)</span>'
+                    : `<span class="cat-badge">🔒 ${Utils.escapeHtml(carElig.reason)}</span>`}
+                <br/>Melayakkan anda memandu kereta secara sah, membawa keluarga berjalan-jalan dan memandu e-hailing.
+              </span>
+            </span>
+            <span class="ai-right">
+              <span class="act-status-pill ${hasCar ? 'done' : 'cost'}">${hasCar ? '✓ Sah' : Utils.formatMoney(carFee, s.countryId)}</span>
+            </span>
+          </button>
+        </div>
+
+        <button type="button" id="btn-back-from-license" class="secondary-btn" style="width:100%;margin-top:10px;">← Kembali</button>
+      `
+    });
+
+    document.querySelectorAll('.start-lic-test-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.showDrivingTestModal(btn.dataset.ltype, returnFn);
+      });
+    });
+
+    const backBtn = document.getElementById('btn-back-from-license');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        if (typeof returnFn === 'function') returnFn();
+        else this.showHub('vehicles');
+      });
+    }
+  },
+
+  showDrivingTestModal(type = 'car', returnFn = null) {
+    const s = GameState.current;
+    if (!s) return;
+    const elig = AssetsEngine.checkLicenseTestEligibility(s, type);
+    if (!elig.ok) {
+      App.toast(elig.reason, 'error');
+      return;
+    }
+
+    const questions = AssetsEngine.pickDrivingTestQuestions(type);
+    let step = 0;
+    let correctCount = 0;
+    const label = type === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta';
+
+    const renderQuestion = () => {
+      const qObj = questions[step];
+      const optsHtml = qObj.options.map((opt, idx) => `
+        <button type="button" class="choice-btn lic-ans-btn" data-idx="${idx}" style="white-space:normal;word-break:break-word;text-align:left;">
+          <span class="choice-title">${Utils.escapeHtml(opt.text)}</span>
+        </button>
+      `).join('');
+
+      Modals.open({
+        icon: type === 'moto' ? '🛵' : '🚗',
+        title: `Ujian ${label} (Soalan ${step + 1}/${questions.length})`,
+        subtitle: `Yuran Ujian: ${Utils.formatMoney(elig.fee, s.countryId)}`,
+        locked: true,
+        bodyHtml: `
+          <div class="event-text" style="font-weight:600;">${Utils.escapeHtml(qObj.q)}</div>
+          <div class="action-list">${optsHtml}</div>
+        `
+      });
+
+      document.querySelectorAll('.lic-ans-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const picked = qObj.options[Number(btn.dataset.idx)];
+          if (picked && picked.correct) correctCount += 1;
+          step += 1;
+          if (step < questions.length) {
+            renderQuestion();
+          } else {
+            Modals.locked = false;
+            const res = AssetsEngine.submitDrivingLicenseTest(type, correctCount, questions.length);
+            App.toast(res.msg, res.ok ? 'success' : 'error');
+            App.renderAll();
+            this.showLicenseHubModal(returnFn);
+          }
+        });
+      });
+    };
+
+    renderQuestion();
+  },
+
+  showVehicleDetailModal(uid, fromTab = 'portfolio') {
+    const s = GameState.current;
+    if (!s) return;
+    AssetsEngine.ensureFields(s);
+    const v = s.assets.vehicles.find(x => x.uid === uid);
+    if (!v) {
+      this.showHub(fromTab);
+      return;
+    }
+
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    const reqType = AssetsEngine.getRequiredLicenseType(v);
+    const hasLic = AssetsEngine.hasMatchingLicense(s, v);
+    const licName = reqType === 'moto' ? 'Lesen Motosikal' : 'Lesen Kereta';
+    const servCost = Math.max(Utils.usdToLocal(120, s.countryId), Math.round(v.value * 0.06));
+    const cruiseUsed = (s.yearlyActions.vehCruiseCount && s.yearlyActions.vehCruiseCount[uid]) || 0;
+    const outingUsed = Boolean(s.yearlyActions.vehFamilyOuting);
+    const gigUsed = Boolean(s.yearlyActions.vehSideGig);
+    const minGigAge = reqType === 'moto' ? 16 : 18;
+    const canDoGig = Boolean(reqType && v.sub === 'Darat' && hasLic && v.condition >= 40 && s.age >= minGigAge && !gigUsed && !inPrison);
+    const canDoOuting = Boolean(hasLic && !outingUsed && !inPrison);
+    const showLemon = Boolean(v.isLemon && v.lemonRevealed);
+
+    let warnHtml = '';
+    if (!hasLic && reqType) {
+      warnHtml += `
+        <div class="info-banner" style="background:#fef3c7;border-color:#fcd34d;color:#92400e;margin-bottom:8px;">
+          ⚠️ <strong>Amaran Tanpa Lesen:</strong> Anda belum memiliki <strong>${licName}</strong>. Memandu atau menunggang tanpa lesen sah membawa risiko tinggi ditahan dalam Sekatan Jalan Raya, disaman berat atau kenderaan disita!
+        </div>
+      `;
+    }
+    if (v.condition < 35) {
+      warnHtml += `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;margin-bottom:8px;">
+          🛠️ <strong>Kondisi Kritikal (${v.condition}%):</strong> Kenderaan ini berisiko tinggi rosak di tengah jalan atau terlibat kemalangan. Sila servis segera!
+        </div>
+      `;
+    }
+
+    Modals.open({
+      icon: v.icon || '🚗',
+      title: v.name,
+      subtitle: `Kondisi: ${v.condition}% • Nilai Semasa: ${Utils.formatMoney(v.value, s.countryId, true)}`,
+      bodyHtml: `
+        <div class="summary-grid" style="margin-bottom:10px;">
+          <div class="summary-stat">
+            <span class="lbl">Kondisi Semasa</span>
+            <span class="val" style="color:${v.condition >= 70 ? '#16a34a' : v.condition >= 35 ? '#d97706' : '#dc2626'};">${v.condition}%</span>
+          </div>
+          <div class="summary-stat">
+            <span class="lbl">Nilai Semasa</span>
+            <span class="val">${Utils.formatMoney(v.value, s.countryId, true)}</span>
+          </div>
+          <div class="summary-stat">
+            <span class="lbl">Kos Tahunan</span>
+            <span class="val">${Utils.formatMoney(v.upkeep || 0, s.countryId, true)}/thn</span>
+          </div>
+          <div class="summary-stat">
+            <span class="lbl">Status Lesen</span>
+            <span class="val" style="color:${hasLic ? '#16a34a' : '#dc2626'};">${!reqType ? 'Tiada Syarat' : (hasLic ? 'Sah' : 'Tiada Lesen')}</span>
+          </div>
+        </div>
+        ${showLemon ? `<div class="info-banner" style="background:#fee2e2;border-color:#fca5a5;color:#991b1b;margin-bottom:8px;">⚠️ <strong>Isu Tersembunyi:</strong> ${Utils.escapeHtml(v.lemonFlaw || 'Kerosakan komponen dalaman')}</div>` : ''}
+        ${warnHtml}
+
+        <div class="action-list">
+          <button type="button" class="action-item" id="btn-veh-act-cruise" ${cruiseUsed >= 2 || inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">🛣️</span>
+            <span class="ai-content">
+              <span class="ai-title">Pandu / Tunggang Bersiar-siar</span>
+              <span class="ai-desc">${cruiseUsed >= 2 ? 'Sudah cukup bersiar-siar tahun ini' : (!hasLic && reqType ? 'Pandu secara haram tanpa lesen (berisiko sekatan jalan raya)' : 'Ambil angin petang untuk menenangkan fikiran')}</span>
+            </span>
+          </button>
+
+          <button type="button" class="action-item" id="btn-veh-act-outing" ${!canDoOuting ? 'disabled' : ''}>
+            <span class="ai-icon">🚗</span>
+            <span class="ai-content">
+              <span class="ai-title">Bawa Keluarga / Pasangan Jalan-jalan</span>
+              <span class="ai-desc">${!hasLic && reqType ? `Perlu memiliki ${licName} dahulu` : outingUsed ? 'Sudah dilakukan tahun ini' : 'Luangkan masa berkualiti bersama insan tersayang'}</span>
+            </span>
+          </button>
+
+          ${reqType && v.sub === 'Darat' ? `
+            <button type="button" class="action-item" id="btn-veh-act-gig" ${!canDoGig ? 'disabled' : ''}>
+              <span class="ai-icon">🛵</span>
+              <span class="ai-content">
+                <span class="ai-title">Buat Kerja Sambilan (${reqType === 'moto' ? 'Rider Penghantaran' : 'Pemandu E-Hailing'})</span>
+                <span class="ai-desc">${!hasLic ? `Perlu memiliki ${licName} dahulu` : s.age < minGigAge ? `Umur minimum ${minGigAge} tahun` : v.condition < 40 ? 'Servis kenderaan dahulu untuk bekerja sambilan' : gigUsed ? 'Sudah dilakukan tahun ini' : 'Jana pendapatan sampingan menggunakan kenderaan sendiri'}</span>
+              </span>
+            </button>
+          ` : ''}
+
+          <button type="button" class="action-item" id="btn-veh-act-service" ${v.condition >= 100 || s.money < servCost || inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">🔧</span>
+            <span class="ai-content">
+              <span class="ai-title">Servis &amp; Baiki Kenderaan</span>
+              <span class="ai-desc">${v.condition >= 100 ? 'Kenderaan berada dalam keadaan terbaik' : 'Pulihkan keadaan mekanikal dan enjin di bengkel'}</span>
+            </span>
+            <span class="ai-right"><span class="act-status-pill cost">${Utils.formatMoney(servCost, s.countryId)}</span></span>
+          </button>
+
+          <button type="button" class="action-item" id="btn-veh-act-sell" ${inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">💰</span>
+            <span class="ai-content">
+              <span class="ai-title">Jual Kenderaan</span>
+              <span class="ai-desc">Jual pada nilai pasaran semasa</span>
+            </span>
+            <span class="ai-right"><span class="act-status-pill">${Utils.formatMoney(v.value, s.countryId, true)}</span></span>
+          </button>
+        </div>
+
+        <button type="button" id="btn-veh-detail-back" class="secondary-btn" style="width:100%;margin-top:10px;">← Kembali</button>
+      `
+    });
+
+    const cruiseBtn = document.getElementById('btn-veh-act-cruise');
+    if (cruiseBtn) {
+      cruiseBtn.addEventListener('click', () => {
+        if (!hasLic && reqType) {
+          const ok = window.confirm(`Anda belum mempunyai ${licName}! Teruskan memandu tanpa lesen dengan risiko ditahan Sekatan Jalan Raya?`);
+          if (!ok) return;
+        }
+        const r = AssetsEngine.cruiseWithVehicle(uid);
+        App.toast(r.msg, r.ok ? 'success' : 'error');
+        App.renderAll();
+        if (r.impounded) this.showHub(fromTab);
+        else this.showVehicleDetailModal(uid, fromTab);
+      });
+    }
+
+    const outingBtn = document.getElementById('btn-veh-act-outing');
+    if (outingBtn) {
+      outingBtn.addEventListener('click', () => {
+        const r = AssetsEngine.familyOutingWithVehicle(uid);
+        App.toast(r.msg, r.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showVehicleDetailModal(uid, fromTab);
+      });
+    }
+
+    const gigBtn = document.getElementById('btn-veh-act-gig');
+    if (gigBtn) {
+      gigBtn.addEventListener('click', () => {
+        const r = AssetsEngine.sideGigWithVehicle(uid);
+        App.toast(r.msg, r.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showVehicleDetailModal(uid, fromTab);
+      });
+    }
+
+    const servBtn = document.getElementById('btn-veh-act-service');
+    if (servBtn) {
+      servBtn.addEventListener('click', () => {
+        const r = AssetsEngine.maintainVehicle(uid);
+        App.toast(r.msg, r.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showVehicleDetailModal(uid, fromTab);
+      });
+    }
+
+    const sellBtn = document.getElementById('btn-veh-act-sell');
+    if (sellBtn) {
+      sellBtn.addEventListener('click', () => {
+        this.showSaleBreakdownModal('vehicle', uid);
+      });
+    }
+
+    const backBtn = document.getElementById('btn-veh-detail-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => this.showHub(fromTab));
+    }
+  },
+
+  // --------------------------------------------------------------------------
   // IKATAN PENDENGAR ACARA
   // --------------------------------------------------------------------------
   _bindHandlers(s, c, tab) {
@@ -504,6 +848,14 @@ window.AssetModals = {
         this.showHub(tab);
       });
     }
+
+    document.querySelectorAll('.open-license-hub-btn').forEach(b => {
+      b.addEventListener('click', () => this.showLicenseHubModal(() => this.showHub(tab)));
+    });
+
+    document.querySelectorAll('.veh-detail-btn').forEach(b => {
+      b.addEventListener('click', () => this.showVehicleDetailModal(b.dataset.uid, tab));
+    });
 
     if (tab === 'portfolio') {
       document.querySelectorAll('.prop-rent-btn').forEach(b => b.addEventListener('click', () => {
