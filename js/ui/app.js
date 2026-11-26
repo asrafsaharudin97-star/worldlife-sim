@@ -176,18 +176,37 @@ window.App = {
           this.updateGuestBanner();
           const gate = document.getElementById('entry-gate-screen');
           const inGate = gate && !gate.classList.contains('hidden');
-          if (inGate || uidChanged || wasGuest) {
-            const loaded = GameState.load();
-            if (loaded && !inGate) {
-              this.showGameScreen();
-              this.renderAll();
-              if (!loaded.alive && window.Modals && Modals.showDeathSummary) {
-                setTimeout(() => Modals.showDeathSummary(), 250);
+          const startScreen = document.getElementById('start-screen');
+          const inStart = startScreen && !startScreen.classList.contains('hidden');
+
+          // Tarik versi Cloud terkini dahulu supaya peranti kedua tidak terperangkap pada cache localStorage lama
+          GameState.pullCloudAndRefreshActive().then((syncRes) => {
+            const loaded = GameState.current || GameState.load();
+            if (loaded && (!inGate || (syncRes && syncRes.updated))) {
+              if (!inStart || (syncRes && syncRes.updated && !inGate)) {
+                this.showGameScreen();
+                this.renderAll();
+                if (!loaded.alive && window.Modals && Modals.showDeathSummary) {
+                  setTimeout(() => Modals.showDeathSummary(), 250);
+                }
+              } else {
+                this.showStartScreen({ skipSave: true });
               }
-            } else {
+            } else if (inGate || uidChanged || wasGuest) {
               this.showStartScreen({ skipSave: true });
             }
-          }
+            this.renderStartAuthBar();
+          }).catch(() => {
+            if (inGate || uidChanged || wasGuest) {
+              const loaded = GameState.load();
+              if (loaded && !inGate) {
+                this.showGameScreen();
+                this.renderAll();
+              } else {
+                this.showStartScreen({ skipSave: true });
+              }
+            }
+          });
         } else if (uidChanged && !GameState.isGuest()) {
           this.showEntryGate();
         }
@@ -197,6 +216,20 @@ window.App = {
       FirebaseService.onSyncStateChange(() => {
         this.renderStartAuthBar();
       });
+
+      if (!this._lifecycleFlushBound) {
+        this._lifecycleFlushBound = true;
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden' && window.GameState && GameState.flushPendingCloudSync) {
+            GameState.flushPendingCloudSync();
+          }
+        });
+        window.addEventListener('pagehide', () => {
+          if (window.GameState && GameState.flushPendingCloudSync) {
+            GameState.flushPendingCloudSync();
+          }
+        });
+      }
     };
     attach();
     if (!this._fbListenersBound) {
@@ -765,7 +798,7 @@ window.App = {
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
     const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice, royalHonorOffer } = Sim.ageUp();
-    GameState.syncActiveSlotToCloud('age_up');
+    GameState.syncActiveSlotToCloud(died ? 'death' : 'age_up');
     this.renderAll();
 
     if (died) {

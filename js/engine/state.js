@@ -1373,9 +1373,11 @@ window.GameState = {
     this.current = prevCurrent;
 
     const isCurrentSlot = slotId === this.getActiveSlotId();
+    const now = Date.now();
     return {
       slotId,
-      updatedAt: Date.now(),
+      savedAt: now,
+      updatedAt: now,
       characterName: s.name || 'Watak Tanpa Nama',
       age: s.age ?? 0,
       country: c.name,
@@ -1533,8 +1535,21 @@ window.GameState = {
       lastRes = { ok: false, msg: `Ralat Cloud Save (${detail}). Simpanan tempatan kekal selamat.` };
     } finally {
       this._cloudSyncInFlight = false;
+      if (lastRes && !lastRes.ok && !lastRes.offline && !lastRes.guest && window.App && App.toast) {
+        App.toast(`⚠️ ${lastRes.msg || 'Gagal menyegerak ke Cloud.'}`, 'error');
+      }
       const waiters = this._cloudSyncWaiters.splice(0, this._cloudSyncWaiters.length);
       waiters.forEach(resolve => resolve(lastRes));
+    }
+  },
+
+  flushPendingCloudSync() {
+    if (this.isGuestMode || !this.current) return;
+    if (!window.FirebaseService || !FirebaseService.isLoggedIn()) return;
+    if (this._cloudSyncTimer) {
+      clearTimeout(this._cloudSyncTimer);
+      this._cloudSyncTimer = null;
+      this._drainCloudSyncQueue();
     }
   },
 
@@ -1547,6 +1562,7 @@ window.GameState = {
       return { ok: false, offline: true, msg: 'Disimpan secara tempatan.' };
     }
 
+    // Hanya 'age_up' biasa menggunakan debounce ringkas; semua peralihan kritikal (legacy, new_life, switch_slot, manual, death, main_menu) disegerak serta-merta
     const shouldDebounce = reason === 'age_up';
     return new Promise((resolve) => {
       this._cloudSyncWaiters.push(resolve);
@@ -1565,6 +1581,29 @@ window.GameState = {
     });
   },
 
+  _normalizeSavedAt(slot) {
+    if (!slot) return 0;
+    const raw = slot.savedAt ?? slot.updatedAt ?? 0;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (raw && typeof raw.toMillis === 'function') return raw.toMillis();
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  },
+
+  _isCloudSlotPreferred(cld, loc) {
+    if (!cld) return false;
+    if (!loc) return true;
+    const cldTs = this._normalizeSavedAt(cld);
+    const locTs = this._normalizeSavedAt(loc);
+    if (cldTs !== locTs) return cldTs > locTs;
+    const cldGen = Number(cld.generation || (cld.gameState && cld.gameState.generation) || 1);
+    const locGen = Number(loc.generation || (loc.gameState && loc.gameState.generation) || 1);
+    if (cldGen !== locGen) return cldGen > locGen;
+    const cldAge = Number(cld.age ?? (cld.gameState && cld.gameState.age) ?? 0);
+    const locAge = Number(loc.age ?? (loc.gameState && loc.gameState.age) ?? 0);
+    return cldAge >= locAge;
+  },
+
   resolveDefaultActiveSlot(slotsMap = null, { preserveExplicit = false } = {}) {
     const key = this._activeSlotStorageKey();
     const rawExplicit = (!this.isGuestMode && typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
@@ -1581,10 +1620,10 @@ window.GameState = {
       return this.setActiveSlotId(currentId);
     }
     let bestId = filled[0];
-    let bestTs = (map[bestId] && map[bestId].updatedAt) || 0;
+    let bestTs = this._normalizeSavedAt(map[bestId]);
     for (let i = 1; i < filled.length; i++) {
       const id = filled[i];
-      const ts = (map[id] && map[id].updatedAt) || 0;
+      const ts = this._normalizeSavedAt(map[id]);
       if (ts > bestTs) {
         bestTs = ts;
         bestId = id;
@@ -1606,9 +1645,15 @@ window.GameState = {
       const loc = localMap[id];
       const cld = cloudMap[id];
       if (cld && loc) {
-        const useCloud = (cld.updatedAt || 0) >= (loc.updatedAt || 0);
+        const useCloud = this._isCloudSlotPreferred(cld, loc);
+        if (useCloud && !this.isGuestMode) {
+          this.saveLocalSlot(id, null, { ...cld, slotId: id });
+        }
         merged[id] = { ...(useCloud ? cld : loc), slotId: id, source: useCloud ? 'cloud' : 'local', inCloud: true };
       } else if (cld) {
+        if (!this.isGuestMode) {
+          this.saveLocalSlot(id, null, { ...cld, slotId: id });
+        }
         merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
       } else if (loc) {
         merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
@@ -1620,6 +1665,36 @@ window.GameState = {
 
     const activeSlotId = this.resolveDefaultActiveSlot(merged, { preserveExplicit: true });
     return { slots: merged, localOnlyIds, isCloud, activeSlotId, cloudError };
+  },
+
+  async pullCloudAndRefreshActive() {
+    if (this.isGuestMode || !window.FirebaseService || !FirebaseService.isLoggedIn()) {
+      return { ok: false, updated: false, cloudError: false };
+    }
+    const prevSlotId = this.getActiveSlotId();
+    const prevLocalSlot = this.getLocalSlot(prevSlotId);
+    const prevLocalTs = this._normalizeSavedAt(prevLocalSlot);
+    const { slots, activeSlotId, cloudError } = await this.getMergedSlots();
+    if (cloudError) {
+      return { ok: false, updated: false, cloudError: true };
+    }
+    const targetId = slots[activeSlotId] ? activeSlotId : this.resolveDefaultActiveSlot(slots, { preserveExplicit: false });
+    const winning = slots[targetId];
+    if (winning && winning.gameState && winning.source === 'cloud') {
+      const cur = this.current;
+      const curPayload = cur ? {
+        savedAt: targetId === prevSlotId ? prevLocalTs : 0,
+        generation: cur.generation || 1,
+        age: cur.age ?? 0,
+        gameState: cur
+      } : null;
+      const shouldReplace = !cur || this._isCloudSlotPreferred(winning, curPayload) || (winning.generation || 1) > (cur.generation || 1);
+      if (shouldReplace) {
+        this.loadSlotPayload(targetId, winning);
+        return { ok: true, updated: true, cloudError: false, activeSlotId: targetId };
+      }
+    }
+    return { ok: true, updated: false, cloudError: false, activeSlotId: targetId };
   },
 
   async uploadLocalSlotsToCloud() {

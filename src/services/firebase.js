@@ -265,10 +265,13 @@ const FirebaseService = {
     }
     this.setSyncState('syncing');
     try {
+      const now = Date.now();
+      const ts = Number((payload && (payload.savedAt || payload.updatedAt)) || now) || now;
       const cleanPayload = this._sanitizeForFirestore({
         ...(payload || {}),
         slotId,
-        updatedAt: (payload && payload.updatedAt) || Date.now()
+        savedAt: ts,
+        updatedAt: ts
       });
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
       await this._withTimeout(setDoc(ref, cleanPayload), 22000, 'timeout');

@@ -2606,14 +2606,22 @@ window.Modals = {
     if (reqId !== this._slotModalReqId) return;
     if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
+    const formatSyncTime = (ts) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    };
     const isGuest = Boolean(window.GameState && GameState.isGuest && GameState.isGuest());
+    const syncTimeStr = (isCloud && fb.lastSyncAt) ? ` (${formatSyncTime(fb.lastSyncAt)})` : '';
     const syncBadgeText = !isCloud
       ? (isGuest ? '👤 Mod Tetamu (Tiada Simpanan)' : '💾 Mod Tempatan')
       : fb.syncState === 'syncing'
         ? '🔄 Menyegerak...'
         : fb.syncState === 'error'
           ? `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`
-          : '☁️ Disegerakkan';
+          : `☁️ Disegerakkan${syncTimeStr}`;
 
     let authBarHtml = '';
     if (isCloud) {
@@ -2630,7 +2638,10 @@ window.Modals = {
               <div style="font-size:11.5px;font-weight:600;color:${fb.syncState === 'error' ? '#dc2626' : '#16a34a'};">${syncBadgeText}</div>
             </div>
           </div>
-          <button type="button" id="slots-btn-logout" class="secondary-btn" style="padding:6px 11px;font-size:12px;">Log Keluar</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" id="slots-btn-force-sync" class="btn-sm primary" style="padding:6px 10px;font-size:11.5px;">🔄 Segerak Cloud Sekarang</button>
+            <button type="button" id="slots-btn-logout" class="secondary-btn" style="padding:6px 11px;font-size:12px;">Log Keluar</button>
+          </div>
         </div>
       `;
     } else {
@@ -2763,6 +2774,24 @@ window.Modals = {
     const retryCloudBtn = document.getElementById('slots-btn-retry-cloud');
     if (retryCloudBtn) {
       retryCloudBtn.addEventListener('click', () => this.showSaveSlotsModal(null));
+    }
+
+    const forceSyncBtn = document.getElementById('slots-btn-force-sync');
+    if (forceSyncBtn) {
+      forceSyncBtn.addEventListener('click', async () => {
+        forceSyncBtn.disabled = true;
+        forceSyncBtn.textContent = '🔄 Menyegerak...';
+        const res = await GameState.pullCloudAndRefreshActive();
+        if (res && res.cloudError) {
+          App.toast('⚠️ Gagal menyegerak dari Cloud. Sila semak sambungan internet.', 'error');
+        } else if (res && res.updated) {
+          App.renderAll();
+          App.toast('☁️ Simpanan Cloud terkini berjaya ditarik & disegerakkan!', 'success');
+        } else {
+          App.toast('☁️ Semua slot sudah selaras dengan Cloud.', 'success');
+        }
+        this.showSaveSlotsModal(null);
+      });
     }
 
     const loginBtn = document.getElementById('slots-btn-login');
