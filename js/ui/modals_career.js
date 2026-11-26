@@ -517,10 +517,25 @@ window.CareerModals = {
   _renderCertsTab(s, c) {
     const ed = s.education;
     const groups = [...new Set(EducationData.CERTIFICATES.map(x => x.group))];
+    const hasMoto = Boolean(s.licenses && s.licenses.moto);
+    const hasCar = Boolean(s.licenses && s.licenses.car);
+    const bothLic = hasMoto && hasCar;
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
     let html = `
       <div class="info-banner highlight">
         <strong>📜 Sijil Profesional &amp; Kemahiran (${ed.certificates.length}/${EducationData.CERTIFICATES.length} Dimiliki)</strong><br/>
-        Sijil yang sepadan dengan bidang anda membuka kerjaya pakar dan memberi <strong>bonus gaji &amp; temu duga +10% hingga +25%</strong>!
+        Sijil yang sepadan dengan bidang anda membuka kerjaya pakar dan meningkatkan peluang temu duga serta gaji tahunan!
+      </div>
+      <div class="section-heading">🪪 Lesen Memandu Rasmi</div>
+      <div class="action-list" style="margin-bottom:10px;">
+        <button type="button" class="action-item" id="certs-open-license-hub" ${s.age < 16 || bothLic || inPrison ? 'disabled' : ''}>
+          <span class="ai-icon">🪪</span>
+          <span class="ai-content">
+            <span class="ai-title">Ambil Lesen Memandu</span>
+            <span class="ai-desc">${s.age < 16 ? 'Dibuka bermula umur 16 tahun' : `🛵 Motosikal: ${hasMoto ? '✓ Lulus' : 'Belum Ada'} • 🚗 Kereta: ${hasCar ? '✓ Lulus' : 'Belum Ada'}`}</span>
+          </span>
+          <span class="ai-right"><span class="act-status-pill ${bothLic ? 'done' : 'free'}">${bothLic ? '✓ Lengkap' : 'Ujian →'}</span></span>
+        </button>
       </div>
     `;
 
@@ -805,6 +820,14 @@ window.CareerModals = {
         });
       });
     } else if (tab === 'certs') {
+      const licBtn = document.getElementById('certs-open-license-hub');
+      if (licBtn) {
+        licBtn.addEventListener('click', () => {
+          if (window.AssetModals && AssetModals.showLicenseHubModal) {
+            AssetModals.showLicenseHubModal(() => this.showHub('certs'));
+          }
+        });
+      }
       document.querySelectorAll('.cert-take-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const res = EduCareerEngine.takeCertificate(btn.dataset.certId);

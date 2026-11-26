@@ -2178,14 +2178,14 @@ window.Modals = {
             </span>
             <span class="ai-right">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
-          ${s.age >= 17 && !s.hasDriverLicense ? `
-            <button class="action-item" id="act-driving-test" ${s.yearlyActions.drivingTest || (s.age >= 18 && s.money < Utils.usdToLocal(220, s.countryId)) ? 'disabled' : ''}>
-              <span class="ai-icon">🚗</span>
+          ${s.age >= 16 && !(s.licenses && s.licenses.moto && s.licenses.car) ? `
+            <button class="action-item" id="act-driving-test" ${s.prison && s.prison.inPrison ? 'disabled' : ''}>
+              <span class="ai-icon">🪪</span>
               <span class="ai-content">
-                <span class="ai-title">Ambil Ujian Memandu ${c.id === 'MY' ? 'JPJ' : c.name}</span>
-                <span class="ai-desc">${s.yearlyActions.drivingTest ? 'Selesai tahun ini' : 'Lulus ujian jalan raya untuk dapatkan lesen memandu'}</span>
+                <span class="ai-title">Ambil Lesen Memandu</span>
+                <span class="ai-desc">Lesen Motosikal (16+) &amp; Lesen Kereta (17+) di Institut Memandu</span>
               </span>
-              <span class="ai-right cost">${s.yearlyActions.drivingTest ? 'Selesai tahun ini' : (s.age < 18 ? 'Mak Ayah Bayar' : Utils.formatMoney(Utils.usdToLocal(220, s.countryId), s.countryId))}</span>
+              <span class="ai-right">Buka →</span>
             </button>
           ` : ''}
         </div>
@@ -2457,11 +2457,12 @@ window.Modals = {
     const libBtn = document.getElementById('act-library');
     if (libBtn) libBtn.addEventListener('click', () => {
       s.yearlyActions.library = true;
-      GameState.adjustStats({ smarts: 6, happiness: 2 });
+      const gain = Utils.randInt(1, 3);
+      GameState.adjustStats({ smarts: gain, happiness: 2 });
       GameState.addJournalEntry(`📚 Meluangkan petang yang tenang membaca di Perpustakaan Awam ${s.city}.`);
       GameState.save();
       App.renderAll();
-      App.toast('Kepintaran +6%!', 'success');
+      App.toast(`Sesi membaca selesai!`, 'success');
       this.showActivities('lifestyle');
     });
 
@@ -2470,16 +2471,20 @@ window.Modals = {
       s.yearlyActions.meditate = true;
       GameState.adjustStats({ happiness: 8, health: 4 });
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -6 });
-      GameState.addJournalEntry(`🧘 Bertenang dan berjalan santai di taman rekreasi (-6% Stres).`);
+      GameState.addJournalEntry(`🧘 Bertenang dan berjalan santai di taman rekreasi.`);
       GameState.save();
       App.renderAll();
-      App.toast('Fikiran lebih tenang! (-6% Stres)', 'success');
+      App.toast('Fikiran lebih tenang!', 'success');
       this.showActivities('lifestyle');
     });
 
     const driveBtn = document.getElementById('act-driving-test');
     if (driveBtn) driveBtn.addEventListener('click', () => {
-      const res = Sim.takeDrivingTest();
+      if (window.AssetModals && AssetModals.showLicenseHubModal) {
+        AssetModals.showLicenseHubModal(() => this.showActivities('lifestyle'));
+        return;
+      }
+      const res = Sim.takeDrivingTest('car');
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
       this.showActivities('lifestyle');
