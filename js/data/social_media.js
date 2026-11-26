@@ -271,6 +271,7 @@ window.SocialMedia = {
   matchCandidate(uid) {
     const s = GameState.current;
     GameState.ensureUpgradedState();
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh menggunakan Aplikasi Janji Temu semasa di dalam penjara.' };
     const minAge = 18;
     if (s.age < minAge) return { ok: false, msg: `Aplikasi Janji Temu dibuka pada umur ${minAge}+ tahun!` };
     if (s.partnerId) return { ok: false, msg: 'Anda sudah mempunyai pasangan aktif!' };

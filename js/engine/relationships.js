@@ -829,6 +829,7 @@ window.Relationships = {
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
 
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh mencari kawan luar semasa berada di dalam penjara.' };
     if (s.age < 7) return { ok: false, msg: 'Anda masih terlalu kecil — tunggu umur 7 tahun untuk cari kawan baru!' };
     if (s.yearlyActions.meetFriend) return { ok: false, msg: 'Anda sudah berkenalan dengan rakan baru tahun ini.' };
 
@@ -888,6 +889,9 @@ window.Relationships = {
     this.ensureRelationshipFields(s);
     const c = Utils.getCountry(s.countryId);
 
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: '⛓️ Tidak boleh menghadiri Sesi Date semasa berada di dalam penjara.' };
+    }
     const minAge = 16;
     if (s.age < minAge) {
       return {
@@ -1198,6 +1202,7 @@ window.Relationships = {
 
     // --- Lamar & Majlis Perkahwinan ---
     if (action === 'propose') {
+      if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh melangsungkan perkahwinan semasa berada di dalam penjara.' };
       if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
 
       const ringCost = Utils.usdToLocal(1800, s.countryId);
@@ -1922,6 +1927,7 @@ window.Relationships = {
     GameState.ensureUpgradedState();
     this.ensureRelationshipFields(s);
 
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh mengambil anak angkat semasa berada di dalam penjara.' };
     if (s.age < 21) return { ok: false, msg: 'Anda perlu berumur sekurang-kurangnya 21 tahun untuk mengambil anak angkat.' };
     if (s.yearlyActions.adoptedChild) return { ok: false, msg: 'Anda sudah mengambil anak angkat tahun ini.' };
 

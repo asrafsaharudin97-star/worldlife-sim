@@ -15,6 +15,12 @@
 </head>
 <body>
   <div id="app" class="app-shell">
+    <!-- Sepanduk Ringkas Mod Tetamu -->
+    <div id="guest-mode-banner" class="hidden" style="position:sticky;top:0;z-index:60;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;">
+      <span>⚠️ Mod Tetamu — Progres tidak disimpan</span>
+      <button type="button" id="btn-guest-banner-login" class="secondary-btn" style="padding:4px 10px;font-size:11.5px;background:#fff;border-color:#f59e0b;color:#92400e;font-weight:700;">Log Masuk</button>
+    </div>
+
     <!-- Bahagian Atas Negara & Watak -->
     <header id="game-header" class="game-header hidden">
       <div class="header-top-row">
@@ -141,12 +147,6 @@
         </button>
       </nav>
     </footer>
-
-    <!-- Sepanduk Ringkas Mod Tetamu -->
-    <div id="guest-mode-banner" class="hidden" style="position:sticky;top:0;z-index:60;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;">
-      <span>⚠️ Mod Tetamu — Progres tidak disimpan</span>
-      <button type="button" id="btn-guest-banner-login" class="secondary-btn" style="padding:4px 10px;font-size:11.5px;background:#fff;border-color:#f59e0b;color:#92400e;font-weight:700;">Log Masuk</button>
-    </div>
 
     <!-- Pintu Masuk Wajib (Log Masuk Google atau Mod Tetamu) -->
     <section id="entry-gate-screen" class="start-screen">

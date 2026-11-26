@@ -108,7 +108,9 @@ window.ModeModals = {
       `;
     } else if (activeTab === 'dating') {
       const minAgeAllowed = 18;
-      if (s.age < minAgeAllowed) {
+      if (s.prison && s.prison.inPrison) {
+        body += `<div class="info-banner">⛓️ Aplikasi Janji Temu disekat semasa anda sedang menjalani tahanan di penjara.</div>`;
+      } else if (s.age < minAgeAllowed) {
         body += `<div class="info-banner">Aplikasi Janji Temu &amp; Penapis Umur dibuka pada umur <strong>18+ tahun</strong>.</div>`;
       } else if (s.partnerId) {
         body += `<div class="info-banner highlight">Anda sudah mempunyai pasangan aktif! Uruskan hubungan anda di tab <strong>❤️ Hubungan</strong>.</div>`;

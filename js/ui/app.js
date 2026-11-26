@@ -314,12 +314,24 @@ window.App = {
     });
 
     document.getElementById('btn-menu').addEventListener('click', () => Modals.showMenu());
+    const isDetainedNow = () => Boolean(
+      GameState.current && GameState.current.prison && GameState.current.prison.inPrison && GameState.current.prison.yearsLeft > 0
+    );
+
     document.getElementById('btn-passport').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
+      if (isDetainedNow() && window.PrisonModals) {
+        PrisonModals.showDetentionActivities();
+        return;
+      }
       Modals.showActivities('passport');
     });
     document.getElementById('char-avatar').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
+      if (isDetainedNow() && window.PrisonModals) {
+        PrisonModals.showDetentionActivities();
+        return;
+      }
       Modals.showActivities('passport');
     });
     document.getElementById('btn-open-legacy').addEventListener('click', () => {
@@ -328,10 +340,18 @@ window.App = {
     });
     document.getElementById('btn-open-modes').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
+      if (isDetainedNow()) {
+        this.toast('⛓️ Papan Pemuka Mod Khas digantung semasa anda berada di dalam penjara.', 'error');
+        return;
+      }
       if (GameState.current && GameState.current.alive && window.SpecialModeModals) SpecialModeModals.showDashboard();
     });
     document.getElementById('btn-open-social').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
+      if (isDetainedNow()) {
+        this.toast('⛓️ Akses Laman Sosial & Aplikasi Janji Temu disekat semasa berada di dalam penjara.', 'error');
+        return;
+      }
       if (GameState.current && GameState.current.alive) ModeModals.showSocialHub('social');
     });
     document.getElementById('prison-alert-bar').addEventListener('click', () => {

@@ -5,8 +5,10 @@
 
 window.Modals = {
   locked: false,
+  _slotModalReqId: 0,
 
-  open({ icon = '✨', title, subtitle = '', bodyHtml = '', locked = false }) {
+  open({ icon = '✨', title, subtitle = '', bodyHtml = '', locked = false, _isSlotModalRender = false }) {
+    if (!_isSlotModalRender) this._slotModalReqId += 1;
     if (window.PrisonModals && typeof PrisonModals._cleanupMiniGame === 'function') {
       PrisonModals._cleanupMiniGame();
     }
@@ -21,6 +23,7 @@ window.Modals = {
 
   close(force = false) {
     if (this.locked && !force) return;
+    this._slotModalReqId += 1;
     if (window.PrisonModals && typeof PrisonModals._cleanupMiniGame === 'function') {
       PrisonModals._cleanupMiniGame();
     }
@@ -2541,19 +2544,23 @@ window.Modals = {
 
   async showSaveSlotsModal(confirmDeleteSlotId = null) {
     const fb = window.FirebaseService;
+    const reqId = ++this._slotModalReqId;
 
     this.open({
       icon: '☁️',
       title: 'Slot Simpanan & Cloud Save',
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
-      bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot simpanan...</div>`
+      bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot simpanan...</div>`,
+      _isSlotModalRender: true
     });
 
     const { slots, localOnlyIds, isCloud, activeSlotId, cloudError } = await GameState.getMergedSlots();
+    if (reqId !== this._slotModalReqId) return;
     if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
+    const isGuest = Boolean(window.GameState && GameState.isGuest && GameState.isGuest());
     const syncBadgeText = !isCloud
-      ? '💾 Mod Tempatan (Tetamu)'
+      ? (isGuest ? '👤 Mod Tetamu (Tiada Simpanan)' : '💾 Mod Tempatan')
       : fb.syncState === 'syncing'
         ? '🔄 Menyegerak...'
         : fb.syncState === 'error'
@@ -2590,9 +2597,11 @@ window.Modals = {
         </div>
       ` : '';
       authBarHtml = `
-        <div class="info-banner" style="background:#f8fafc;">
-          <div style="font-size:12px;color:#475569;margin-bottom:8px;">
-            💾 <strong>Mod Tempatan:</strong> Simpanan anda kini disimpan dalam pelayar ini. Log masuk Google untuk menyegerakkan semua 5 slot ke Cloud.
+        <div class="info-banner" style="background:${isGuest ? '#fffbeb' : '#f8fafc'};${isGuest ? 'border-color:#fde68a;color:#92400e;' : ''}">
+          <div style="font-size:12px;color:${isGuest ? '#92400e' : '#475569'};margin-bottom:8px;">
+            ${isGuest
+              ? '⚠️ <strong>Mod Tetamu:</strong> Progres sesi ini disimpan sementara dalam memori sahaja dan <strong>TIDAK disimpan</strong> secara tempatan atau ke Cloud. Log masuk dengan Google untuk menyimpan permainan anda.'
+              : '💾 <strong>Mod Tempatan:</strong> Simpanan anda kini disimpan dalam pelayar ini. Log masuk Google untuk menyegerakkan semua 5 slot ke Cloud.'}
           </div>
           <button type="button" id="slots-btn-login" class="primary-btn" style="width:100%;">🔐 Log Masuk dengan Google (Cloud Save)</button>
           ${errBoxHtml}
@@ -2913,6 +2922,7 @@ window.Modals = {
     const isMuted = Utils.isMuted ? Utils.isMuted() : !!window._wlMuted;
     const activeSlotNum = GameState.getActiveSlotId().replace('slot_', '');
     const isCloudLoggedIn = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
+    const toddlerLocked = Boolean(window.App && App._isToddlerLocked && App._isToddlerLocked());
 
     this.open({
       icon: '🌍',
@@ -2934,11 +2944,11 @@ window.Modals = {
               <span class="ai-desc">${isCloudLoggedIn ? 'Segerakkan kemajuan terkini ke Firestore Cloud' : 'Log masuk Google untuk menyimpan ke Cloud'}</span>
             </span>
           </button>
-          <button class="action-item" id="menu-open-legacy">
+          <button class="action-item" id="menu-open-legacy" ${toddlerLocked ? 'disabled' : ''}>
             <span class="ai-icon">👑</span>
             <span class="ai-content">
               <span class="ai-title">Legasi Keluarga &amp; Pencapaian Dinasti</span>
-              <span class="ai-desc">Salasilah, Reputasi Keluarga, Status Legasi &amp; Generasi Perdana</span>
+              <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Salasilah, Reputasi Keluarga, Status Legasi &amp; Generasi Perdana'}</span>
             </span>
           </button>
           ${(GameState.current && window.SpecialModesEngine && SpecialModesEngine.getActiveInfo(GameState.current)) ? (() => {
@@ -2953,18 +2963,18 @@ window.Modals = {
               </button>
             `;
           })() : ''}
-          <button class="action-item" id="menu-open-social">
+          <button class="action-item" id="menu-open-social" ${toddlerLocked ? 'disabled' : ''}>
             <span class="ai-icon">📱</span>
             <span class="ai-content">
               <span class="ai-title">Laman Sosial, Viral &amp; Sesi Date</span>
-              <span class="ai-desc">Bina pengikut, kerjaya viral &amp; cari pasangan</span>
+              <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Bina pengikut, kerjaya viral &amp; cari pasangan'}</span>
             </span>
           </button>
-          <button class="action-item" id="menu-open-passport">
+          <button class="action-item" id="menu-open-passport" ${toddlerLocked ? 'disabled' : ''}>
             <span class="ai-icon">🛂</span>
             <span class="ai-content">
               <span class="ai-title">Lihat Pasport &amp; Profil</span>
-              <span class="ai-desc">Semak negara, cop pasport &amp; biodata</span>
+              <span class="ai-desc">${toddlerLocked ? 'Dibuka selepas umur 4 tahun' : 'Semak negara, cop pasport &amp; biodata'}</span>
             </span>
           </button>
           <button class="action-item" id="menu-new-life">

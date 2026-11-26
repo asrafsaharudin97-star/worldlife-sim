@@ -152,7 +152,6 @@ const FirebaseService = {
       this.user = cred.user;
       this.lastAuthError = null;
       this.setSyncState('synced');
-      this._notifyAuthListeners();
       return {
         ok: true,
         user: cred.user,
