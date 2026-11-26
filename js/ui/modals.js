@@ -1562,25 +1562,70 @@ window.Modals = {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
     LegalInheritanceEngine.ensureLegalFields(s);
+    LegalInheritanceEngine.ensureFamilyTrust(s);
     const report = LegalInheritanceEngine.calculateEstateStatement(s);
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
     const curMode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
-    const curSoleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
-    const isSoleActive = curMode === 'sole_heir' || curMode === 'single_child';
-    const livingHeirs = LegalInheritanceEngine._getLivingFamilyHeirs
-      ? LegalInheritanceEngine._getLivingFamilyHeirs(s)
-      : (s.relationships || []).filter(r => ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role) && r.alive);
-    const chosenHeirObj = curSoleId ? livingHeirs.find(h => h.id === curSoleId) : null;
+    const ft = s.familyTrust;
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    const trustLocked = s.age < 18 || inPrison;
+    const setupFee = LegalInheritanceEngine.getTrustSetupFee(s);
+    const annualFee = LegalInheritanceEngine.getTrustAnnualFee(s);
+    const trustStatusLabel = !ft.active
+      ? 'Tidak Aktif'
+      : ft.lapsed
+        ? '⚠️ Tergantung (Tunggakan Yuran)'
+        : 'Aktif (Bebas Cukai Pusaka)';
+    const trustStatusBg = !ft.active ? '#f1f5f9' : ft.lapsed ? '#fef3c7' : '#dcfce7';
+    const trustStatusColor = !ft.active ? '#475569' : ft.lapsed ? '#92400e' : '#166534';
 
     this.open({
       icon: '📜',
-      title: 'Pengurusan Wasiat Sivil',
-      subtitle: 'Undang-Undang Sivil & Wasiat',
+      title: 'Pengurusan Wasiat & Yayasan Keluarga',
+      subtitle: 'Undang-Undang Sivil & Tabung Yayasan Keluarga',
       bodyHtml: `
         <div class="info-banner highlight">
           <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
           <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
-          Nilai Harta Bersih Anggaran: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (Bebas Cukai Pusaka)'}
+          Nilai Harta Bersih Anggaran: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
+        </div>
+
+        <div class="section-heading">🏛️ Tabung Yayasan Keluarga</div>
+        <div class="migration-card" style="border-color:${ft.active && !ft.lapsed ? '#22c55e' : ft.lapsed ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
+          <div class="mig-head">
+            <div class="mig-title">🏛️ Tabung Yayasan Keluarga</div>
+            <span class="cat-badge" style="background:${trustStatusBg};color:${trustStatusColor};">${trustStatusLabel}</span>
+          </div>
+          <div style="font-size:12px;color:#475569;line-height:1.55;margin-bottom:10px;">
+            Dana Dalam Yayasan: <strong style="color:#0f172a;">${fmt(ft.balance)}</strong><br/>
+            Anggaran Yuran Pengurusan Tahunan: <strong>${fmt(annualFee)}/thn</strong><br/>
+            <small>Selagi Yayasan Keluarga aktif &amp; tiada tunggakan yuran, 100% harta pusaka anda dipindahkan ke generasi seterusnya dengan <strong>0% cukai pusaka</strong>.</small>
+          </div>
+          ${trustLocked ? `
+            <div class="info-banner" style="font-size:11.5px;margin-bottom:0;">
+              🔒 Pengurusan Tabung Yayasan Keluarga hanya dibenarkan untuk umur 18+ dan di luar tahanan.
+            </div>
+          ` : !ft.active ? `
+            <button type="button" class="primary-btn" id="btn-trust-setup" style="width:100%;">
+              🏛️ Tubuhkan Yayasan Keluarga (${fmt(setupFee)})
+            </button>
+          ` : `
+            ${ft.lapsed ? `
+              <button type="button" class="primary-btn" id="btn-trust-reactivate" style="width:100%;margin-bottom:8px;background:#d97706;">
+                🔄 Langsaikan Yuran &amp; Aktifkan Semula (${fmt(annualFee)})
+              </button>
+            ` : ''}
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <input type="number" id="input-trust-amount" class="form-input" min="1" placeholder="Jumlah (${Utils.getCountry(s.countryId).currency.symbol})" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);" />
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <button type="button" class="btn-sm primary" id="btn-trust-deposit" style="flex:1;">💰 Masukkan Dana ke Yayasan</button>
+              <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;">💵 Keluarkan Dana Yayasan</button>
+            </div>
+            <button type="button" class="ghost-btn" id="btn-trust-dissolve" style="width:100%;border-color:#fca5a5;color:#dc2626;font-weight:700;">
+              ❌ Bubarkan Yayasan
+            </button>
+          `}
         </div>
 
         <div class="section-heading">Pilih Mod Pembahagian Wasiat</div>
@@ -1606,36 +1651,6 @@ window.Modals = {
               <span class="ai-desc">Dermakan seluruh harta pusaka kepada tabung kebajikan awam</span>
             </span>
           </button>
-          <button type="button" class="action-item" id="btn-wasiat-pick-heir">
-            <span class="ai-icon">👑</span>
-            <span class="ai-content">
-              <span class="ai-title">100% Kepada Ahli Waris Pilihan ${isSoleActive ? `✓${chosenHeirObj ? ` (${Utils.escapeHtml(chosenHeirObj.name)})` : ''}` : ''}</span>
-              <span class="ai-desc">Serahkan 100% seluruh harta pusaka kepada seorang ahli waris yang anda pilih</span>
-            </span>
-          </button>
-        </div>
-
-        <div id="wasiat-sole-heir-box" style="margin-top:12px;">
-          <div class="section-heading">👑 Pilih Ahli Waris Tunggal (100% Harta)</div>
-          ${livingHeirs.length > 0 ? `
-            <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-bottom:8px;">
-              ⚠️ Amaran: Memilih seorang ahli waris tunggal (100%) akan mencetuskan kemarahan ahli keluarga lain yang masih hidup (-Kepercayaan, -Kemesraan &amp; +Stres).
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-              <select id="select-wasiat-heir" class="form-input" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);">
-                ${livingHeirs.map(h => `
-                  <option value="${h.id}" ${curSoleId === h.id ? 'selected' : ''}>
-                    ${Utils.escapeHtml(h.name)} (${Utils.escapeHtml(h.isAdopted ? `${h.role} (Angkat)` : (h.role || 'Keluarga'))} • ${h.age} thn)
-                  </option>
-                `).join('')}
-              </select>
-              <button type="button" class="primary-btn" id="btn-confirm-sole-heir" style="white-space:nowrap;">Tetapkan 100%</button>
-            </div>
-          ` : `
-            <div class="info-banner" style="font-size:12px;">
-              Tiada ahli waris hidup ditemui buat masa ini. Bina keluarga (pasangan atau anak) terlebih dahulu untuk memilih ahli waris tunggal.
-            </div>
-          `}
         </div>
 
         <button type="button" class="secondary-btn" id="btn-wasiat-back" style="width:100%;margin-top:8px;">← Kembali</button>
@@ -1644,32 +1659,56 @@ window.Modals = {
 
     document.querySelectorAll('.civil-wasiat-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode, btn.dataset.target || null);
+        const res = LegalInheritanceEngine.setCivilWasiat(s, btn.dataset.mode);
         App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
         this.showWasiatModal(onBack);
       });
     });
 
-    const pickHeirBtn = document.getElementById('btn-wasiat-pick-heir');
-    if (pickHeirBtn) {
-      pickHeirBtn.addEventListener('click', () => {
-        const box = document.getElementById('wasiat-sole-heir-box');
-        if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const sel = document.getElementById('select-wasiat-heir');
-        if (sel) sel.focus();
-      });
-    }
+    const setupBtn = document.getElementById('btn-trust-setup');
+    if (setupBtn) setupBtn.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.setupFamilyTrust(s);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
 
-    const confirmSoleBtn = document.getElementById('btn-confirm-sole-heir');
-    if (confirmSoleBtn) {
-      confirmSoleBtn.addEventListener('click', () => {
-        const sel = document.getElementById('select-wasiat-heir');
-        const targetId = sel ? sel.value : null;
-        const res = LegalInheritanceEngine.setCivilWasiat(s, 'sole_heir', targetId);
-        App.toast(res.msg, res.ok ? 'success' : 'error');
-        this.showWasiatModal(onBack);
-      });
-    }
+    const reactBtn = document.getElementById('btn-trust-reactivate');
+    if (reactBtn) reactBtn.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.payTrustArrearsAndReactivate(s);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+
+    const depBtn = document.getElementById('btn-trust-deposit');
+    if (depBtn) depBtn.addEventListener('click', () => {
+      const inp = document.getElementById('input-trust-amount');
+      const amt = inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(s.money * 0.25));
+      const res = LegalInheritanceEngine.depositFamilyTrust(s, amt);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+
+    const wdrBtn = document.getElementById('btn-trust-withdraw');
+    if (wdrBtn) wdrBtn.addEventListener('click', () => {
+      const inp = document.getElementById('input-trust-amount');
+      const amt = inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(ft.balance * 0.25));
+      const res = LegalInheritanceEngine.withdrawFamilyTrust(s, amt);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+
+    const disBtn = document.getElementById('btn-trust-dissolve');
+    if (disBtn) disBtn.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.dissolveFamilyTrust(s);
+      App.toast(res.msg, res.ok ? 'culture' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
 
     document.getElementById('btn-wasiat-back').addEventListener('click', () => {
       if (typeof onBack === 'function') onBack();

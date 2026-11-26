@@ -188,86 +188,189 @@ window.LegalInheritanceEngine = {
     );
   },
 
+  ensureFamilyTrust(s) {
+    if (!s) return null;
+    if (!s.familyTrust || typeof s.familyTrust !== 'object') {
+      s.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
+    }
+    s.familyTrust.active = Boolean(s.familyTrust.active);
+    s.familyTrust.balance = Math.max(0, Math.round(Number(s.familyTrust.balance) || 0));
+    s.familyTrust.lapsed = Boolean(s.familyTrust.lapsed);
+    if (s.familyTrust.lastPaidAge === undefined) s.familyTrust.lastPaidAge = null;
+    // Migrasi selamat untuk simpanan lama yang pernah memilih pewaris tunggal 100%
+    if (s.legal && s.legal.wasiat && (s.legal.wasiat.mode === 'sole_heir' || s.legal.wasiat.mode === 'single_child' || s.legal.wasiat.willType === 'sole_heir' || s.legal.wasiat.willType === 'single_child')) {
+      s.legal.wasiat.mode = 'equal';
+      s.legal.wasiat.willType = 'equal';
+      s.legal.wasiat.soleHeirId = null;
+      s.legal.wasiat.soleBeneficiaryId = null;
+    }
+    return s.familyTrust;
+  },
+
+  getTrustSetupFee(s) {
+    if (!s) return 0;
+    return Utils.usdToLocal(5000, s.countryId || 'MY');
+  },
+
+  getTrustAnnualFee(s) {
+    if (!s) return 0;
+    this.ensureFamilyTrust(s);
+    const cid = s.countryId || 'MY';
+    const baseFee = Utils.usdToLocal(450, cid);
+    const protectedWealth = Math.max(0, s.familyTrust.balance || 0) + Math.max(0, Math.round(s.money || 0));
+    const variableFee = Math.round(protectedWealth * 0.0175);
+    const capFee = Utils.usdToLocal(75000, cid);
+    return Math.min(capFee, baseFee + variableFee);
+  },
+
+  setupFamilyTrust(s) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureLegalFields(s);
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Anda mesti berumur 18 tahun ke atas untuk menubuhkan Yayasan Keluarga.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menubuhkan Yayasan Keluarga semasa dalam tahanan.' };
+    if (s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga sudah pun aktif.' };
+    const fee = this.getTrustSetupFee(s);
+    if (s.money < fee) {
+      return { ok: false, msg: `Baki tidak mencukupi — kos penubuhan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    }
+    s.money -= fee;
+    s.familyTrust.active = true;
+    s.familyTrust.lapsed = false;
+    s.familyTrust.lastPaidAge = s.age;
+    GameState.addJournalEntry(
+      `🏛️ Anda menubuhkan Tabung Yayasan Keluarga dengan yuran pendaftaran ${Utils.formatMoney(fee, s.countryId)}. Harta pusaka anda kini dilindungi bebas cukai pusaka selagi yuran tahunan dibayar!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: 'Tabung Yayasan Keluarga berjaya ditubuhkan!' };
+  },
+
+  depositFamilyTrust(s, amount) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Transaksi yayasan disekat semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+    const amt = Math.round(Number(amount) || 0);
+    if (amt <= 0) return { ok: false, msg: 'Masukkan jumlah dana yang sah.' };
+    if (s.money < amt) return { ok: false, msg: 'Baki bank tidak mencukupi.' };
+    s.money -= amt;
+    s.familyTrust.balance += amt;
+    GameState.addJournalEntry(`🏛️ Memasukkan ${Utils.formatMoney(amt, s.countryId)} ke dalam Tabung Yayasan Keluarga (Dana Yayasan: ${Utils.formatMoney(s.familyTrust.balance, s.countryId)}).`);
+    GameState.save();
+    return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dimasukkan ke Yayasan Keluarga.` };
+  },
+
+  withdrawFamilyTrust(s, amount) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Transaksi yayasan disekat semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    const amt = Math.round(Number(amount) || 0);
+    if (amt <= 0) return { ok: false, msg: 'Masukkan jumlah pengeluaran yang sah.' };
+    if (s.familyTrust.balance < amt) return { ok: false, msg: 'Dana dalam Yayasan Keluarga tidak mencukupi.' };
+    s.familyTrust.balance -= amt;
+    s.money += amt;
+    GameState.addJournalEntry(`💵 Mengeluarkan ${Utils.formatMoney(amt, s.countryId)} daripada Tabung Yayasan Keluarga ke akaun bank.`);
+    GameState.save();
+    return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dikeluarkan ke akaun bank.` };
+  },
+
+  payTrustArrearsAndReactivate(s) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh mengaktifkan semula yayasan semasa dalam tahanan.' };
+    if (!s.familyTrust.active || !s.familyTrust.lapsed) return { ok: false, msg: 'Yayasan tidak mempunyai tunggakan yuran.' };
+    const fee = this.getTrustAnnualFee(s);
+    if (s.money >= fee) {
+      s.money -= fee;
+    } else if (s.familyTrust.balance >= fee) {
+      s.familyTrust.balance -= fee;
+    } else {
+      return { ok: false, msg: `Baki tidak mencukupi — perlukan ${Utils.formatMoney(fee, s.countryId)} untuk melangsaikan yuran.` };
+    }
+    s.familyTrust.lapsed = false;
+    s.familyTrust.lastPaidAge = s.age;
+    GameState.addJournalEntry(`🔄 Tunggakan yuran Tabung Yayasan Keluarga (${Utils.formatMoney(fee, s.countryId)}) dilangsaikan. Perlindungan bebas cukai pusaka kini aktif semula!`, 'milestone');
+    GameState.save();
+    return { ok: true, msg: 'Tabung Yayasan Keluarga berjaya diaktifkan semula!' };
+  },
+
+  dissolveFamilyTrust(s) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membubarkan yayasan semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    const returned = Math.max(0, Math.round(s.familyTrust.balance || 0));
+    s.money += returned;
+    s.familyTrust.balance = 0;
+    s.familyTrust.active = false;
+    s.familyTrust.lapsed = false;
+    s.familyTrust.lastPaidAge = null;
+    GameState.addJournalEntry(`❌ Tabung Yayasan Keluarga dibubarkan. Dana ${Utils.formatMoney(returned, s.countryId)} dikembalikan ke akaun bank anda (harta kini tertakluk cukai pusaka biasa).`, 'warning');
+    GameState.save();
+    return { ok: true, msg: `Yayasan Keluarga dibubarkan. ${Utils.formatMoney(returned, s.countryId)} dikembalikan ke akaun bank.` };
+  },
+
+  tickYearlyFamilyTrust(s) {
+    if (!s || !s.alive) return;
+    this.ensureFamilyTrust(s);
+    if (!s.familyTrust.active) return;
+
+    const fee = this.getTrustAnnualFee(s);
+    if (s.money >= fee) {
+      s.money -= fee;
+      s.familyTrust.lapsed = false;
+      s.familyTrust.lastPaidAge = s.age;
+      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga telah ditolak (-${Utils.formatMoney(fee, s.countryId)}).`);
+    } else if (s.familyTrust.balance >= fee) {
+      s.familyTrust.balance -= fee;
+      s.familyTrust.lapsed = false;
+      s.familyTrust.lastPaidAge = s.age;
+      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga telah ditolak daripada dana yayasan (-${Utils.formatMoney(fee, s.countryId)}).`);
+    } else {
+      s.familyTrust.lapsed = true;
+      GameState.addJournalEntry(
+        `⚠️ Gagal membayar yuran tahunan Tabung Yayasan Keluarga (${Utils.formatMoney(fee, s.countryId)}). Perlindungan bebas cukai kini digantung sehingga tunggakan dilangsaikan.`,
+        'warning'
+      );
+    }
+  },
+
   getWasiatSummary(s) {
     this.ensureLegalFields(s);
+    this.ensureFamilyTrust(s);
     const mode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
-    const soleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
-    if ((mode === 'sole_heir' || mode === 'single_child') && soleId) {
-      const livingFamily = this._getLivingFamilyHeirs(s);
-      const chosen = livingFamily.find(rel => rel.id === soleId);
-      return chosen
-        ? `100% Kepada ${chosen.name} (Ahli Waris Pilihan)`
-        : '100% Kepada Ahli Waris Pilihan';
-    }
     const labels = {
       equal: 'Pembahagian Sama Rata',
       spouse_all: '100% Kepada Pasangan',
-      charity: '100% Yayasan Kebajikan',
-      sole_heir: '100% Kepada Ahli Waris Pilihan',
-      single_child: '100% Kepada Ahli Waris Pilihan'
+      charity: '100% Yayasan Kebajikan'
     };
-    return labels[mode] || labels.equal;
+    const base = labels[mode] || labels.equal;
+    if (s.familyTrust.active && !s.familyTrust.lapsed) {
+      return `${base} + Tabung Yayasan Keluarga (Bebas Cukai Pusaka)`;
+    }
+    return base;
   },
 
   // --------------------------------------------------------------------------
   // 6. PENGURUSAN WASIAT SIVIL (CUSTOMIZABLE WILL)
   // --------------------------------------------------------------------------
-  setCivilWasiat(s, mode, soleBeneficiaryId = null) {
+  setCivilWasiat(s, mode) {
     this.ensureLegalFields(s);
-    const validModes = ['equal', 'spouse_all', 'single_child', 'sole_heir', 'charity'];
+    this.ensureFamilyTrust(s);
+    const validModes = ['equal', 'spouse_all', 'charity'];
     if (!validModes.includes(mode)) {
       return { ok: false, msg: 'Mod wasiat tidak sah.' };
     }
-    const isSoleMode = mode === 'sole_heir' || mode === 'single_child';
-    const nextSoleId = isSoleMode ? soleBeneficiaryId : null;
-    if (isSoleMode && !nextSoleId) {
-      return { ok: false, msg: 'Sila pilih seorang pewaris tunggal.' };
-    }
-
-    const prevMode = s.legal.wasiat.mode;
-    const prevSoleId = s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId || null;
-    const isSameSelection = prevMode === mode && prevSoleId === nextSoleId;
 
     s.legal.wasiat.mode = mode;
     s.legal.wasiat.willType = mode;
-    s.legal.wasiat.soleBeneficiaryId = nextSoleId;
-    s.legal.wasiat.soleHeirId = nextSoleId;
+    s.legal.wasiat.soleBeneficiaryId = null;
+    s.legal.wasiat.soleHeirId = null;
     s.legal.wasiat.charityPct = mode === 'charity' ? 100 : 0;
-
-    if (isSoleMode) {
-      const livingFamily = this._getLivingFamilyHeirs(s);
-      const chosen = livingFamily.find(r => r.id === nextSoleId);
-      const chosenName = chosen ? chosen.name : 'Pewaris Pilihan';
-      if (!isSameSelection) {
-        const others = livingFamily.filter(r => r.id !== nextSoleId);
-        if (others.length > 0) {
-          others.forEach(rel => {
-            const dropClose = Utils.randInt(25, 40);
-            const dropTrust = Utils.randInt(25, 40);
-            rel.closeness = Utils.clamp((rel.closeness ?? 60) - dropClose, 0, 100);
-            rel.trust = Utils.clamp((rel.trust ?? 60) - dropTrust, 0, 100);
-          });
-          const stressGain = Utils.randInt(15, 25);
-          if (window.KarmaEndings) {
-            KarmaEndings.adjustAlignment({ stress: stressGain });
-          } else if (s.alignment) {
-            s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + stressGain, 0, 100);
-          }
-          GameState.addJournalEntry(
-            `🔥 KONFLIK KELUARGA (WASIAT): Keputusan anda menyerahkan 100% harta kepada ${chosenName} menimbulkan kemarahan ${others.length} ahli keluarga lain (Kepercayaan & Kemesraan merosot teruk, Stres +${stressGain}%).`,
-            'warning'
-          );
-          GameState.save();
-          return {
-            ok: true,
-            msg: `Wasiat 100% ditetapkan kepada ${chosenName}! Ahli keluarga lain berang (+${stressGain}% Stres).`
-          };
-        }
-      }
-      GameState.addJournalEntry(`📜 Wasiat sivil dikemas kini: 100% harta diserahkan kepada pewaris tunggal, ${chosenName}.`, 'milestone');
-      GameState.save();
-      return { ok: true, msg: `Wasiat 100% ditetapkan kepada ${chosenName}.` };
-    }
 
     const labels = {
       equal: 'Pembahagian Sama Rata (Pasangan & Semua Anak)',
@@ -292,17 +395,20 @@ window.LegalInheritanceEngine = {
   // --------------------------------------------------------------------------
   calculateEstateStatement(s) {
     this.ensureLegalFields(s);
+    this.ensureFamilyTrust(s);
     const countryId = s.countryId || 'MY';
     const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(countryId) : { name: countryId };
     const cash = Math.max(0, Math.round(s.money || 0));
+    const trustBalance = Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
+    const trustProtected = Boolean(s.familyTrust && s.familyTrust.active && !s.familyTrust.lapsed);
     const assetSum = window.AssetsEngine ? AssetsEngine.getAssetCashflowSummary(s) : { totalAssetValue: 0, totalDebt: 0 };
-    const grossEstate = cash + Math.round(assetSum.totalAssetValue || 0);
+    const grossEstate = cash + trustBalance + Math.round(assetSum.totalAssetValue || 0);
     const totalDebt = Math.round(assetSum.totalDebt || 0) + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0);
     const netBeforeTax = Math.max(0, grossEstate - totalDebt);
 
     const netUsd = Utils.localToUsd ? Utils.localToUsd(netBeforeTax, countryId) : netBeforeTax;
-    const taxRate = this.getCountryEstateTaxRate(countryId, netUsd);
-    const estateTax = Math.round(netBeforeTax * taxRate);
+    const taxRate = trustProtected ? 0 : this.getCountryEstateTaxRate(countryId, netUsd);
+    const estateTax = trustProtected ? 0 : Math.round(netBeforeTax * taxRate);
     const distributable = Math.max(0, netBeforeTax - estateTax);
 
     const spouse = s.married && s.partnerId
@@ -310,33 +416,18 @@ window.LegalInheritanceEngine = {
       : null;
     const children = (s.relationships || []).filter(r => this._isChildRel(r) && r.alive);
     const parents = (s.relationships || []).filter(r => this._isParentRel(r) && r.alive);
-    const livingFamily = this._getLivingFamilyHeirs(s);
 
     const mode = (s.legal.wasiat && (s.legal.wasiat.willType || s.legal.wasiat.mode)) || 'equal';
-    const soleId = (s.legal.wasiat && (s.legal.wasiat.soleHeirId || s.legal.wasiat.soleBeneficiaryId)) || null;
-    const wasiatLabels = {
-      equal: 'Pembahagian Sama Rata (Sivil)',
-      spouse_all: '100% Kepada Pasangan',
-      single_child: '100% Kepada Pewaris Tunggal',
-      sole_heir: '100% Kepada Pewaris Tunggal',
-      charity: '100% Yayasan Kebajikan'
-    };
     const shares = [];
 
     if (distributable > 0) {
-      if (mode === 'charity') {
+      if (mode === 'charity' && !trustProtected) {
         shares.push({ id: 'charity', isEntity: true, name: 'Yayasan Kebajikan Awam', role: 'Derma Wasiat', fractionLabel: 'Wasiat Kebajikan', pct: 100, amount: distributable });
-      } else if (mode === 'spouse_all' && spouse) {
+      } else if (mode === 'spouse_all' && spouse && !trustProtected) {
         shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Wasiat Penuh Pasangan', pct: 100, amount: distributable });
-      } else if ((mode === 'sole_heir' || mode === 'single_child') && soleId) {
-        const chosen = livingFamily.find(rel => rel.id === soleId);
-        if (chosen) {
-          shares.push({ id: chosen.id, isEntity: false, name: chosen.name, role: chosen.isAdopted ? 'Anak Angkat' : (chosen.role || 'Pewaris'), fractionLabel: 'Pewaris Tunggal Wasiat (100%)', pct: 100, amount: distributable });
-        }
       }
 
       if (shares.length === 0) {
-        // Pembahagian sivil adil: Pasangan + semua anak (kandung & angkat sama rata)
         if (spouse && children.length > 0) {
           const spouseAmt = Math.round(distributable * 0.5);
           const childPool = distributable - spouseAmt;
@@ -389,13 +480,15 @@ window.LegalInheritanceEngine = {
 
     const heirlooms = ((s.assets && s.assets.collectibles) || []).filter(col => col && col.isHeirloom);
     const taxRatePct = Math.round(taxRate * 100);
-    const systemName = 'Undang-Undang Sivil & Wasiat';
+    const systemName = trustProtected ? 'Tabung Yayasan Keluarga (Bebas Cukai Pusaka)' : 'Undang-Undang Sivil & Wasiat';
 
     return {
       countryId,
       countryName: c.name || countryId,
       systemName,
       systemLabel: systemName,
+      trustProtected,
+      trustBalance,
       grossEstate,
       totalDebt,
       totalDebts: totalDebt,
@@ -412,6 +505,7 @@ window.LegalInheritanceEngine = {
       heirlooms,
       shares,
       getHeirAmount(heirId) {
+        if (trustProtected) return distributable;
         const found = shares.find(sh => sh.id === heirId);
         return found ? found.amount : 0;
       }

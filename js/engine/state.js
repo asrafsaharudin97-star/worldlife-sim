@@ -207,6 +207,7 @@ window.GameState = {
       creditScore: 620,
       loans: [],
       loanBlacklisted: false,
+      familyTrust: { active: false, balance: 0, lapsed: false, lastPaidAge: null },
       peakSalaryUsd: 0,
 
       assets: {
@@ -397,9 +398,15 @@ window.GameState = {
     if (typeof s.creditScore !== 'number' || Number.isNaN(s.creditScore)) s.creditScore = 620;
     if (!Array.isArray(s.loans)) s.loans = [];
     if (typeof s.loanBlacklisted !== 'boolean') s.loanBlacklisted = false;
+    if (!s.familyTrust || typeof s.familyTrust !== 'object') {
+      s.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
+    }
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);
+    }
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureFamilyTrust) {
+      LegalInheritanceEngine.ensureFamilyTrust(s);
     }
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
@@ -499,14 +506,15 @@ window.GameState = {
   getNetWorth() {
     const s = this.current;
     if (!s) return 0;
+    const trustBal = Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
     const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
       ? SpecialModesEngine.getCeoEquityLocal(s)
       : 0;
     if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
       const aSum = AssetsEngine.getAssetCashflowSummary(s);
-      return Math.round((s.money || 0) + (s.retirementFund || 0) + aSum.totalAssetValue + ceoEquity - aSum.totalDebt);
+      return Math.round((s.money || 0) + trustBal + (s.retirementFund || 0) + aSum.totalAssetValue + ceoEquity - aSum.totalDebt);
     }
-    let total = s.money + (s.investments || 0) + s.retirementFund + ceoEquity;
+    let total = s.money + trustBal + (s.investments || 0) + s.retirementFund + ceoEquity;
     for (const v of s.assets.vehicles) total += v.value;
     for (const p of s.assets.properties) total += p.value;
     return Math.round(total);
@@ -705,6 +713,23 @@ window.GameState = {
           'milestone'
         );
       }
+    }
+
+    if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
+      const consolidatedLocal = Math.max(0, shareLocal);
+      state.money = 0;
+      state.familyTrust = {
+        active: true,
+        balance: consolidatedLocal,
+        lapsed: false,
+        lastPaidAge: null
+      };
+      this.addJournalEntry(
+        `🏛️ Pemindahan Harta Bebas Cukai (0%): Seluruh kekayaan bersih berjumlah ${Utils.formatMoney(consolidatedLocal, cId)} dipindahkan dengan selamat melalui Tabung Yayasan Keluarga ke Generasi ${state.generation}!`,
+        'milestone'
+      );
+    } else {
+      state.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
     }
 
     if (window.Dynasty) {
@@ -1169,6 +1194,22 @@ window.GameState = {
           'milestone'
         );
       }
+    }
+    if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
+      const consolidatedLocal = Math.max(0, netWorth);
+      state.money = 0;
+      state.familyTrust = {
+        active: true,
+        balance: consolidatedLocal,
+        lapsed: false,
+        lastPaidAge: null
+      };
+      this.addJournalEntry(
+        `🏛️ Pemindahan Harta Bebas Cukai (0%): Seluruh kekayaan bersih berjumlah ${Utils.formatMoney(consolidatedLocal, cId)} dipindahkan dengan selamat melalui Tabung Yayasan Keluarga ke Generasi ${newGen}!`,
+        'milestone'
+      );
+    } else {
+      state.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
     }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();

@@ -367,6 +367,9 @@ window.Sim = {
         setTimeout(() => Modals.showEvent(loanEv), 260);
       }
     }
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.tickYearlyFamilyTrust) {
+      LegalInheritanceEngine.tickYearlyFamilyTrust(s);
+    }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
     }
