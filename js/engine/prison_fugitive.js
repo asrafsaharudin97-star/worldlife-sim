@@ -283,46 +283,17 @@ window.PrisonFugitive = {
     const bribeWinChance = Math.max(0.10, Math.min(0.75, corruption / 100));
     const health = (s.stats && s.stats.health) || 60;
     const runWinChance = Math.max(0.12, Math.min(0.68, 0.14 + (health / 100) * 0.52));
+    const secLevel = forcedSecurity || (baseYears >= 6 ? 'maximum' : 'medium');
 
     return {
       id: `police_arrest_${Date.now()}`,
       icon: '🚨',
       title: 'Ditangkap Polis!',
-      text: `Pihak polis mengepung anda atas pertuduhan "${crimeName}" di ${c.name} (Tahap Korupsi Polis: ${corruption}%). Apa tindakan anda?`,
+      text: `Pihak polis mengepung anda atas pertuduhan "${crimeName}" di ${c.name} (Tahap Korupsi Negara: ${corruption}%). Apa tindakan anda?`,
       choices: [
         {
-          label: `💵 Rasuah Polis (${Utils.formatMoney(bribeCost, s.countryId)})`,
-          hint: `Peluang berjaya ~${Math.round(bribeWinChance * 100)}% (ikut tahap korupsi negara) • Gagal = tuduhan & hukuman bertambah`,
-          journalType: 'warning',
-          customAction: (st) => {
-            if (st.money < bribeCost) {
-              return {
-                outcome: `Wang tunai tidak mencukupi (${Utils.formatMoney(bribeCost, st.countryId)}) untuk merasuah polis — anda terus diberkas ke mahkamah!`,
-                toastType: 'error',
-                nextEvent: this.buildCourtTrialEvent(st, crimeName, baseYears, forcedSecurity)
-              };
-            }
-            st.money -= bribeCost;
-            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -15, notoriety: 8 });
-            if (Utils.chance(bribeWinChance)) {
-              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -15 });
-              return {
-                outcome: `💵 Rasuah berjaya! Pegawai polis di ${c.name} menutup kes anda dan melepaskan anda di tempat kejadian.`,
-                toastType: 'culture'
-              };
-            }
-            const extraYears = baseYears + Utils.randInt(2, 4);
-            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 10 });
-            return {
-              outcome: '🚨 RASUAH GAGAL! Pegawai polis menambah pertuduhan cubaan merasuah penjawat awam — hukuman bertambah berat!',
-              toastType: 'error',
-              nextEvent: this.buildCourtTrialEvent(st, `${crimeName} + Cubaan Rasuah`, extraYears, 'maximum')
-            };
-          }
-        },
-        {
           label: '🏃 Lari Dari Polis',
-          hint: `Peluang lolos ~${Math.round(runWinChance * 100)}% (ikut kesihatan ${health}%) • Gagal = hukuman +, Heat +, risiko mati ditembak!`,
+          hint: `Peluang lolos ~${Math.round(runWinChance * 100)}% (ikut kesihatan ${health}%) • Risiko mati ditembak atau hukuman ditambah`,
           journalType: 'warning',
           customAction: (st) => {
             if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 15, stress: 12 });
@@ -345,22 +316,78 @@ window.PrisonFugitive = {
             }
             const extraYears = baseYears + Utils.randInt(2, 4);
             GameState.adjustStats({ health: -15 });
+            this.enterPrisonState(st, `${crimeName} + Menentang Tangkapan`, extraYears, 'maximum');
+            GameState.save();
             return {
-              outcome: '🚨 GAGAL LARI! Anda diberkas dengan kasar (Kesihatan -15%, Heat +15%) dan tuduhan menentang tangkapan ditambah!',
-              toastType: 'error',
-              nextEvent: this.buildCourtTrialEvent(st, `${crimeName} + Menentang Tangkapan`, extraYears, 'maximum')
+              outcome: `🚨 GAGAL LARI! Anda diberkas dengan kasar (Kesihatan -15%, Heat +15%) dan terus dipenjara selama ${extraYears} tahun!`,
+              toastType: 'error'
             };
           }
         },
         {
-          label: '🙌 Serah Diri Secara Aman',
-          hint: 'Terus ke proses mahkamah tanpa sebarang tuduhan tambahan',
+          label: '⚖️ Mengaku Bersalah',
+          hint: 'Mengaku bersalah di hadapan pihak berkuasa • Tempoh penjara mungkin berkurangan atau kekal (ikut nasib)',
           journalType: 'normal',
-          customAction: (st) => ({
-            outcome: 'Anda menyerah diri secara aman tanpa melawan dan dibawa terus ke proses mahkamah.',
-            toastType: 'culture',
-            nextEvent: this.buildCourtTrialEvent(st, crimeName, baseYears, forcedSecurity)
-          })
+          customAction: (st) => {
+            const lucky = Utils.chance(0.50);
+            if (lucky && baseYears > 1) {
+              const reduced = Math.max(1, Math.round(baseYears * Utils.randFloat(0.5, 0.75)));
+              this.enterPrisonState(st, crimeName, reduced, secLevel);
+              GameState.save();
+              return {
+                outcome: `⚖️ Anda mengaku bersalah dan bernasib baik! Hakim meringankan tempoh penjara daripada ${baseYears} tahun kepada ${reduced} tahun.`,
+                toastType: 'culture'
+              };
+            }
+            this.enterPrisonState(st, crimeName, baseYears, secLevel);
+            GameState.save();
+            return {
+              outcome: `⚖️ Anda mengaku bersalah, namun nasib tidak menyebelahi anda — hukuman kekal penuh selama ${baseYears} tahun penjara.`,
+              toastType: 'warning'
+            };
+          }
+        },
+        {
+          label: `💵 Merasuah Polis (${Utils.formatMoney(bribeCost, s.countryId)})`,
+          hint: `Peluang berjaya ~${Math.round(bribeWinChance * 100)}% (ikut tahap korupsi ${corruption}%) • Risiko duit lesap & tetap masuk penjara atau hukuman ditambah`,
+          journalType: 'warning',
+          customAction: (st) => {
+            if (st.money < bribeCost) {
+              this.enterPrisonState(st, crimeName, baseYears, secLevel);
+              GameState.save();
+              return {
+                outcome: `Wang tunai tidak mencukupi (${Utils.formatMoney(bribeCost, st.countryId)}) untuk merasuah polis — anda terus dimasukkan ke penjara selama ${baseYears} tahun!`,
+                toastType: 'error'
+              };
+            }
+            st.money -= bribeCost;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -15, notoriety: 8 });
+            if (Utils.chance(bribeWinChance)) {
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: -15 });
+              GameState.save();
+              return {
+                outcome: `💵 Rasuah berjaya! Pegawai polis di ${c.name} menerima ${Utils.formatMoney(bribeCost, st.countryId)}, menutup kes anda dan melepaskan anda.`,
+                toastType: 'culture'
+              };
+            }
+            // Gagal merasuah: sama ada polis ambil duit & tetap masuk penjara, atau hukuman ditambah!
+            if (Utils.chance(0.50)) {
+              this.enterPrisonState(st, crimeName, baseYears, secLevel);
+              GameState.save();
+              return {
+                outcome: `💸 DITIPU POLIS! Pegawai polis mengambil wang rasuah ${Utils.formatMoney(bribeCost, st.countryId)} anda dan tetap memasukkan anda ke penjara selama ${baseYears} tahun!`,
+                toastType: 'error'
+              };
+            }
+            const extraYears = baseYears + Utils.randInt(2, 4);
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 10 });
+            this.enterPrisonState(st, `${crimeName} + Cubaan Rasuah Polis`, extraYears, 'maximum');
+            GameState.save();
+            return {
+              outcome: `🚨 RASUAH GAGAL! Wang ${Utils.formatMoney(bribeCost, st.countryId)} dirampas dan pertuduhan cubaan merasuah ditambah — anda dipenjara selama ${extraYears} tahun!`,
+              toastType: 'error'
+            };
+          }
         }
       ]
     };

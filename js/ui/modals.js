@@ -2476,7 +2476,11 @@ window.Modals = {
         const res = Sim.commitCrime(btn.dataset.crime);
         App.toast(res.msg, res.ok ? 'culture' : 'error');
         App.renderAll();
-        this.showActivities('crime');
+        if (res.arrestEvent) {
+          this.showEvent(res.arrestEvent);
+        } else {
+          this.showActivities('crime');
+        }
       });
     });
 

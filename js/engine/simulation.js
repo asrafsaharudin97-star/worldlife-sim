@@ -2932,19 +2932,22 @@ window.Sim = {
         KarmaEndings.adjustAlignment({ karma: def.karma, notoriety: Math.round(def.heat * 1.4), stress: def.stress + 8 });
       }
 
-      // Risiko hukuman penjara bagi jenayah berat (18+) atau pusat juvana bagi bawah umur berulang
+      // Risiko hukuman penjara bagi jenayah berat (18+) -> keluar pop-up tangkapan polis (Lari / Mengaku / Rasuah)
       const shouldJail = s.age >= 18 && def.jailYears && (currentHeat >= 45 || Utils.chance(0.45));
-      if (shouldJail && window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+      if (shouldJail && window.PrisonFugitive && PrisonFugitive.buildPoliceArrestEvent) {
         const yrs = Utils.randInt(def.jailYears[0], def.jailYears[1]);
-        PrisonFugitive.enterPrisonState(s, def.title, yrs, this.CRIME_POOL && yrs >= 6 ? 'maximum' : 'medium');
-        const isMafiaLife = Boolean(s.prison && s.prison.isLife);
-        const termLabel = isMafiaLife ? 'SEUMUR HIDUP (Ahli Mafia)' : `${yrs} tahun`;
+        const secLevel = yrs >= 6 ? 'maximum' : 'medium';
+        const arrestEvent = PrisonFugitive.buildPoliceArrestEvent(s, def.title, yrs, secLevel);
         GameState.addJournalEntry(
-          `🚓 DICEKUP POLIS! Anda gagal dalam "${def.title}" di ${c.name}, didenda ${Utils.formatMoney(fine, s.countryId)} dan dijatuhi hukuman penjara ${termLabel}!`,
+          `🚓 DICEKUP POLIS! Anda kantoi dalam "${def.title}" di ${c.name} dan didenda ${Utils.formatMoney(fine, s.countryId)}. Polis sedang mengepung anda!`,
           'warning'
         );
         GameState.save();
-        return { ok: false, msg: `Kantoi! Dipenjara ${termLabel} & didenda ${Utils.formatMoney(fine, s.countryId)}.` };
+        return {
+          ok: false,
+          msg: `Ditangkap polis! Didenda ${Utils.formatMoney(fine, s.countryId)} — pilih tindakan anda.`,
+          arrestEvent
+        };
       }
 
       if (s.age < 18 && currentHeat >= 30 && Utils.chance(0.4)) {
