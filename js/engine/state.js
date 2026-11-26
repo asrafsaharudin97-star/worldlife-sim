@@ -207,7 +207,7 @@ window.GameState = {
       creditScore: 620,
       loans: [],
       loanBlacklisted: false,
-      familyTrust: { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null },
+      familyTrust: { active: false, balance: 0, assets: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null },
       peakSalaryUsd: 0,
 
       assets: {
@@ -759,7 +759,7 @@ window.GameState = {
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
     }
 
     if (window.Dynasty) {
@@ -1244,7 +1244,7 @@ window.GameState = {
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 2.0, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
     }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();

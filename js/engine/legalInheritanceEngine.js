@@ -195,7 +195,7 @@ window.LegalInheritanceEngine = {
         active: false,
         balance: 0,
         assets: [],
-        feeRate: 2.0,
+        feeRate: 1.5,
         yearsActive: 0,
         fundManager: null,
         underAudit: false,
@@ -207,8 +207,7 @@ window.LegalInheritanceEngine = {
     ft.active = Boolean(ft.active);
     ft.balance = Math.max(0, Math.round(Number(ft.balance) || 0));
     if (!Array.isArray(ft.assets)) ft.assets = [];
-    if (typeof ft.feeRate !== 'number' || Number.isNaN(ft.feeRate)) ft.feeRate = 2.0;
-    ft.feeRate = Math.min(50, Math.max(2.0, +ft.feeRate.toFixed(1)));
+    ft.feeRate = 1.5;
     if (typeof ft.yearsActive !== 'number' || Number.isNaN(ft.yearsActive)) ft.yearsActive = 0;
     if (ft.fundManager && typeof ft.fundManager === 'object') {
       if (typeof ft.fundManager.yearsLeft !== 'number') ft.fundManager.yearsLeft = 5;
@@ -251,8 +250,7 @@ window.LegalInheritanceEngine = {
     const cid = s.countryId || 'MY';
     const baseFee = Utils.usdToLocal(450, cid);
     const trustWealth = this.getTrustNetWorth(s);
-    const rate = Math.min(50, Math.max(2.0, s.familyTrust.feeRate || 2.0)) / 100;
-    return Math.max(baseFee, Math.round(trustWealth * rate));
+    return Math.max(baseFee, Math.round(trustWealth * 0.015));
   },
 
   getFundManagerOffers(s) {
@@ -472,9 +470,9 @@ window.LegalInheritanceEngine = {
     const ft = s.familyTrust;
     if (!ft.active) return null;
 
-    // 1. Peningkatan yuran pengurusan tahunan (+0.5% p.a., had maks 50% p.a.)
+    // 1. Yuran pengurusan tahunan tetap 1.5% setahun
     ft.yearsActive = (ft.yearsActive || 0) + 1;
-    ft.feeRate = Math.min(50, +((ft.feeRate || 2.0) + 0.5).toFixed(1));
+    ft.feeRate = 1.5;
 
     const fee = this.getTrustAnnualFee(s);
     if (s.money >= fee) {

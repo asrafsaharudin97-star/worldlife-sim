@@ -1606,7 +1606,7 @@ window.Modals = {
           <div style="font-size:12px;color:#475569;line-height:1.58;margin-bottom:10px;">
             Dana Tunai Yayasan: <strong style="color:#0f172a;">${fmt(ft.balance)}</strong> • Aset Yayasan (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
             Jumlah Kekayaan Dilindungi: <strong style="color:#059669;">${fmt(trustNetWorth)}</strong><br/>
-            Kadar Yuran Semasa: <strong>${ft.feeRate.toFixed(1)}% setahun (Maks 50%)</strong> • Anggaran Yuran: <strong>${fmt(annualFee)}/thn</strong><br/>
+            Kadar Yuran Tetap: <strong>1.5% setahun</strong> • Anggaran Yuran: <strong>${fmt(annualFee)}/thn</strong><br/>
             <small>100% dana &amp; aset dalam Yayasan Keluarga diwarisi eksklusif oleh watak pemain generasi seterusnya (0% kepada NPC &amp; bebas cukai pusaka).</small>
           </div>
           ${trustLocked ? `
