@@ -61,7 +61,7 @@ window.ActivitiesDeck = {
     if (!act || !s) return 0;
     const baseUsd = act.cost ?? act.costUsd ?? 0;
     if (baseUsd <= 0) return 0;
-    if (s.age < 15 && baseUsd <= 40) return 0; // ditanggung ibu bapa untuk kanak-kanak/remaja awal
+    if (s.age < 15 && baseUsd <= 40 && window.GameState && GameState.hasLivingParent(s)) return 0; // ditanggung ibu bapa untuk kanak-kanak/remaja awal
     return Utils.usdToLocal(baseUsd, s.countryId);
   },
 

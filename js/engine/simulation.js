@@ -549,7 +549,7 @@ window.Sim = {
     if (ed.stage === 'university' && !ed.activeStudy) {
       const isLocal = s.citizenships.includes(s.countryId) || s.residencyStatus === 'PR';
       const tuition = Math.round(ced.uniTuitionAnnual * (isLocal ? 1 : 1.75));
-      if (s.age <= 22 && s.money < tuition && s.relationships.some(r => ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role) && r.alive)) {
+      if (s.age <= 22 && s.money < tuition && GameState.hasLivingParent(s)) {
         GameState.addJournalEntry(`🎓 Ibu bapa membantu membayar yuran ${Utils.formatMoney(tuition, s.countryId)} anda di ${ed.universityName}.`);
       } else {
         s.money -= tuition;
@@ -2752,11 +2752,12 @@ window.Sim = {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
     if (s.yearlyActions[act.id]) return { ok: false, msg: 'Anda sudah melakukan aktiviti ini tahun ini!' };
-    if (s.money < act.cost && s.age >= 18) {
-      return { ok: false, msg: `Anda perlukan ${Utils.formatMoney(act.cost, s.countryId)}.` };
+    const parentCovers = s.age < 18 && GameState.hasLivingParent(s);
+    if (!parentCovers && s.money < act.cost) {
+      return { ok: false, msg: `Baki tidak mencukupi — anda perlukan ${Utils.formatMoney(act.cost, s.countryId)}.` };
     }
     s.yearlyActions[act.id] = true;
-    if (s.age >= 18) s.money -= act.cost;
+    if (!parentCovers) s.money -= act.cost;
     GameState.adjustStats(act.effects);
     GameState.addJournalEntry(`${act.icon} ${act.title} (${c.name}): ${act.desc}`, 'culture');
     GameState.save();

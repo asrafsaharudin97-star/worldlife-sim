@@ -461,6 +461,12 @@ window.GameState = {
     }
   },
 
+  hasLivingParent(s = this.current) {
+    if (!s || !Array.isArray(s.relationships)) return false;
+    const parentRoles = ['Ibu', 'Ayah', 'Bapa', 'Ibu Angkat', 'Ayah Angkat', 'Penjaga', 'Mother', 'Father', 'Guardian'];
+    return s.relationships.some(r => r && r.alive !== false && parentRoles.includes(r.role));
+  },
+
   getNetWorth() {
     const s = this.current;
     if (!s) return 0;

@@ -496,7 +496,7 @@ window.Modals = {
         <button class="action-item" id="btn-find-love" ${inPrison ? 'disabled' : ''}>
           <span class="ai-icon">💘</span>
           <span class="ai-content">
-            <span class="ai-title">Sesi Date (${s.city}, ${c.name} ${c.flag})</span>
+            <span class="ai-title">Sesi Date (${s.city}, ${c.name} ${Utils.renderFlagHtml(c.id, c.flag)})</span>
             <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : 'Kenali calon pasangan baharu melalui Sesi Date'}</span>
           </span>
           <span class="ai-right">Sesi Date</span>
@@ -1869,7 +1869,7 @@ window.Modals = {
     const tabsHtml = `
       <div class="tab-pills">
         <button class="tab-pill ${activeSubTab === 'deck' ? 'active' : ''}" data-sub="deck">🎲 Dek Aktiviti</button>
-        <button class="tab-pill ${activeSubTab === 'culture' ? 'active' : ''}" data-sub="culture">${c.flag} Budaya</button>
+        <button class="tab-pill ${activeSubTab === 'culture' ? 'active' : ''}" data-sub="culture">${Utils.renderFlagHtml(c.id, c.flag)} Budaya</button>
         <button class="tab-pill ${activeSubTab === 'migrate' ? 'active' : ''}" data-sub="migrate">✈️ Hijrah</button>
         <button class="tab-pill ${activeSubTab === 'passport' ? 'active' : ''}" data-sub="passport">🛂 Pasport</button>
         <button class="tab-pill ${activeSubTab === 'lifestyle' ? 'active' : ''}" data-sub="lifestyle">💪 Gaya Hidup</button>
@@ -1883,9 +1883,10 @@ window.Modals = {
       contentHtml += LegacyModals.renderDynamicActivitiesTab(s, c);
     } else if (activeSubTab === 'culture') {
       const adapt = GameState.getCurrentAdaptation();
+      const parentCovers = s.age < 18 && GameState.hasLivingParent(s);
       contentHtml += `
         <div class="info-banner culture-box">
-          <strong>${c.flag} Kehidupan di ${s.city}, ${c.name}</strong><br/>
+          <strong>${Utils.renderFlagHtml(c.id, c.flag)} Kehidupan di ${s.city}, ${c.name}</strong><br/>
           ${Utils.escapeHtml(c.tagline)}<br/>
           ${s.countryId !== s.birthCountryId ? `<div style="margin-top:5px;">🌍 Penyesuaian Budaya: <strong>${adapt}%</strong> (Sertai budaya tempatan untuk layak memohon PR/Warganegara!)</div>` : ''}
         </div>
@@ -1897,7 +1898,7 @@ window.Modals = {
                 <span class="ai-title">${Utils.escapeHtml(act.title)}</span>
                 <span class="ai-desc">${Utils.escapeHtml(act.desc)}</span>
               </span>
-              <span class="ai-right cost">${s.age < 18 ? 'Mak Ayah Bayar' : Utils.formatMoney(act.cost, s.countryId)}</span>
+              <span class="ai-right cost">${parentCovers ? 'Mak Ayah Bayar' : Utils.formatMoney(act.cost, s.countryId)}</span>
             </button>
           `).join('')}
         </div>
@@ -1911,7 +1912,7 @@ window.Modals = {
           <button class="action-item" id="btn-visit-home" ${s.yearlyActions.visitHome ? 'disabled' : ''}>
             <span class="ai-icon">🛫</span>
             <span class="ai-content">
-              <span class="ai-title">Bercuti Pulang ke ${home.name} ${home.flag}</span>
+              <span class="ai-title">Bercuti Pulang ke ${home.name} ${Utils.renderFlagHtml(home.id, home.flag)}</span>
               <span class="ai-desc">Jumpa keluarga tersayang &amp; makan juadah kegemaran zaman kecil!</span>
             </span>
             <span class="ai-right cost">${Utils.formatMoney(tripCost, s.countryId)}</span>
