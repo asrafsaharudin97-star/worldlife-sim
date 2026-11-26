@@ -124,11 +124,9 @@ window.LegalInheritanceEngine = {
       });
     }
 
-    partner.type = 'ex';
-    partner.role = 'Bekas Pasangan';
-    partner.stage = 'divorced';
-    partner.closeness = Math.max(5, (partner.closeness || 40) - 40);
+    s.relationships = (s.relationships || []).filter(r => r && r.id !== partner.id);
     s.married = false;
+    s.maritalStatus = 'divorced';
     s.partnerId = null;
     s.legal.prenup = false;
     s.legal.prenupPartnerId = null;

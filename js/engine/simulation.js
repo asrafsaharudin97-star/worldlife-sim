@@ -2274,8 +2274,8 @@ window.Sim = {
       } else {
         s.partnerId = null;
         s.married = false;
-        spouse.category = 'ex';
-        spouse.role = 'Bekas Pasangan (Cerai)';
+        s.maritalStatus = 'divorced';
+        s.relationships = (s.relationships || []).filter(r => r && r.id !== spouse.id);
       }
       // Pastikan baki tunai masih mencukupi untuk kos tiket atau benarkan diteruskan selepas penyelesaian harta
       if (s.money < costLocal) {

@@ -1650,10 +1650,8 @@ window.Relationships = {
       }
       s.partnerId = null;
       s.married = false;
-      rel.category = 'ex';
-      rel.role = wasMarried ? 'Bekas Pasangan (Cerai)' : 'Bekas Pasangan';
-      rel.closeness = 15;
-      rel.trust = 20;
+      s.maritalStatus = wasMarried ? 'divorced' : 'single';
+      s.relationships = (s.relationships || []).filter(r => r && r.id !== rel.id);
       if (wasMarried && s.money > 0) {
         const settle = Math.round(s.money * 0.15);
         s.money -= settle;

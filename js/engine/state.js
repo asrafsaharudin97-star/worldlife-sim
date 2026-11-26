@@ -404,6 +404,7 @@ window.GameState = {
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
     }
+    this.purgeExPartners(s);
     if (window.PrisonFugitive && PrisonFugitive.ensureFields) {
       PrisonFugitive.ensureFields(s);
     }
@@ -479,6 +480,20 @@ window.GameState = {
     if (!s || !Array.isArray(s.relationships)) return false;
     const parentRoles = ['Ibu', 'Ayah', 'Bapa', 'Ibu Angkat', 'Ayah Angkat', 'Penjaga', 'Mother', 'Father', 'Guardian'];
     return s.relationships.some(r => r && r.alive !== false && parentRoles.includes(r.role));
+  },
+
+  purgeExPartners(s = this.current) {
+    if (!s || !Array.isArray(s.relationships)) return;
+    s.relationships = s.relationships.filter(r => {
+      if (!r) return false;
+      const roleStr = String(r.role || '');
+      const isEx = r.category === 'ex' || r.type === 'ex' || r.stage === 'divorced' || /^Bekas\b/i.test(roleStr) || /^Ex\b/i.test(roleStr);
+      return !isEx;
+    });
+    if (s.partnerId && !s.relationships.some(r => r && r.id === s.partnerId && r.alive !== false)) {
+      s.partnerId = null;
+      s.married = false;
+    }
   },
 
   getNetWorth() {
@@ -1753,6 +1768,7 @@ window.GameState = {
       this._saveTimer = null;
     }
     if (!this.current) return false;
+    this.purgeExPartners(this.current);
     this.trimJournal(this.current);
     // Mod Tetamu: simpan dalam memori sesi semasa sahaja (JANGAN tulis ke localStorage)
     if (this.isGuestMode) return true;
