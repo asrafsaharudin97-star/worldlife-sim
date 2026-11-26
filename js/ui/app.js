@@ -844,7 +844,7 @@ window.App = {
     this.applyCountryTheme(s.countryId);
 
     document.getElementById('header-year-pill').textContent = s.year;
-    document.getElementById('header-flag').textContent = c.flag;
+    document.getElementById('header-flag').innerHTML = Utils.renderFlagHtml(c.id, c.flag);
     document.getElementById('header-country-code').textContent = c.id;
 
     document.querySelector('#char-avatar .avatar-emoji').textContent = (s.fugitive && s.fugitive.avatarOverride) || Utils.getAvatar(s.age, s.gender);

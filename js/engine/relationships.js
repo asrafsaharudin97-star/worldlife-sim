@@ -1392,8 +1392,12 @@ window.Relationships = {
       return { ok: true, msg: 'Rumah tangga semakin harmoni!' };
     }
 
-    // --- Timang Cahaya Mata (Kesuburan Realistik, Menopaus, Ketidaksuburan & Pasangan Tidak Mahu Anak) ---
+    // --- Timang Cahaya Mata (Wajib Berkahwin Sah, Kesuburan Realistik, Menopaus & Ketidaksuburan) ---
     if (action === 'have_kid') {
+      if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak dapat menimang cahaya mata semasa berada dalam tahanan.' };
+      if (!s.married || rel.id !== s.partnerId) {
+        return { ok: false, msg: 'Perlu berkahwin terlebih dahulu sebelum menimang cahaya mata.' };
+      }
       if (s.age < 18) return { ok: false, msg: 'Tunggu sehingga dewasa!' };
       if (s.pregnancy && s.pregnancy.active) {
         return { ok: false, msg: 'Kehamilan sedang berlangsung — bayi akan dilahirkan pada tahun hadapan!' };

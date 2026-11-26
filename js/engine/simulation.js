@@ -296,11 +296,14 @@ window.Sim = {
       }
     }
 
-    // 1C. Semakan Kehamilan & Risiko Keguguran (sebelum kelahiran)
+    // 1C. Semakan Kehamilan & Risiko Keguguran (sebelum kelahiran — hanya sah jika berkahwin)
     if (s.pregnancy && s.pregnancy.active) {
       const preg = s.pregnancy;
       s.pregnancy = null;
-      const partner = preg.partnerId ? s.relationships.find(r => r.id === preg.partnerId && r.alive) : null;
+      if (!s.married) {
+        // Sekat sebarang kelahiran luar nikah bagi simpanan lama/tidak sah
+      } else {
+        const partner = preg.partnerId ? s.relationships.find(r => r.id === preg.partnerId && r.alive) : null;
       const motherAge = (preg.motherAge || s.age) + 1;
       const miscChance = this.computeMiscarriageChance(s, motherAge);
 
@@ -322,6 +325,7 @@ window.Sim = {
           isAdopted: false,
           kidAge: 0
         });
+      }
       }
     }
 

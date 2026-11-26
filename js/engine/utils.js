@@ -212,5 +212,13 @@ window.Utils = {
       osc.start(start);
       osc.stop(start + total + 0.02);
     } catch (e) {}
+  },
+
+  renderFlagHtml(countryId, fallbackFlag = '') {
+    const code = String(countryId || 'MY').trim().toLowerCase();
+    const iso = code === 'uk' ? 'gb' : code;
+    if (!/^[a-z]{2}$/.test(iso)) return this.escapeHtml(fallbackFlag || '🌍');
+    const safeAlt = this.escapeHtml(iso.toUpperCase());
+    return `<img class="flag-img" src="https://flagcdn.com/w40/${iso}.png" srcset="https://flagcdn.com/w80/${iso}.png 2x" alt="${safeAlt}" width="20" height="14" loading="lazy" decoding="async" onerror="this.style.display='none'" />`;
   }
 };

@@ -923,13 +923,13 @@ window.Modals = {
         ` : ''}
 
         ${isPartner && s.age >= 18 ? `
-          <button class="action-item rel-act-btn" data-act="have_kid" ${inPrison ? 'disabled' : ''}>
+          <button class="action-item rel-act-btn" data-act="have_kid" ${!s.married || inPrison ? 'disabled' : ''}>
             <span class="ai-icon">👶</span>
             <span class="ai-content">
               <span class="ai-title">Timang Cahaya Mata</span>
-              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : `Anak akan lahir di ${Utils.getCountry(s.countryId).name} ${Utils.getCountry(s.countryId).flag}`}</span>
+              <span class="ai-desc">${inPrison ? 'Dikunci semasa dalam tahanan' : (!s.married ? 'Perlu berkahwin terlebih dahulu' : `Anak akan lahir di ${Utils.getCountry(s.countryId).name} ${Utils.getCountry(s.countryId).flag}`)}</span>
             </span>
-            <span class="ai-right">Rancang</span>
+            <span class="ai-right">${!s.married ? '🔒 Kunci' : 'Rancang'}</span>
           </button>
         ` : ''}
 
