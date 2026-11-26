@@ -4,11 +4,12 @@
    ========================================================================== */
 
 window.EducationData = {
-  LEVEL_ORDER: ['none', 'high_school', 'diploma', 'bachelor', 'master', 'phd'],
+  LEVEL_ORDER: ['none', 'high_school', 'foundation', 'diploma', 'bachelor', 'master', 'phd'],
 
   LEVEL_INFO: {
     none:        { id: 'none',        label: 'Tiada Pendidikan Formal', short: 'Tiada',       icon: '📄', rank: 0 },
     high_school: { id: 'high_school', label: 'Sekolah Menengah / SPM',  short: 'Menengah',    icon: '🏫', rank: 1 },
+    foundation:  { id: 'foundation',  label: 'Asasi / Matrikulasi',     short: 'Asasi',       icon: '📗', rank: 2 },
     diploma:     { id: 'diploma',     label: 'Diploma / Vokasional',    short: 'Diploma',     icon: '📘', rank: 2 },
     bachelor:    { id: 'bachelor',    label: 'Ijazah Sarjana Muda',     short: 'Ijazah',      icon: '🎓', rank: 3 },
     master:      { id: 'master',      label: 'Ijazah Sarjana (Master)', short: 'Master',      icon: '🏛️', rank: 4 },
@@ -62,6 +63,18 @@ window.EducationData = {
       desc: 'Peluang kedua bagi orang dewasa tanpa kelulusan sekolah menengah untuk melayakkan diri ke pengajian tinggi.'
     },
     {
+      id: 'foundation',
+      title: 'Asasi / Matrikulasi',
+      icon: '📗',
+      minAge: 17,
+      reqLevel: 'high_school',
+      needsField: true,
+      baseYears: 1,
+      tuitionFactor: 0.45,
+      minSmarts: 35,
+      desc: 'Program pra-universiti 1 tahun selepas Sekolah Menengah untuk melayakkan diri ke Ijazah Sarjana Muda.'
+    },
+    {
       id: 'diploma',
       title: 'Diploma / Kolej Vokasional',
       icon: '📘',
@@ -77,8 +90,8 @@ window.EducationData = {
       id: 'bachelor',
       title: 'Ijazah Sarjana Muda (Degree)',
       icon: '🎓',
-      minAge: 17,
-      reqLevel: 'high_school',
+      minAge: 18,
+      reqLevel: 'foundation',
       needsField: true,
       baseYears: 3,
       fastTrackYears: 2,

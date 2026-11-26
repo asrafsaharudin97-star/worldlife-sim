@@ -494,12 +494,11 @@ window.Sim = {
       ed.stage = 'preschool';
       ed.schoolName = `${ced.preschool.name} ${s.city}`;
       GameState.addJournalEntry(`🎒 Anda memulakan alam persekolahan di ${ed.schoolName}, ${c.name}!`, 'milestone');
-      GameState.adjustStats({ smarts: 4, happiness: 3 });
+      GameState.adjustStats({ happiness: 3 });
     } else if (s.age === ced.primary.startAge && (ed.stage === 'infant' || ed.stage === 'preschool')) {
       ed.stage = 'primary';
       ed.schoolName = `${ced.primary.name} ${s.city}`;
       GameState.addJournalEntry(`📚 Anda mendaftar masuk ke ${ed.schoolName}.`, 'milestone');
-      GameState.adjustStats({ smarts: 5 });
     } else if (s.age === ced.primary.examAge && ed.stage === 'primary') {
       const score = Utils.clamp(s.stats.smarts + Utils.randInt(-10, 12), 20, 100);
       const grade = score >= 80 ? 'Semua A Cemerlang!' : score >= 60 ? 'Lulus Dengan Baik' : 'Lulus Sederhana';
@@ -507,7 +506,7 @@ window.Sim = {
         `📝 Anda menduduki ${ced.primary.examName} di ${c.name} dan memperoleh keputusan: ${grade}`,
         'milestone'
       );
-      GameState.adjustStats({ happiness: score >= 60 ? 8 : -4, smarts: 3 });
+      GameState.adjustStats({ happiness: score >= 60 ? 8 : -4 });
     } else if (s.age === ced.secondary.startAge && ed.stage === 'primary') {
       ed.pendingSecondaryChoice = true;
     } else if (s.age === ced.secondary.examAge && ed.stage === 'secondary') {
@@ -529,19 +528,13 @@ window.Sim = {
       ed.stage = 'highschool_done';
       ed.schoolName = null;
       GameState.addJournalEntry(
-        `🎓 Anda menamatkan ${ced.secondary.examName} di ${c.name} dengan keputusan: ${gradeText}! Anda kini boleh mohon Diploma/Universiti, ambil Sijil, mula bekerja, atau berhijrah pada umur 18.`,
+        `🎓 Anda menamatkan ${ced.secondary.examName} di ${c.name} dengan keputusan: ${gradeText}! Anda kini boleh mohon Asasi/Matrikulasi atau Diploma, ambil Sijil, mula bekerja, atau berhijrah pada umur 18.`,
         'milestone'
       );
-      GameState.adjustStats({ happiness: score >= 65 ? 12 : 2, smarts: 5 });
-    } else if (ed.stage === 'secondary' && !ed.activeStudy) {
-      if (ed.secondaryTrack === 'berasrama') {
-        GameState.adjustStats({ smarts: 3 });
-      } else if (ed.secondaryTrack === 'teknik') {
-        GameState.adjustStats({ smarts: 2 });
-      }
+      GameState.adjustStats({ happiness: score >= 65 ? 12 : 2 });
     }
 
-    // Enjin Pendidikan Sepanjang Hayat (Kelas Dewasa, Diploma, Ijazah, Master, PhD & Bayaran Balik Pinjaman)
+    // Enjin Pendidikan Sepanjang Hayat (Kelas Dewasa, Asasi, Diploma, Ijazah, Master, PhD & Bayaran Balik Pinjaman)
     if (window.EduCareerEngine && EduCareerEngine.tickYearlyEducation) {
       const handled = EduCareerEngine.tickYearlyEducation(s, c);
       if (handled) return;
@@ -556,7 +549,6 @@ window.Sim = {
         s.money -= tuition;
         GameState.addJournalEntry(`🎓 Membayar yuran ${Utils.formatMoney(tuition, s.countryId)} di ${ed.universityName} (${isLocal ? 'Kadar tempatan' : 'Kadar antarabangsa'}).`);
       }
-      GameState.adjustStats({ smarts: Utils.randInt(4, 7) });
       ed.uniYearsLeft -= 1;
       if (ed.uniYearsLeft <= 0) {
         ed.stage = 'graduated';
@@ -566,7 +558,7 @@ window.Sim = {
           `🎉 Tahniah! Anda berjaya menamatkan pengajian di ${ed.universityName} (${c.name} ${c.flag}) dan menggenggam Ijazah Sarjana Muda!`,
           'milestone'
         );
-        GameState.adjustStats({ happiness: 18, smarts: 6 });
+        GameState.adjustStats({ happiness: 18 });
       }
     }
   },
@@ -676,7 +668,7 @@ window.Sim = {
       }
     }
 
-    if (s.age === 60 && s.retirementFund > 0 && !s.job) {
+    if (s.age === 60 && s.retirementFund > 0 && !s.job && !isDetained) {
       s.money += s.retirementFund;
       GameState.addJournalEntry(
         `🏦 Anda mengeluarkan simpanan persaraan ${c.retirementScheme} berjumlah ${Utils.formatMoney(s.retirementFund, s.countryId)}!`,
@@ -2390,7 +2382,10 @@ window.Sim = {
   enrollUniversity(uniName) {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
-    if (s.age < 17) return { ok: false, msg: 'Tamatkan sekolah menengah dahulu!' };
+    if (s.age < 18) return { ok: false, msg: 'Perlu tamat Asasi atau Diploma dahulu.' };
+    if (window.EducationData && !EducationData.hasMinLevel(s.education.educationLevel, 'foundation')) {
+      return { ok: false, msg: 'Perlu tamat Asasi atau Diploma dahulu.' };
+    }
     if (s.education.stage === 'university') return { ok: false, msg: 'Anda sudah belajar di universiti!' };
     if (s.education.hasDegree) return { ok: false, msg: 'Anda sudah memiliki ijazah universiti!' };
 
@@ -2398,7 +2393,7 @@ window.Sim = {
     s.education.universityName = uniName;
     s.education.uniYearsLeft = c.education.uniDuration;
     GameState.addJournalEntry(`🎓 Anda mendaftar masuk ke ${uniName} di ${c.name} ${c.flag}!`, 'milestone');
-    GameState.adjustStats({ happiness: 10, smarts: 4 });
+    GameState.adjustStats({ happiness: 10 });
     GameState.save();
     return { ok: true, msg: `Berjaya mendaftar di ${uniName}!` };
   },

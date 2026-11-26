@@ -709,12 +709,13 @@ window.PrisonFugitive = {
     }
 
     if (action === 'library') {
+      const gain = Utils.randInt(1, 3);
       p.behavior = Utils.clamp(p.behavior + Utils.randInt(7, 13), 0, 100);
-      GameState.adjustStats({ smarts: 7, happiness: 4 });
+      GameState.adjustStats({ smarts: gain, happiness: 4 });
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: 6, stress: -6 });
-      GameState.addJournalEntry('📚 Anda tekun membaca buku undang-undang dan ilmu di Perpustakaan Penjara (Kepintaran +7%, Kelakuan +).');
+      GameState.addJournalEntry(`📚 Anda tekun membaca buku undang-undang dan ilmu di Perpustakaan Penjara (Kepintaran +${gain}%, Kelakuan +).`);
       GameState.save();
-      return { ok: true, msg: `Kepintaran +7% & Rekod Kelakuan kini ${p.behavior}%!` };
+      return { ok: true, msg: `Kepintaran +${gain}% & Rekod Kelakuan kini ${p.behavior}%!` };
     }
 
     if (action === 'work') {

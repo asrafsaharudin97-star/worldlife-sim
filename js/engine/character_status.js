@@ -187,13 +187,8 @@ window.CharacterStatus = {
       breakdown.push({ label: 'Pencen Bekas Pemimpin', gross: g, net: g, icon: '🏛️' });
     }
 
-    // 4) Pendapatan Pasif Media Sosial (jika >= 10,000 pengikut)
-    if (s.socialMedia && s.socialMedia.hasAccount && s.socialMedia.followers >= 10000) {
-      const usdSponsor = Math.min(85000, Math.round((s.socialMedia.followers / 10000) * 1800));
-      const g = Utils.usdToLocal(usdSponsor, s.countryId);
-      grossLocal += g;
-      breakdown.push({ label: 'Tajaan & Iklan Media Sosial', gross: g, net: g, icon: '📱' });
-    }
+    // 4) Media sosial tidak lagi memberi pendapatan pasif automatik setiap tahun
+    //    (pemain mesti melakukan tajaan/aktiviti secara aktif di menu Media Sosial)
 
     // 5) Pencen Persaraan (kekal dibayar walaupun memegang kerja kontrak 60+)
     if ((s.retired || s.isRetired) && (!s.job || s.job.isContract) && s.pensionAnnual > 0) {

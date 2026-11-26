@@ -159,7 +159,8 @@ window.LegalInheritanceEngine = {
     if (s.legal.alimonyObligations.length > 0) {
       s.legal.alimonyObligations = s.legal.alimonyObligations.filter(ob => {
         if (ob.yearsLeft <= 0) return false;
-        s.money = Math.round(s.money - ob.annualLocal);
+        const pay = Math.max(0, Math.round(ob.annualLocal || 0));
+        if (pay > 0) s.money = Math.round(s.money - pay);
         ob.yearsLeft -= 1;
         return ob.yearsLeft > 0;
       });
@@ -167,7 +168,8 @@ window.LegalInheritanceEngine = {
     if (s.legal.alimonyIncome.length > 0) {
       s.legal.alimonyIncome = s.legal.alimonyIncome.filter(inc => {
         if (inc.yearsLeft <= 0) return false;
-        s.money = Math.round(s.money + inc.annualLocal);
+        const gain = Math.max(0, Math.round(inc.annualLocal || 0));
+        if (gain > 0) s.money = Math.round(s.money + gain);
         inc.yearsLeft -= 1;
         return inc.yearsLeft > 0;
       });

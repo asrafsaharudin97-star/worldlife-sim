@@ -231,8 +231,20 @@ window.EduCareerEngine = {
       return { ok: false, reason: 'Anda sudah memiliki kelayakan sekolah menengah atau lebih tinggi.' };
     }
     if (!EducationData.hasMinLevel(ed.educationLevel, prog.reqLevel)) {
-      const reqInfo = EducationData.LEVEL_INFO[prog.reqLevel];
-      return { ok: false, reason: `Perlukan kelayakan minimum: ${reqInfo ? reqInfo.label : prog.reqLevel}.` };
+      let reason = 'Kelayakan minimum tidak dipenuhi.';
+      if (level === 'foundation' || level === 'diploma') {
+        reason = 'Perlu tamat Sekolah Menengah dahulu';
+      } else if (level === 'bachelor') {
+        reason = 'Perlu tamat Asasi atau Diploma dahulu';
+      } else if (level === 'master') {
+        reason = 'Perlu tamat Ijazah Sarjana Muda dahulu';
+      } else if (level === 'phd') {
+        reason = 'Perlu tamat Sarjana (Master) dahulu';
+      } else {
+        const reqInfo = EducationData.LEVEL_INFO[prog.reqLevel];
+        reason = `Perlu tamat ${reqInfo ? reqInfo.label : prog.reqLevel} dahulu`;
+      }
+      return { ok: false, reason };
     }
     if (prog.needsField && !fieldId) {
       return { ok: false, reason: 'Sila pilih bidang pengajian terlebih dahulu.' };
@@ -334,7 +346,7 @@ window.EduCareerEngine = {
       `🎓 Anda mendaftar ${prog.title}${fieldObj ? ` (${fieldObj.name})` : ''} di ${instName}, ${c.name} ${c.flag} — ${modeTxt}, ${finalTotalYears} tahun (${fundingLabel})!`,
       'milestone'
     );
-    GameState.adjustStats({ happiness: 8, smarts: 3 });
+    GameState.adjustStats({ happiness: 8 });
     GameState.save();
     return { ok: true, msg: `Berjaya mendaftar ${prog.title} (${finalTotalYears} tahun, ${fundingLabel})!` };
   },
@@ -379,7 +391,7 @@ window.EduCareerEngine = {
       ed.isStudying = true;
       ed.droppedOut = false;
       ed.pendingSecondaryChoice = false;
-      GameState.adjustStats({ smarts: 6, happiness: 3 });
+      GameState.adjustStats({ happiness: 3 });
       GameState.addJournalEntry(
         `🏛️ Anda diterima masuk ke ${ed.schoolName} (Sekolah Berasrama)! Yuran ${Utils.formatMoney(fee, s.countryId)} dibayar. Bonus akademik aktif!`,
         'milestone'
@@ -396,7 +408,7 @@ window.EduCareerEngine = {
       ed.isStudying = true;
       ed.droppedOut = false;
       ed.pendingSecondaryChoice = false;
-      GameState.adjustStats({ smarts: 4, health: 4 });
+      GameState.adjustStats({ health: 4 });
       GameState.addJournalEntry(
         `🔧 Anda mendaftar masuk ke ${ed.schoolName} (Sekolah Teknik/Vokasional)! Bonus kemahiran & kerja teknikal aktif.`,
         'milestone'
@@ -551,7 +563,7 @@ window.EduCareerEngine = {
     }
     s.yearlyActions.studyHard = true;
     s.education.studiedThisYear = true;
-    const gain = Utils.randInt(4, 8);
+    const gain = Utils.randInt(1, 3);
     GameState.adjustStats({ smarts: gain, happiness: -2 });
     if (s.alignment) s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + 4, 0, 100);
 
@@ -630,7 +642,6 @@ window.EduCareerEngine = {
       st.currentCgpa = Number(Math.min(4.0, curCgpa + boost).toFixed(2));
       st.gpa = st.currentCgpa;
       ed.currentCgpa = st.currentCgpa;
-      GameState.adjustStats({ smarts: Utils.randInt(3, 6) });
     }
 
     // Tetapkan semula status ulang kaji bagi tahun baharu
@@ -668,7 +679,7 @@ window.EduCareerEngine = {
       ed.hasDeansAward = true;
       ed.deansAwardCount = (ed.deansAwardCount || 0) + 1;
       deansAwardedThisYear = true;
-      GameState.adjustStats({ happiness: 10, smarts: 2 });
+      GameState.adjustStats({ happiness: 10 });
       if (window.Dynasty) Dynasty.adjustReputation(2);
       if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: 2 });
       if (window.Utils && Utils.playTone) Utils.playTone('achievement');
@@ -682,7 +693,7 @@ window.EduCareerEngine = {
     if (st.level === 'phd' && st.yearsCompleted < st.totalYears) {
       if (Utils.chance(0.55)) {
         st.publications = (st.publications || 0) + 1;
-        GameState.adjustStats({ smarts: 3, happiness: 5 });
+        GameState.adjustStats({ happiness: 5 });
         if (window.Dynasty) Dynasty.adjustReputation(2);
         GameState.addJournalEntry(
           `📄 Kajian PhD (${st.fieldName}): Kertas penyelidikan anda berjaya diterbitkan dalam jurnal antarabangsa (Jumlah penerbitan: ${st.publications})!`,
@@ -766,7 +777,7 @@ window.EduCareerEngine = {
         );
       }
 
-      GameState.adjustStats({ happiness: graduatedWithDeans ? 24 : 18, smarts: 6 });
+      GameState.adjustStats({ happiness: graduatedWithDeans ? 24 : 18 });
       ed.activeStudy = null;
       ed.isStudying = false;
       ed.stage = newRank >= 3 ? 'graduated' : 'highschool_done';

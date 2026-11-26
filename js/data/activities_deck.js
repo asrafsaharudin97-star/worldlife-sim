@@ -300,7 +300,13 @@ window.ActivitiesDeck = {
 
   _applyEffects(s, eff) {
     if (!eff) return '';
-    if (eff.stats) GameState.adjustStats(eff.stats);
+    if (eff.stats) {
+      const statsAdj = { ...eff.stats };
+      if (typeof statsAdj.smarts === 'number' && statsAdj.smarts > 0) {
+        statsAdj.smarts = Utils.clamp(Math.round(statsAdj.smarts / 3), 1, 3);
+      }
+      GameState.adjustStats(statsAdj);
+    }
     if (eff.moneyUsd) {
       s.money += Utils.usdToLocal(eff.moneyUsd, s.countryId);
     }
