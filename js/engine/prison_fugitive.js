@@ -282,18 +282,21 @@ window.PrisonFugitive = {
     const bribeCost = Utils.usdToLocal(Math.round(4500 * econScale), s.countryId);
     const bribeWinChance = Math.max(0.10, Math.min(0.75, corruption / 100));
     const health = (s.stats && s.stats.health) || 60;
-    const runWinChance = Math.max(0.12, Math.min(0.68, 0.14 + (health / 100) * 0.52));
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+    const heatPenalty = heat > 80 ? 0.14 : (heat >= 50 ? 0.06 : 0);
+    const runWinChance = Math.max(0.08, Math.min(0.68, 0.14 + (health / 100) * 0.52 - heatPenalty));
+    const shotDeathChance = heat > 80 ? 0.34 : (heat >= 50 ? 0.24 : 0.16);
     const secLevel = forcedSecurity || (baseYears >= 6 ? 'maximum' : 'medium');
 
     return {
       id: `police_arrest_${Date.now()}`,
       icon: '🚨',
-      title: 'Ditangkap Polis!',
-      text: `Pihak polis mengepung anda atas pertuduhan "${crimeName}" di ${c.name} (Tahap Korupsi Negara: ${corruption}%). Apa tindakan anda?`,
+      title: heat > 80 ? 'Diburu & Dikepung Polis!' : 'Ditangkap Polis!',
+      text: `Pihak polis mengepung anda atas pertuduhan "${crimeName}" di ${c.name} (Haba Polis: ${heat}% • Tahap Korupsi Negara: ${corruption}%). Apa tindakan anda?`,
       choices: [
         {
           label: '🏃 Lari Dari Polis',
-          hint: `Peluang lolos ~${Math.round(runWinChance * 100)}% (ikut kesihatan ${health}%) • Risiko mati ditembak atau hukuman ditambah`,
+          hint: `Peluang lolos ~${Math.round(runWinChance * 100)}% (kesihatan ${health}%, haba ${heat}%) • Risiko mati ditembak ~${Math.round(shotDeathChance * 100)}%`,
           journalType: 'warning',
           customAction: (st) => {
             if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 15, stress: 12 });
@@ -303,7 +306,7 @@ window.PrisonFugitive = {
                 toastType: 'culture'
               };
             }
-            if (Utils.chance(0.22)) {
+            if (Utils.chance(shotDeathChance)) {
               GameState.addJournalEntry('🔫 MATI DITEMBAK POLIS! Anda cuba melarikan diri ketika serbuan dan terkena tembakan maut pihak berkuasa.', 'warning');
               if (window.Sim && Sim.triggerDeath) {
                 Sim.triggerDeath('Mati Ditembak Polis Ketika Cuba Melarikan Diri');

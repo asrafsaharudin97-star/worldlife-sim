@@ -2232,6 +2232,17 @@ window.Modals = {
           <strong>🕶️ Jenayah &amp; Aktiviti Gelap</strong><br/>
           <span style="font-size:12px;">Operasi Berjaya: <strong>${crimesDoneTotal}</strong> • Reputasi Gelap: <strong>${crimRep}%</strong> • Haba Polis: <strong>${heat}%</strong></span>
         </div>
+        ${heat > 0 ? `
+          <div class="action-list" style="margin-bottom:10px;">
+            <button type="button" class="action-item" id="btn-cool-police-heat" ${s.yearlyActions.coolHeatTried ? 'disabled' : ''}>
+              <span class="ai-icon">🕵️</span>
+              <span class="ai-content">
+                <span class="ai-title">Aktiviti Rawak Kurangkan Haba Polis</span>
+                <span class="ai-desc">${s.yearlyActions.coolHeatTried ? 'Sudah dicuba tahun ini' : 'Cuba aktiviti rawak untuk sejukkan haba polis (mungkin berkurangan atau tiada perubahan)'}</span>
+              </span>
+            </button>
+          </div>
+        ` : ''}
         <div class="section-heading">🕶️ Sindiket Mafia</div>
         <div class="action-list" style="margin-bottom:10px;">
           ${mafiaCardHtml}
@@ -2470,6 +2481,16 @@ window.Modals = {
       App.renderAll();
       this.showActivities('lifestyle');
     });
+
+    const coolHeatBtn = document.getElementById('btn-cool-police-heat');
+    if (coolHeatBtn) {
+      coolHeatBtn.addEventListener('click', () => {
+        const res = Sim.tryRandomCoolHeatActivity();
+        App.toast(res.msg, !res.ok ? 'error' : (res.unchanged ? 'info' : 'success'));
+        App.renderAll();
+        this.showActivities('crime');
+      });
+    }
 
     document.querySelectorAll('.crime-btn').forEach(btn => {
       btn.addEventListener('click', () => {

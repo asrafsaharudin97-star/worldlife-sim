@@ -476,7 +476,15 @@ window.GameState = {
     const exactParentShare = report
       ? report.getHeirAmount(child.id)
       : Math.round(Math.max(0, this.getNetWorth()) / Math.max(1, livingKids.length));
-    const shareLocal = Utils.convertMoney(exactParentShare, parent.countryId, cId);
+    const parentNetDebt = report
+      ? Math.max(0, (report.totalDebt || 0) - (report.grossEstate || 0))
+      : Math.max(0, -(this.getNetWorth()));
+    const inheritedDebtLocal = parentNetDebt > 0
+      ? Utils.convertMoney(parentNetDebt, parent.countryId, cId)
+      : 0;
+    const shareLocal = inheritedDebtLocal > 0
+      ? -inheritedDebtLocal
+      : Utils.convertMoney(exactParentShare, parent.countryId, cId);
 
     const siblings = livingKids
       .filter(k => k.id !== child.id)
@@ -554,6 +562,7 @@ window.GameState = {
       },
 
       money: shareLocal,
+      inheritedDebt: inheritedDebtLocal,
       investments: 0,
       retirementFund: 0,
       annualExpensesMultiplier: 1,
@@ -603,10 +612,12 @@ window.GameState = {
               text: `👑 Legasi Generasi ${(parent.generation || 1) + 1}! Anda menyambung kehidupan sebagai ${child.name} (Umur ${childAge}) di ${city}, ${country.name} ${country.flag} selepas pemergian ${parent.name} (${parentC.flag}).`
             },
             {
-              type: 'culture',
-              text: report
-                ? `📜 Penyata Harta Pusaka (${report.systemName || 'Undang-Undang Sivil & Wasiat'}): Anda mewarisi bahagian sebanyak ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}.`
-                : `💰 Anda mewarisi ${Utils.formatMoney(shareLocal, cId)} daripada harta pusaka ${parent.name}!`
+              type: inheritedDebtLocal > 0 ? 'warning' : 'culture',
+              text: inheritedDebtLocal > 0
+                ? `💸 WARISAN HUTANG KELUARGA: ${parent.name} meninggalkan hutang belum berbayar sebanyak ${Utils.formatMoney(inheritedDebtLocal, cId)}. Sebagai keturunan seterusnya, anda wajib melangsaikan hutang ini sehingga selesai!`
+                : (report
+                    ? `📜 Penyata Harta Pusaka (${report.systemName || 'Undang-Undang Sivil & Wasiat'}): Anda mewarisi bahagian sebanyak ${Utils.formatMoney(shareLocal, cId)} daripada pusaka ${parent.name}.`
+                    : `💰 Anda mewarisi ${Utils.formatMoney(shareLocal, cId)} daripada harta pusaka ${parent.name}!`)
             }
           ]
         }
@@ -994,7 +1005,11 @@ window.GameState = {
           ? nonEntityShares[0].amount
           : (report.wasiatMode === 'charity' ? 0 : (report.distributable ?? report.distributableEstate ?? 0)))
       : Math.max(0, this.getNetWorth());
-    const netWorth = inheritedAmount;
+    const parentNetDebt = report
+      ? Math.max(0, (report.totalDebt || 0) - (report.grossEstate || 0))
+      : Math.max(0, -(this.getNetWorth()));
+    const inheritedDebtLocal = parentNetDebt > 0 ? parentNetDebt : 0;
+    const netWorth = inheritedDebtLocal > 0 ? -inheritedDebtLocal : inheritedAmount;
     const newGen = (parent.generation || 1) + 1;
     const heirAge = Utils.randInt(16, 22);
 
@@ -1036,6 +1051,7 @@ window.GameState = {
       },
 
       money: netWorth,
+      inheritedDebt: inheritedDebtLocal,
       investments: 0,
       retirementFund: 0,
       annualExpensesMultiplier: 1,

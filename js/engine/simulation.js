@@ -572,31 +572,41 @@ window.Sim = {
   },
 
   _processFinances(s, c) {
-    // Gunakan CharacterStatus.getTotalAnnualIncome sebagai SUMBER TUNGGAL untuk semua pendapatan!
-    const inc = window.CharacterStatus
-      ? CharacterStatus.getTotalAnnualIncome(s)
-      : { grossLocal: s.job ? s.job.salary : 0, netLocal: s.job ? Math.round(s.job.salary * (1 - c.taxRate)) : 0, retireContribLocal: s.job ? Math.round(s.job.salary * 0.09) : 0 };
+    const isDetained = Boolean(s.prison && s.prison.inPrison);
 
-    if (inc.netLocal > 0) {
-      s.money += inc.netLocal;
-      s.retirementFund += (inc.retireContribLocal || 0);
-      const usdGross = Utils.localToUsd(inc.grossLocal, s.countryId);
+    // Perakaunan berasaskan sifar (zero-base): tiada pendapatan automatik tanpa sumber aktif
+    const inc = isDetained
+      ? { grossLocal: 0, netLocal: 0, taxLocal: 0, retireContribLocal: 0, breakdown: [] }
+      : (window.CharacterStatus
+          ? CharacterStatus.getTotalAnnualIncome(s)
+          : {
+              grossLocal: (s.job && s.job.salary > 0) ? Math.round(s.job.salary) : 0,
+              netLocal: (s.job && s.job.salary > 0) ? Math.round(s.job.salary * (1 - (c.taxRate || 0))) : 0,
+              retireContribLocal: (s.job && s.job.salary > 0) ? Math.round(s.job.salary * 0.09) : 0,
+              breakdown: (s.job && s.job.salary > 0) ? [{ label: s.job.title, net: Math.round(s.job.salary * (1 - (c.taxRate || 0))) }] : []
+            });
+
+    const yearlyIncomeNet = Math.max(0, Math.round(inc.netLocal || 0));
+    if (yearlyIncomeNet > 0) {
+      s.money += yearlyIncomeNet;
+      s.retirementFund += Math.max(0, Math.round(inc.retireContribLocal || 0));
+      const usdGross = Utils.localToUsd(inc.grossLocal || 0, s.countryId);
       if (usdGross > s.peakSalaryUsd) s.peakSalaryUsd = Math.round(usdGross);
     }
 
-    if ((s.retired || s.isRetired) && (!s.job || s.job.isContract) && (s.pensionAnnual || 0) > 0 && !(s.prison && s.prison.inPrison)) {
+    if ((s.retired || s.isRetired) && (!s.job || s.job.isContract) && (s.pensionAnnual || 0) > 0 && !isDetained) {
       GameState.addJournalEntry(
         `🏖️ Pencen Persaraan tahunan anda berjumlah ${Utils.formatMoney(s.pensionAnnual, s.countryId)} telah dikreditkan secara automatik ke akaun tunai anda.`
       );
     }
 
     // Bersara wajib automatik pada umur >= 60 bagi pemegang kerja tetap
-    if (s.age >= 60 && s.job && !s.job.isContract && !(s.prison && s.prison.inPrison) && window.EduCareerEngine && EduCareerEngine.retireFromJob) {
+    if (s.age >= 60 && s.job && !s.job.isContract && !isDetained && window.EduCareerEngine && EduCareerEngine.retireFromJob) {
       EduCareerEngine.retireFromJob(s, { isMandatory: true });
       return;
     }
 
-    if (s.job && !(s.prison && s.prison.inPrison)) {
+    if (s.job && !isDetained) {
       s.job.years = (s.job.years || 0) + 1;
       s.yearsInCurrentJob = s.job.years;
       s.totalYearsWorked = (s.totalYearsWorked || 0) + 1;
@@ -675,22 +685,42 @@ window.Sim = {
       s.retirementFund = 0;
     }
 
-    if (s.age >= 19) {
+    let yearlyExpenses = 0;
+    if (s.age >= 19 && !isDetained) {
       const hasHome = s.assets.properties.length > 0;
       const baseLivingUsd = (hasHome ? 6500 : 12500) * c.costOfLivingIndex;
-      const livingLocal = Utils.usdToLocal(baseLivingUsd, s.countryId);
+      const livingLocal = Math.max(0, Utils.usdToLocal(baseLivingUsd, s.countryId));
       let assetUpkeep = 0;
 
-      for (const v of s.assets.vehicles) assetUpkeep += (v.upkeep || 0);
-      for (const p of s.assets.properties) assetUpkeep += (p.upkeep || 0);
+      for (const v of s.assets.vehicles) assetUpkeep += Math.max(0, v.upkeep || 0);
+      for (const p of s.assets.properties) assetUpkeep += Math.max(0, p.upkeep || 0);
 
-      if (inc.grossLocal > 0 || s.money > livingLocal) {
-        s.money -= (livingLocal + assetUpkeep);
+      if ((inc.grossLocal || 0) > 0 || s.money > livingLocal) {
+        yearlyExpenses = livingLocal + assetUpkeep;
       } else if (s.education.stage === 'university' || s.education.activeStudy) {
-        s.money -= Math.round(livingLocal * 0.35);
+        yearlyExpenses = Math.round(livingLocal * 0.35);
       } else {
-        s.money -= Math.round(livingLocal * 0.65);
+        yearlyExpenses = Math.round(livingLocal * 0.65);
       }
+
+      if (yearlyExpenses > 0) {
+        s.money -= yearlyExpenses;
+      }
+    }
+
+    // Ringkasan telus aliran tunai tahunan jika terdapat pendapatan atau perbelanjaan
+    if (yearlyIncomeNet > 0 || yearlyExpenses > 0) {
+      const parts = [];
+      if (yearlyIncomeNet > 0) {
+        const srcText = Array.isArray(inc.breakdown) && inc.breakdown.length > 0
+          ? ` (${inc.breakdown.map(b => b.label).join(', ')})`
+          : '';
+        parts.push(`Pendapatan bersih +${Utils.formatMoney(yearlyIncomeNet, s.countryId)}${srcText}`);
+      }
+      if (yearlyExpenses > 0) {
+        parts.push(`Sara hidup & penyelenggaraan -${Utils.formatMoney(yearlyExpenses, s.countryId)}`);
+      }
+      GameState.addJournalEntry(`💵 Ringkasan Kewangan Tahunan: ${parts.join(' • ')}.`);
     }
 
     // Kemas kini tahunan Enjin Aset (Trend Pasaran, Pinjaman Bank, Sewa, Penyusutan Kenderaan & Pusaka)
@@ -699,7 +729,7 @@ window.Sim = {
     }
 
     // Risiko nasib malang / bencana kewangan tahunan (boleh menyebabkan pemain kaya jatuh miskin)
-    if (s.age >= 18 && !(s.prison && s.prison.inPrison)) {
+    if (s.age >= 18 && !isDetained) {
       this._processFinancialHardship(s, c);
     }
 
@@ -715,11 +745,14 @@ window.Sim = {
           'warning'
         );
       }
-    }
-
-    if (s.age >= 8 && s.age <= 17 && Utils.chance(0.7)) {
-      const allowance = Utils.usdToLocal(Utils.randInt(40, 140), s.countryId);
-      s.money += allowance;
+    } else if ((s.inheritedDebt || 0) > 0 && s.money >= 0) {
+      s.inheritedDebt = 0;
+      GameState.adjustStats({ happiness: 15 });
+      if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: -15 });
+      GameState.addJournalEntry(
+        '🎉 HUTANG WARISAN SELESAI! Anda akhirnya berjaya melangsaikan kesemua hutang yang ditinggalkan oleh generasi terdahulu!',
+        'milestone'
+      );
     }
   },
 
@@ -779,14 +812,8 @@ window.Sim = {
   _processCultureAndFestivals(s, c) {
     if (s.age >= 3 && Utils.chance(0.55)) {
       const fest = Utils.pick(c.festivals);
-      let extra = '';
-      if (s.age <= 18 && (fest.name.includes('Raya') || fest.name.includes('New Year') || fest.name.includes('Tahun Baru') || fest.name.includes('Seollal') || fest.name.includes('Oshogatsu') || fest.name.includes('Idul Fitri'))) {
-        const gift = Utils.usdToLocal(Utils.randInt(35, 110), s.countryId);
-        s.money += gift;
-        extra = ` Anda menerima ${Utils.formatMoney(gift, s.countryId)} duit raya / sampul perayaan!`;
-      }
       GameState.addJournalEntry(
-        `${fest.icon} Menyambut ${fest.name} di ${c.name}: ${fest.desc}${extra}`,
+        `${fest.icon} Menyambut ${fest.name} di ${c.name}: ${fest.desc}`,
         'culture'
       );
       GameState.adjustStats({ happiness: Utils.randInt(3, 7), adaptation: 4 });
@@ -1234,10 +1261,13 @@ window.Sim = {
     if (!s || (s.prison && s.prison.inPrison)) return null;
     const heat = (s.alignment && typeof s.alignment.notoriety === 'number') ? s.alignment.notoriety : 0;
     if (heat < 70 || s.age < 13) return null;
-    if (!Utils.chance(0.55)) return null;
+
+    // Risiko diburu polis meningkat drastik apabila Haba Polis melebihi 80%
+    const triggerChance = heat > 80 ? 0.88 : 0.55;
+    if (!Utils.chance(triggerChance)) return null;
 
     const hasJob = Boolean(s.job);
-    const triggerFiring = hasJob && Utils.chance(0.50);
+    const triggerFiring = hasJob && heat <= 80 && Utils.chance(0.45);
 
     if (triggerFiring) {
       const jobTitle = s.job.title || 'pekerjaan semasa';
@@ -1285,7 +1315,10 @@ window.Sim = {
     }
 
     if (window.PrisonFugitive && PrisonFugitive.buildPoliceArrestEvent) {
-      return PrisonFugitive.buildPoliceArrestEvent(s, 'Rekod Haba Polis Tinggi', Utils.randInt(2, 5));
+      const heatYears = heat >= 95 ? Utils.randInt(6, 10) : (heat > 80 ? Utils.randInt(4, 7) : Utils.randInt(2, 5));
+      const heatSec = heat > 80 ? 'maximum' : 'medium';
+      const titleLabel = heat > 80 ? `Diburu Polis (Haba Kritikal ${heat}%)` : 'Rekod Haba Polis Tinggi';
+      return PrisonFugitive.buildPoliceArrestEvent(s, titleLabel, heatYears, heatSec);
     }
 
     const bribeLocal = Utils.usdToLocal(s.age < 18 ? 300 : 2500, s.countryId);
@@ -2993,6 +3026,51 @@ window.Sim = {
     s.crimeBoardIds = picked.map(cr => cr.id);
     s.crimeBoardYear = s.year;
     return picked;
+  },
+
+  tryRandomCoolHeatActivity() {
+    const s = GameState.current;
+    if (!s || !s.alive) return { ok: false, msg: 'Tiada watak aktif.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh dilakukan semasa di penjara.' };
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+    if (heat <= 0) return { ok: false, msg: 'Haba Polis anda sudah 0%.' };
+    if (s.yearlyActions.coolHeatTried) {
+      return { ok: false, msg: 'Anda sudah mencuba aktiviti menyejukkan haba polis tahun ini.' };
+    }
+    s.yearlyActions.coolHeatTried = true;
+
+    const activities = [
+      'menyertai program sukarela komuniti setempat',
+      'menyepi di kampung dan menukar penampilan harian',
+      'menderma secara senyap kepada tabung kebajikan awam',
+      'menghadiri kempen kesedaran anti-jenayah',
+      'mengelak tempat tumpuan dan kekal rendah profil'
+    ];
+    const picked = Utils.pick(activities);
+
+    // 65% peluang berjaya kurangkan haba polis, 35% peluang tiada perubahan langsung
+    if (Utils.chance(0.65)) {
+      const drop = Utils.randInt(8, 22);
+      const actualDrop = Math.min(heat, drop);
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ notoriety: -actualDrop, karma: 3, stress: -5 });
+      } else if (s.alignment) {
+        s.alignment.notoriety = Math.max(0, heat - actualDrop);
+      }
+      GameState.addJournalEntry(
+        `🕵️ SEJUKKAN HABA POLIS: Anda ${picked}. Pemantauan polis berkurangan dan Haba Polis turun -${actualDrop}%!`,
+        'culture'
+      );
+      GameState.save();
+      return { ok: true, msg: `Berjaya! Anda ${picked} — Haba Polis turun -${actualDrop}%.` };
+    }
+
+    GameState.addJournalEntry(
+      `🕵️ SEJUKKAN HABA POLIS: Anda cuba ${picked}, namun pihak polis masih memantau rapat — Haba Polis tidak berubah (${heat}%).`,
+      'info'
+    );
+    GameState.save();
+    return { ok: true, unchanged: true, msg: `Anda ${picked}, tetapi Haba Polis tidak berubah (${heat}%).` };
   },
 
   commitCrime(crimeId) {
