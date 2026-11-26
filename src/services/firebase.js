@@ -227,7 +227,7 @@ const FirebaseService = {
   },
 
   async listCloudSlots() {
-    if (!db || !this.isLoggedIn()) return {};
+    if (!db || !this.isLoggedIn()) return { slots: {}, cloudError: false };
     this.setSyncState('syncing');
     try {
       const colRef = collection(db, 'users', this.user.uid, 'saves');
@@ -239,12 +239,12 @@ const FirebaseService = {
         }
       });
       this.setSyncState('synced');
-      return map;
+      return { slots: map, cloudError: false };
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
       console.error('[Firebase] listCloudSlots error:', detail, err);
       this.setSyncState('error', detail);
-      return {};
+      return { slots: {}, cloudError: true, errorDetail: detail };
     }
   },
 

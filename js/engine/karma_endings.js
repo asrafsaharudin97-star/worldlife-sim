@@ -448,16 +448,24 @@ window.KarmaEndings = {
                   KarmaEndings.addHighlight('⚖️', 'Membersihkan nama daripada fitnah jenayah besar');
                   return { outcome: `Anda memenangi saman malu bernilai ${Utils.formatMoney(comp, st.countryId)} dan dihormati ramai!` };
                 } else {
-                  st.criminalRecord += 1;
-                  st.prison.inPrison = true;
-                  st.prison.yearsLeft = 2;
-                  st.prison.totalServed = (st.prison.totalServed || 0) + 2;
-                  st.prison.crimeName = 'Difitnah Dalam Skandal Kewangan';
-                  st.job = null;
-                  KarmaEndings.adjustAlignment({ stress: 22, notoriety: 15 });
-                  GameState.adjustStats({ happiness: -24, health: -6 });
-                  KarmaEndings.addHighlight('⛓️', 'Dipenjarakan akibat fitnah skandal kewangan');
-                  return { outcome: 'Anda dihantar ke penjara selama 2 tahun walaupun tidak bersalah. Ini ujian paling berat dalam hidup anda.' };
+                  if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+                    PrisonFugitive.enterPrisonState(st, 'Difitnah Dalam Skandal Kewangan', 2, 'minimum');
+                  } else {
+                    st.criminalRecord = (st.criminalRecord || 0) + 1;
+                    st.prison.inPrison = true;
+                    st.prison.detentionType = st.age < 18 ? 'juvenile' : 'prison';
+                    st.prison.yearsLeft = 2;
+                    st.prison.originalSentence = 2;
+                    st.prison.yearsServed = 0;
+                    st.prison.totalServed = (st.prison.totalServed || 0) + 2;
+                    st.prison.crimeName = 'Difitnah Dalam Skandal Kewangan';
+                    st.prison.securityLevel = 'minimum';
+                    st.job = null;
+                    KarmaEndings.adjustAlignment({ stress: 22, notoriety: 15 });
+                    GameState.adjustStats({ happiness: -24, health: -6 });
+                    KarmaEndings.addHighlight('⛓️', 'Dipenjarakan akibat fitnah skandal kewangan');
+                  }
+                  return { outcome: 'Anda dihantar menjalani tahanan selama 2 tahun walaupun tidak bersalah. Ini ujian paling berat dalam hidup anda.' };
                 }
               }
             }

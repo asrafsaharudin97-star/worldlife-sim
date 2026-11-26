@@ -409,6 +409,18 @@ window.App = {
     });
 
     document.getElementById('btn-start-life').addEventListener('click', () => {
+      if (!GameState.isGuestMode) {
+        const activeSlotId = GameState.getActiveSlotId();
+        const existing = GameState.getLocalSlot(activeSlotId);
+        if (existing) {
+          const slotNum = activeSlotId.replace('slot_', '');
+          const existingName = existing.characterName || 'Watak Sedia Ada';
+          const ok = window.confirm(
+            `Slot ${slotNum} sudah mengandungi simpanan ${existingName}. Timpa slot ini dengan kehidupan baru?`
+          );
+          if (!ok) return;
+        }
+      }
       const customName = document.getElementById('custom-name-input').value.trim();
       GameState.createNewLife({
         countryId: this.creator.countryId,
@@ -667,7 +679,7 @@ window.App = {
         }
 
         // Simpan salinan tempatan & Cloud ke targetSlotId tanpa menukar activeSlotId
-        GameState.saveLocalSlot(targetSlotId, deepCopyState);
+        GameState.saveLocalSlot(targetSlotId, deepCopyState, payload);
         return await GameState.syncSlotToCloud(targetSlotId, payload);
       });
 

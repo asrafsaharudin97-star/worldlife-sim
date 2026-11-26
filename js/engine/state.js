@@ -1391,16 +1391,16 @@ window.GameState = {
     return this.SLOT_IDS.some(id => Boolean(slots[id]));
   },
 
-  saveLocalSlot(slotId, stateObj = null) {
+  saveLocalSlot(slotId, stateObj = null, payloadOverride = null) {
     if (this.isGuestMode) return true;
     const s = stateObj || this.current;
-    if (!s || !this.SLOT_IDS.includes(slotId)) return false;
-    this.trimJournal(s);
-    const payload = this.buildSlotPayload(slotId, s);
+    if ((!s && !payloadOverride) || !this.SLOT_IDS.includes(slotId)) return false;
+    if (s) this.trimJournal(s);
+    const payload = payloadOverride || this.buildSlotPayload(slotId, s);
     if (!payload) return false;
     const key = this._slotStorageKey(slotId);
     if (window.SafeStorage) {
-      return SafeStorage.setJSON(key, payload, () => this.buildSlotPayload(slotId, s));
+      return SafeStorage.setJSON(key, payload, () => payloadOverride || this.buildSlotPayload(slotId, s));
     }
     try {
       localStorage.setItem(key, JSON.stringify(payload));
@@ -1458,6 +1458,44 @@ window.GameState = {
     }
   },
 
+  _cloudSyncTimer: null,
+  _cloudSyncInFlight: false,
+  _cloudSyncQueued: false,
+  _cloudSyncWaiters: [],
+
+  async _drainCloudSyncQueue() {
+    if (this._cloudSyncInFlight) {
+      this._cloudSyncQueued = true;
+      return;
+    }
+    this._cloudSyncInFlight = true;
+    let lastRes = { ok: false, msg: 'Tiada watak aktif.' };
+    try {
+      do {
+        this._cloudSyncQueued = false;
+        if (this.isGuestMode) {
+          lastRes = { ok: false, guest: true, msg: 'Mod Tetamu — progres tidak disimpan.' };
+        } else if (!this.current) {
+          lastRes = { ok: false, msg: 'Tiada watak aktif.' };
+        } else if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
+          lastRes = { ok: false, offline: true, msg: 'Disimpan secara tempatan.' };
+        } else {
+          const slotId = this.getActiveSlotId();
+          const latestPayload = this.buildSlotPayload(slotId, this.current);
+          lastRes = await this.syncSlotToCloud(slotId, latestPayload);
+        }
+      } while (this._cloudSyncQueued);
+    } catch (err) {
+      const detail = (err && (err.code || err.message)) || 'unknown';
+      console.error('[State] syncActiveSlotToCloud error:', err);
+      lastRes = { ok: false, msg: `Ralat Cloud Save (${detail}). Simpanan tempatan kekal selamat.` };
+    } finally {
+      this._cloudSyncInFlight = false;
+      const waiters = this._cloudSyncWaiters.splice(0, this._cloudSyncWaiters.length);
+      waiters.forEach(resolve => resolve(lastRes));
+    }
+  },
+
   async syncActiveSlotToCloud(reason = 'manual') {
     if (this.isGuestMode) return { ok: false, guest: true, msg: 'Mod Tetamu — progres tidak disimpan.' };
     if (!this.current) return { ok: false, msg: 'Tiada watak aktif.' };
@@ -1466,13 +1504,23 @@ window.GameState = {
     if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
       return { ok: false, offline: true, msg: 'Disimpan secara tempatan.' };
     }
-    try {
-      return await this.syncSlotToCloud(slotId, this.buildSlotPayload(slotId, this.current));
-    } catch (err) {
-      const detail = (err && (err.code || err.message)) || 'unknown';
-      console.error('[State] syncActiveSlotToCloud error:', err);
-      return { ok: false, msg: `Ralat Cloud Save (${detail}). Simpanan tempatan kekal selamat.` };
-    }
+
+    const shouldDebounce = reason === 'age_up';
+    return new Promise((resolve) => {
+      this._cloudSyncWaiters.push(resolve);
+      if (this._cloudSyncTimer) {
+        clearTimeout(this._cloudSyncTimer);
+        this._cloudSyncTimer = null;
+      }
+      if (shouldDebounce) {
+        this._cloudSyncTimer = setTimeout(() => {
+          this._cloudSyncTimer = null;
+          this._drainCloudSyncQueue();
+        }, 650);
+      } else {
+        this._drainCloudSyncQueue();
+      }
+    });
   },
 
   resolveDefaultActiveSlot(slotsMap = null, { preserveExplicit = false } = {}) {
@@ -1506,7 +1554,9 @@ window.GameState = {
   async getMergedSlots() {
     const localMap = this.getLocalSlots();
     const isCloud = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
-    const cloudMap = isCloud ? await FirebaseService.listCloudSlots() : {};
+    const cloudRes = isCloud ? await FirebaseService.listCloudSlots() : { slots: {}, cloudError: false };
+    const cloudError = Boolean(cloudRes && cloudRes.cloudError);
+    const cloudMap = (cloudRes && cloudRes.slots) ? cloudRes.slots : {};
     const merged = {};
     const localOnlyIds = [];
 
@@ -1520,14 +1570,14 @@ window.GameState = {
         merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
       } else if (loc) {
         merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
-        if (isCloud) localOnlyIds.push(id);
+        if (isCloud && !cloudError) localOnlyIds.push(id);
       } else {
         merged[id] = null;
       }
     });
 
     const activeSlotId = this.resolveDefaultActiveSlot(merged, { preserveExplicit: true });
-    return { slots: merged, localOnlyIds, isCloud, activeSlotId };
+    return { slots: merged, localOnlyIds, isCloud, activeSlotId, cloudError };
   },
 
   async uploadLocalSlotsToCloud() {

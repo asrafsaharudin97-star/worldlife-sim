@@ -2549,7 +2549,7 @@ window.Modals = {
       bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot simpanan...</div>`
     });
 
-    const { slots, localOnlyIds, isCloud, activeSlotId } = await GameState.getMergedSlots();
+    const { slots, localOnlyIds, isCloud, activeSlotId, cloudError } = await GameState.getMergedSlots();
     if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
     const syncBadgeText = !isCloud
@@ -2600,7 +2600,17 @@ window.Modals = {
       `;
     }
 
-    const uploadLocalBanner = (isCloud && localOnlyIds.length > 0) ? `
+    const cloudErrorBanner = cloudError ? `
+      <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12px;line-height:1.45;">
+          <strong>⚠️ Gagal memuatkan senarai slot dari Cloud.</strong><br/>
+          Sila cuba muat semula. Tindakan menimpa atau mencipta slot baru dikunci sementara bagi melindungi simpanan Cloud anda.
+        </div>
+        <button type="button" id="slots-btn-retry-cloud" class="btn-sm primary" style="background:#dc2626;">🔄 Cuba Lagi</button>
+      </div>
+    ` : '';
+
+    const uploadLocalBanner = (isCloud && !cloudError && localOnlyIds.length > 0) ? `
       <div class="info-banner highlight" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <div style="font-size:12px;">
           <strong>💾 ${localOnlyIds.length} simpanan tempatan ditemui!</strong><br/>
@@ -2610,7 +2620,7 @@ window.Modals = {
       </div>
     ` : '';
 
-    const canSaveCurrentHere = Boolean(isCloud && !GameState.isGuestMode && GameState.current);
+    const canSaveCurrentHere = Boolean(isCloud && !cloudError && !GameState.isGuestMode && GameState.current);
 
     const slotsHtml = GameState.SLOT_IDS.map((slotId, idx) => {
       const slotNum = idx + 1;
@@ -2621,16 +2631,16 @@ window.Modals = {
           <div class="migration-card" style="border-style:dashed;background:#f8fafc;">
             <div class="mig-head">
               <div class="mig-title">📂 Slot ${slotNum} ${isActive ? '<span class="cat-badge synergy">Aktif</span>' : ''}</div>
-              <span style="font-size:11.5px;color:#64748b;">Kosong</span>
+              <span style="font-size:11.5px;color:#64748b;">${cloudError ? 'Status Cloud Tidak Pasti' : 'Kosong'}</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
               ${canSaveCurrentHere ? `
-                <button type="button" class="btn-sm primary slot-save-current-btn" data-slot="${slotId}" style="width:100%;">
+                <button type="button" class="btn-sm primary slot-save-current-btn" data-slot="${slotId}" style="width:100%;" ${cloudError ? 'disabled' : ''}>
                   💾 Simpan Permainan Semasa di Sini
                 </button>
               ` : ''}
-              <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-new-btn" data-slot="${slotId}" style="width:100%;">
-                ➕ Mula Kehidupan Baru di Slot Ini
+              <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-new-btn" data-slot="${slotId}" style="width:100%;" ${cloudError ? 'disabled' : ''}>
+                ${cloudError ? '🔒 Dikunci (Ralat Cloud)' : '➕ Mula Kehidupan Baru di Slot Ini'}
               </button>
             </div>
           </div>
@@ -2670,9 +2680,9 @@ window.Modals = {
                 ${isActive ? '💾 Kemas Kini Simpanan' : '💾 Timpa dengan Permainan Semasa'}
               </button>
             ` : ''}
-            <div class="mig-actions" style="grid-template-columns:${isCloud && !canSaveCurrentHere ? 'repeat(3,1fr)' : 'repeat(2,1fr)'};">
+            <div class="mig-actions" style="grid-template-columns:${isCloud && !cloudError && !canSaveCurrentHere ? 'repeat(3,1fr)' : 'repeat(2,1fr)'};">
               <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-load-btn" data-slot="${slotId}">▶ Muatkan</button>
-              ${isCloud && !canSaveCurrentHere ? `<button type="button" class="btn-sm secondary slot-sync-btn" data-slot="${slotId}">☁️ Sync</button>` : ''}
+              ${isCloud && !cloudError && !canSaveCurrentHere ? `<button type="button" class="btn-sm secondary slot-sync-btn" data-slot="${slotId}">☁️ Sync</button>` : ''}
               <button type="button" class="btn-sm secondary slot-del-btn" data-slot="${slotId}" style="color:#dc2626;">🗑️ Padam</button>
             </div>
           `}
@@ -2686,11 +2696,17 @@ window.Modals = {
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
       bodyHtml: `
         ${authBarHtml}
+        ${cloudErrorBanner}
         ${uploadLocalBanner}
         <div class="section-heading">📂 Senarai Slot Simpanan (Slot 1 – Slot 5)</div>
         ${slotsHtml}
       `
     });
+
+    const retryCloudBtn = document.getElementById('slots-btn-retry-cloud');
+    if (retryCloudBtn) {
+      retryCloudBtn.addEventListener('click', () => this.showSaveSlotsModal(null));
+    }
 
     const loginBtn = document.getElementById('slots-btn-login');
     if (loginBtn) {
