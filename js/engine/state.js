@@ -408,6 +408,16 @@ window.GameState = {
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureFamilyTrust) {
       LegalInheritanceEngine.ensureFamilyTrust(s);
     }
+    const curCountry = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    if (curCountry) {
+      s.heritageLabel = this.cleanHeritageLabel(s.heritageLabel, curCountry.name);
+      if (typeof s.city === 'string' && s.city === `Pelabuhan ${curCountry.name}` && Array.isArray(curCountry.cities) && curCountry.cities.length > 0) {
+        s.city = curCountry.cities[0];
+      }
+      if (typeof s.birthCity === 'string' && s.birthCity === `Pelabuhan ${curCountry.name}` && Array.isArray(curCountry.cities) && curCountry.cities.length > 0) {
+        s.birthCity = curCountry.cities[0];
+      }
+    }
     if (window.Relationships && Relationships.ensureRelationshipFields) {
       Relationships.ensureRelationshipFields(s);
     }
@@ -481,6 +491,16 @@ window.GameState = {
     } else if (effects.adaptation && s.countryId === s.birthCountryId) {
       s.stats.happiness = Utils.clamp(s.stats.happiness + Math.round(effects.adaptation / 4));
     }
+  },
+
+  cleanHeritageLabel(rawLabel, currentCountryName = '') {
+    const cur = String(currentCountryName || '').trim();
+    const stripped = String(rawLabel || '').replace(/\s*\([^)]*\)/g, '').trim();
+    if (!stripped) return cur || 'Dunia';
+    if (!cur || stripped.toLowerCase() === cur.toLowerCase() || stripped.toLowerCase() === `anak jati ${cur.toLowerCase()}`) {
+      return cur || stripped;
+    }
+    return `${cur} (Asal ${stripped})`;
   },
 
   hasLivingParent(s = this.current) {
@@ -593,7 +613,7 @@ window.GameState = {
       name: child.name,
       gender: child.gender,
       heritageId: country.heritages[0].id,
-      heritageLabel: `${parent.heritageLabel} (${country.name})`,
+      heritageLabel: this.cleanHeritageLabel(parent.heritageLabel, country.name),
       isAdopted: Boolean(child.isAdopted),
       isOutOfWedlock: Boolean(child.isOutOfWedlock),
       age: childAge,

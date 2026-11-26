@@ -921,9 +921,12 @@ window.App = {
     document.getElementById('char-subtitle').textContent = `${roleText} • ${s.city}, ${c.name}${sickSuffix}`;
 
     const genPrefix = (s.generation && s.generation > 1) ? `Gen ${s.generation} • ` : '';
+    const cleanHeritage = (window.GameState && GameState.cleanHeritageLabel)
+      ? GameState.cleanHeritageLabel(s.heritageLabel, c.name)
+      : (s.heritageLabel || c.name);
     const cultureTag = s.countryId === s.birthCountryId
-      ? `${genPrefix}${birthC.flag} ${s.heritageLabel}`
-      : `${genPrefix}Lahir ${birthC.flag} → ${c.flag} ${c.name}`;
+      ? `${genPrefix}${birthC.flag} ${cleanHeritage}`
+      : `${genPrefix}${c.flag} ${c.name} (Asal ${birthC.name})`;
     document.getElementById('char-culture-tag').textContent = cultureTag;
 
     const moneyEl = document.getElementById('char-money');
