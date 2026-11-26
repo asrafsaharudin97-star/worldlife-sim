@@ -204,6 +204,9 @@ window.GameState = {
       mcCountThisYear: 0,
       mcTotalInJob: 0,
       mcWarnings: 0,
+      creditScore: 620,
+      loans: [],
+      loanBlacklisted: false,
       peakSalaryUsd: 0,
 
       assets: {
@@ -391,6 +394,9 @@ window.GameState = {
     if (typeof s.mcCountThisYear !== 'number') s.mcCountThisYear = 0;
     if (typeof s.mcTotalInJob !== 'number') s.mcTotalInJob = 0;
     if (typeof s.mcWarnings !== 'number') s.mcWarnings = 0;
+    if (typeof s.creditScore !== 'number' || Number.isNaN(s.creditScore)) s.creditScore = 620;
+    if (!Array.isArray(s.loans)) s.loans = [];
+    if (typeof s.loanBlacklisted !== 'boolean') s.loanBlacklisted = false;
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);

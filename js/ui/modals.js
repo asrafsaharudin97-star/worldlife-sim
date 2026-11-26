@@ -2122,6 +2122,15 @@ window.Modals = {
             </span>
             <span class="ai-right">${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? 'Rawat →' : 'Buka →'}</span>
           </button>
+          ${s.age >= 18 ? `
+          <button class="action-item" id="btn-open-loans" style="border-color:${Array.isArray(s.loans) && s.loans.length > 0 ? '#f59e0b' : '#3b82f6'};">
+            <span class="ai-icon">💳</span>
+            <span class="ai-content">
+              <span class="ai-title">Pinjaman &amp; Hutang${Array.isArray(s.loans) && s.loans.length > 0 ? ` (${s.loans.length} Aktif)` : ''}</span>
+              <span class="ai-desc">Pinjaman Bank, Skor Kredit, Pinjaman Ah Long &amp; bayaran ansuran hutang</span>
+            </span>
+            <span class="ai-right">Buka →</span>
+          </button>` : ''}
           <button class="action-item" id="act-doc-pub" ${docPubDone || !canAffordPub ? 'disabled' : ''}>
             <span class="ai-icon">🏥</span>
             <span class="ai-content">
@@ -2426,6 +2435,11 @@ window.Modals = {
     const openHospitalBtn = document.getElementById('btn-open-hospital');
     if (openHospitalBtn) openHospitalBtn.addEventListener('click', () => {
       this.showHospitalModal();
+    });
+
+    const openLoansBtn = document.getElementById('btn-open-loans');
+    if (openLoansBtn) openLoansBtn.addEventListener('click', () => {
+      this.showLoansModal('bank');
     });
 
     const docPub = document.getElementById('act-doc-pub');
@@ -3548,5 +3562,155 @@ window.Modals = {
         this.showHospitalModal();
       });
     }
+  },
+
+  // ==========================================================================
+  // PINJAMAN & HUTANG (PINJAMAN BANK, SKOR KREDIT & PINJAMAN AH LONG)
+  // ==========================================================================
+  showLoansModal(activeTab = 'bank') {
+    const s = GameState.current;
+    if (!s || !window.LoansEngine) return;
+    LoansEngine.ensureFields(s);
+    const prof = LoansEngine.calculateCreditProfile(s);
+    const totalDebt = LoansEngine.getTotalDebt(s);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    const loans = Array.isArray(s.loans) ? s.loans : [];
+
+    const activeLoansHtml = loans.length === 0
+      ? `<div class="info-banner" style="background:#f8fafc;margin-bottom:10px;">Tiada hutang aktif buat masa ini.</div>`
+      : loans.map(l => {
+          const isAl = l.lenderType === 'ahlong';
+          const due = Math.min(l.balance, l.yearlyDue);
+          return `
+            <div class="migration-card" style="border-color:${isAl ? '#ef4444' : '#3b82f6'};margin-bottom:10px;">
+              <div class="mig-head">
+                <div class="mig-title">${isAl ? '🦈' : '🏦'} ${Utils.escapeHtml(l.lenderName)}</div>
+                <strong style="color:#dc2626;">${Utils.formatMoney(l.balance, s.countryId)}</strong>
+              </div>
+              <div style="font-size:11.5px;color:#475569;margin-bottom:8px;">
+                Faedah Tahunan: <strong>${Math.round(l.interestRate * 100)}%/thn</strong> • Ansuran: <strong>${Utils.formatMoney(due, s.countryId)}/thn</strong>
+                ${l.missedPayments > 0 ? `<br/><span style="color:#dc2626;font-weight:700;">⚠️ Tertunggak ${l.missedPayments} tahun!</span>` : ''}
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn-sm loan-pay-inst" data-loan-id="${l.id}" style="flex:1;" ${l.paidThisYear ? 'disabled' : ''}>
+                  ${l.paidThisYear ? '✓ Ansuran Tahun Ini Dibayar' : '💵 Bayar Ansuran Tahun Ini'}
+                </button>
+                <button type="button" class="btn-sm secondary loan-pay-full" data-loan-id="${l.id}" style="flex:1;">
+                  💰 Langsaikan Penuh
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+    let tabBody = '';
+    if (activeTab === 'bank') {
+      const bankOffers = LoansEngine.getBankOffers(s);
+      const bankCount = loans.filter(l => l.lenderType === 'bank').length;
+      if (prof.autoReject) {
+        tabBody = `<div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;">🔒 <strong>Permohonan Bank Ditolak:</strong> ${Utils.escapeHtml(prof.reason || 'Tidak layak memohon pinjaman bank buat masa ini.')}</div>`;
+      } else {
+        tabBody = `
+          <div class="info-banner" style="margin-bottom:8px;">
+            Pinjaman bank aktif: <strong>${bankCount}/${LoansEngine.MAX_BANK_LOANS}</strong> • Kadar faedah anggaran: <strong>${Math.round((prof.interestRate || 0.16) * 100)}%/thn</strong>
+          </div>
+          <div class="action-list">
+            ${bankOffers.map(o => `
+              <button type="button" class="action-item loan-apply-bank" data-offer-id="${o.id}" ${bankCount >= LoansEngine.MAX_BANK_LOANS || inPrison ? 'disabled' : ''}>
+                <span class="ai-icon">🏦</span>
+                <span class="ai-content">
+                  <span class="ai-title">${Utils.escapeHtml(o.title)} (${Utils.formatMoney(o.principal, s.countryId)})</span>
+                  <span class="ai-desc">Ansuran anggaran: ${Utils.formatMoney(o.yearlyDue, s.countryId)}/thn • Tempoh ${o.years} tahun</span>
+                </span>
+                <span class="ai-right free">Mohon</span>
+              </button>
+            `).join('')}
+          </div>
+        `;
+      }
+    } else {
+      const alOffers = LoansEngine.getAhLongOffers(s);
+      const alCount = loans.filter(l => l.lenderType === 'ahlong').length;
+      tabBody = `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:8px;">
+          ⚠️ <strong>Tiada semakan kredit • Faedah sangat tinggi • Risiko gangguan melampau jika lewat bayar!</strong><br/>
+          Pinjaman Ah Long aktif: <strong>${alCount}/${LoansEngine.MAX_AHLONG_LOANS}</strong>
+        </div>
+        <div class="action-list">
+          ${alOffers.map(o => `
+            <button type="button" class="action-item loan-apply-ahlong" data-offer-id="${o.id}" ${alCount >= LoansEngine.MAX_AHLONG_LOANS || inPrison || s.age < 18 ? 'disabled' : ''}>
+              <span class="ai-icon">🦈</span>
+              <span class="ai-content">
+                <span class="ai-title">${Utils.escapeHtml(o.title)} (${Utils.formatMoney(o.principal, s.countryId)})</span>
+                <span class="ai-desc">Faedah ${Math.round(o.interestRate * 100)}%/thn berganda • Ansuran awal: ${Utils.formatMoney(o.yearlyDue, s.countryId)}/thn</span>
+              </span>
+              <span class="ai-right cost">Ambil Tunai</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    this.open({
+      icon: '💳',
+      title: 'Pinjaman & Hutang',
+      subtitle: `Baki Bank: ${Utils.formatMoney(s.money, s.countryId)} • Jumlah Hutang: ${Utils.formatMoney(totalDebt, s.countryId)}`,
+      bodyHtml: `
+        <div class="info-banner" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;background:#f8fafc;">
+          <span>📊 Skor Kredit: <strong>${prof.score}</strong> / 850</span>
+          <span style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:${prof.bg};color:${prof.color};">${prof.label}</span>
+        </div>
+
+        <div class="section-heading">📋 Senarai Hutang Aktif (${loans.length})</div>
+        ${activeLoansHtml}
+
+        <div class="tab-pills" style="margin-top:10px;margin-bottom:10px;">
+          <button type="button" class="tab-pill loan-tab-btn ${activeTab === 'bank' ? 'active' : ''}" data-loan-tab="bank">🏦 Pinjaman Bank</button>
+          <button type="button" class="tab-pill loan-tab-btn ${activeTab === 'ahlong' ? 'active' : ''}" data-loan-tab="ahlong">🦈 Pinjaman Ah Long (Tanpa Syarat)</button>
+        </div>
+
+        ${tabBody}
+      `
+    });
+
+    document.querySelectorAll('.loan-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.showLoansModal(btn.dataset.loanTab));
+    });
+
+    document.querySelectorAll('.loan-apply-bank').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LoansEngine.takeBankLoan(s, btn.dataset.offerId);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showLoansModal('bank');
+      });
+    });
+
+    document.querySelectorAll('.loan-apply-ahlong').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LoansEngine.takeAhLongLoan(s, btn.dataset.offerId);
+        App.toast(res.msg, res.ok ? 'culture' : 'error');
+        App.renderAll();
+        this.showLoansModal('ahlong');
+      });
+    });
+
+    document.querySelectorAll('.loan-pay-inst').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LoansEngine.payInstallment(s, btn.dataset.loanId);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showLoansModal(activeTab);
+      });
+    });
+
+    document.querySelectorAll('.loan-pay-full').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LoansEngine.payOffLoan(s, btn.dataset.loanId);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showLoansModal(activeTab);
+      });
+    });
   }
 };

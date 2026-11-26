@@ -361,6 +361,12 @@ window.Sim = {
     if (window.HealthMedicalEngine && HealthMedicalEngine.tickYearlyHealth) {
       HealthMedicalEngine.tickYearlyHealth(s, c);
     }
+    if (window.LoansEngine && LoansEngine.tickYearlyLoans) {
+      const loanEv = LoansEngine.tickYearlyLoans(s);
+      if (loanEv && window.Modals && Modals.showEvent) {
+        setTimeout(() => Modals.showEvent(loanEv), 260);
+      }
+    }
     if (window.CharacterStatus && CharacterStatus.recordPeakRole) {
       CharacterStatus.recordPeakRole(s);
     }
