@@ -199,6 +199,7 @@ window.GameState = {
       job: null,
       partTimeJob: null,
       jobAppsThisYear: 0,
+      jobActionsUsedThisYear: [],
       peakSalaryUsd: 0,
 
       assets: {
@@ -381,6 +382,7 @@ window.GameState = {
     }
     if (!('partTimeJob' in s)) s.partTimeJob = null;
     if (typeof s.jobAppsThisYear !== 'number') s.jobAppsThisYear = 0;
+    if (!Array.isArray(s.jobActionsUsedThisYear)) s.jobActionsUsedThisYear = [];
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);

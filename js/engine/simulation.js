@@ -23,6 +23,7 @@ window.Sim = {
     );
     s.yearlyActions = {};
     s.jobAppsThisYear = 0;
+    s.jobActionsUsedThisYear = [];
     s.stoleMoneyIdsThisYear = [];
     s.askedMoneyCountThisYear = 0;
 

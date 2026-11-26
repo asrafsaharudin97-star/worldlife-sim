@@ -144,30 +144,37 @@ window.CareerModals = {
         </div>
 
         <div class="action-list" style="margin-bottom:12px;">
-          <button type="button" class="action-item" id="act-work-hard" ${s.yearlyActions.workHard ? 'disabled' : ''}>
+          ${(() => {
+            const usedActs = Array.isArray(s.jobActionsUsedThisYear) ? s.jobActionsUsedThisYear : [];
+            const doneWorkHard = Boolean(usedActs.includes('work_hard') || (s.yearlyActions && s.yearlyActions.workHard));
+            const doneWorkNet = Boolean(usedActs.includes('work_network') || (s.yearlyActions && s.yearlyActions.workNetwork));
+            const doneRaise = Boolean(usedActs.includes('ask_raise') || (s.yearlyActions && s.yearlyActions.askedRaise));
+            return `
+          <button type="button" class="action-item ${doneWorkHard ? 'act-done-card' : ''}" id="act-work-hard" ${doneWorkHard ? 'disabled' : ''}>
             <span class="ai-icon">⚡</span>
             <span class="ai-content">
               <span class="ai-title">Kerja Keras &amp; Lebih Masa</span>
               <span class="ai-desc">Berikan komitmen tambahan untuk tugasan dan projek syarikat</span>
             </span>
-            <span class="ai-right">Laksana</span>
+            <span class="ai-right" ${doneWorkHard ? 'style="color:#64748b;"' : ''}>${doneWorkHard ? 'Selesai Tahun Ini' : 'Laksana'}</span>
           </button>
-          <button type="button" class="action-item" id="act-work-network" ${s.yearlyActions.workNetwork ? 'disabled' : ''}>
+          <button type="button" class="action-item ${doneWorkNet ? 'act-done-card' : ''}" id="act-work-network" ${doneWorkNet ? 'disabled' : ''}>
             <span class="ai-icon">🤝</span>
             <span class="ai-content">
               <span class="ai-title">Bina Rangkaian (Networking)</span>
               <span class="ai-desc">Berkenalan dan bergaul dengan pengarah serta tokoh industri</span>
             </span>
-            <span class="ai-right">Laksana</span>
+            <span class="ai-right" ${doneWorkNet ? 'style="color:#64748b;"' : ''}>${doneWorkNet ? 'Selesai Tahun Ini' : 'Laksana'}</span>
           </button>
-          <button type="button" class="action-item" id="act-raise" ${s.yearlyActions.askedRaise ? 'disabled' : ''}>
+          <button type="button" class="action-item ${doneRaise ? 'act-done-card' : ''}" id="act-raise" ${doneRaise ? 'disabled' : ''}>
             <span class="ai-icon">💰</span>
             <span class="ai-content">
               <span class="ai-title">Minta Kenaikan Gaji</span>
               <span class="ai-desc">Berunding dengan majikan mengenai semakan gaji tahunan anda</span>
             </span>
-            <span class="ai-right">Rundingan</span>
-          </button>
+            <span class="ai-right" ${doneRaise ? 'style="color:#64748b;"' : ''}>${doneRaise ? 'Selesai Tahun Ini' : 'Rundingan'}</span>
+          </button>`;
+          })()}
           <button type="button" class="action-item" id="act-retire-job" ${retElig.ok || s.job.isContract ? '' : 'style="opacity:0.75;"'}>
             <span class="ai-icon">🏖️</span>
             <span class="ai-content">
@@ -748,9 +755,19 @@ window.CareerModals = {
       const openCertsBtn = document.getElementById('btn-jobs-open-certs');
       if (openCertsBtn) openCertsBtn.addEventListener('click', () => this.showHub('certs'));
 
+      const markJobActionUsed = (actionId) => {
+        if (!Array.isArray(s.jobActionsUsedThisYear)) s.jobActionsUsedThisYear = [];
+        if (!s.jobActionsUsedThisYear.includes(actionId)) {
+          s.jobActionsUsedThisYear.push(actionId);
+          GameState.save();
+        }
+      };
+
       const workBtn = document.getElementById('act-work-hard');
       if (workBtn) workBtn.addEventListener('click', () => {
+        if (Array.isArray(s.jobActionsUsedThisYear) && s.jobActionsUsedThisYear.includes('work_hard')) return;
         const res = Sim.workHarder();
+        markJobActionUsed('work_hard');
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showHub('jobs');
@@ -758,7 +775,9 @@ window.CareerModals = {
 
       const netBtn = document.getElementById('act-work-network');
       if (netBtn) netBtn.addEventListener('click', () => {
+        if (Array.isArray(s.jobActionsUsedThisYear) && s.jobActionsUsedThisYear.includes('work_network')) return;
         const res = EduCareerEngine.networkAtWork();
+        markJobActionUsed('work_network');
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showHub('jobs');
@@ -766,7 +785,9 @@ window.CareerModals = {
 
       const raiseBtn = document.getElementById('act-raise');
       if (raiseBtn) raiseBtn.addEventListener('click', () => {
+        if (Array.isArray(s.jobActionsUsedThisYear) && s.jobActionsUsedThisYear.includes('ask_raise')) return;
         const res = Sim.askForRaise();
+        markJobActionUsed('ask_raise');
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showHub('jobs');
