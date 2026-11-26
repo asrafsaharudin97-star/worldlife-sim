@@ -576,6 +576,7 @@ window.PrisonFugitive = {
       s.hasCriminalRecord = true;
     }
     s.job = null;
+    s.partTimeJob = null;
     if (!isJuv && s.education && (s.education.stage === 'university' || s.education.isStudying)) {
       s.education.isStudying = false;
       s.education.stage = 'done';
@@ -1061,6 +1062,7 @@ window.PrisonFugitive = {
       p.yearsLeft = 0;
       if ('detentionYearsLeft' in s) s.detentionYearsLeft = 0;
       s.fugitive.isFugitive = true;
+      s.partTimeJob = null;
       s.fugitive.hiddenPast = false;
       s.fugitive.recaptureRisk = Utils.randInt(26, 35);
       s.fugitive.escapedFromCountryId = s.countryId;

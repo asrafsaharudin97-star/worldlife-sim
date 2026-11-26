@@ -22,6 +22,7 @@ window.Sim = {
       )
     );
     s.yearlyActions = {};
+    s.jobAppsThisYear = 0;
     s.stoleMoneyIdsThisYear = [];
     s.askedMoneyCountThisYear = 0;
 
@@ -350,8 +351,8 @@ window.Sim = {
     if (window.ActivitiesDeck && ActivitiesDeck.generateYearlyDeck) {
       ActivitiesDeck.generateYearlyDeck(s);
     }
-    if (s.age >= 18 && window.EduCareerEngine && EduCareerEngine.generateYearlyJobMarket) {
-      EduCareerEngine.generateYearlyJobMarket(s);
+    if (s.age >= 15 && window.EduCareerEngine && EduCareerEngine.generateYearlyJobMarket) {
+      EduCareerEngine.generateYearlyJobMarket(s, { force: true });
     }
     if (window.SpecialModesEngine && SpecialModesEngine.tickYearlySpecialMode) {
       SpecialModesEngine.tickYearlySpecialMode(s);
@@ -658,6 +659,39 @@ window.Sim = {
         }
         s.job.performance = Utils.clamp(s.job.performance + Utils.randInt(-4, 3), 20, 100);
       }
+      }
+    }
+
+    // Pekerjaan Sambilan: keletihan tahunan, penalti kerja berlebihan & risiko dibuang kerana lesu melampau
+    if (s.partTimeJob && !isDetained && !(s.fugitive && s.fugitive.isFugitive)) {
+      s.partTimeJob.years = (s.partTimeJob.years || 0) + 1;
+      const baseStress = s.partTimeJob.stressGain || Utils.randInt(3, 6);
+      const baseHealthDrop = s.partTimeJob.healthDrop || 0;
+      const isOverworked = Boolean(s.job || (s.education && (s.education.activeStudy || s.education.stage === 'university')));
+
+      let totalStressAdd = baseStress;
+      let totalHealthDrop = baseHealthDrop;
+      if (isOverworked) {
+        totalStressAdd += Utils.randInt(6, 10);
+        totalHealthDrop += Utils.randInt(2, 4);
+      }
+
+      if (totalHealthDrop > 0) GameState.adjustStats({ health: -totalHealthDrop });
+      if (window.KarmaEndings) {
+        KarmaEndings.adjustAlignment({ stress: totalStressAdd });
+      } else if (s.alignment) {
+        s.alignment.stress = Utils.clamp((s.alignment.stress || 0) + totalStressAdd, 0, 100);
+      }
+
+      const curStressAfter = (s.alignment && s.alignment.stress) || 0;
+      if (curStressAfter >= 88 && Utils.chance(0.32)) {
+        const lostPt = s.partTimeJob.title;
+        s.partTimeJob = null;
+        GameState.adjustStats({ happiness: -10 });
+        GameState.addJournalEntry(
+          `📉 DIBERHENTIKAN KERJA SAMBILAN: Akibat keletihan dan tekanan melampau, majikan menamatkan khidmat sambilan anda sebagai ${lostPt}.`,
+          'warning'
+        );
       }
     }
 

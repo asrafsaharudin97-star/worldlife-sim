@@ -5,8 +5,79 @@
    ========================================================================== */
 
 window.EduCareerEngine = {
-  MAX_MARKET_REFRESHES: 2,
-  MAX_APPLICATIONS_YEAR: 5,
+  MAX_MARKET_REFRESHES: 0,
+  MAX_APPLICATIONS_YEAR: 2,
+
+  // 6 Pekerjaan Sambilan (Umur 15+ & 18+) — Gaji 25%–45% gaji permulaan
+  PART_TIME_JOBS: [
+    {
+      id: 'pt_cafe_crew',
+      icon: '☕',
+      title: 'Kru Kafe & Restoran',
+      minAge: 15,
+      reqSmarts: 0,
+      payRatio: 0.26,
+      stressGain: 4,
+      healthDrop: 0,
+      desc: 'Melayan pelanggan dan menyediakan minuman di kafe tempatan mengikut syif fleksibel.'
+    },
+    {
+      id: 'pt_convenience_cashier',
+      icon: '🛒',
+      title: 'Juruwang Kedai Serbaneka',
+      minAge: 15,
+      reqSmarts: 0,
+      payRatio: 0.28,
+      stressGain: 3,
+      healthDrop: 0,
+      desc: 'Menguruskan kaunter bayaran dan menyusun rak barangan harian di kedai serbaneka.'
+    },
+    {
+      id: 'pt_weekend_warehouse',
+      icon: '📦',
+      title: 'Pembantu Gudang Hujung Minggu',
+      minAge: 15,
+      reqSmarts: 0,
+      payRatio: 0.34,
+      stressGain: 5,
+      healthDrop: 2,
+      desc: 'Membantu menyusun dan memuatkan bungkusan penghantaran pada hujung minggu.'
+    },
+    {
+      id: 'pt_tutor',
+      icon: '📚',
+      title: 'Tutor Sambilan',
+      minAge: 18,
+      reqSmarts: 55,
+      allowStudentBypass: true,
+      payRatio: 0.38,
+      stressGain: 4,
+      healthDrop: 0,
+      desc: 'Mengajar kelas tuisyen sambilan bagi pelajar sekolah dalam subjek teras.'
+    },
+    {
+      id: 'pt_freelance_digital',
+      icon: '💻',
+      title: 'Pekerja Bebas (Freelance Digital)',
+      minAge: 18,
+      reqSmarts: 50,
+      payRatio: 0.40,
+      stressGain: 4,
+      healthDrop: 0,
+      desc: 'Mengambil tugasan reka bentuk, penulisan atau pengurusan media secara bebas.'
+    },
+    {
+      id: 'pt_night_guard',
+      icon: '🌙',
+      title: 'Pengawal / Syif Malam Sambilan',
+      minAge: 18,
+      reqSmarts: 0,
+      payRatio: 0.45,
+      stressGain: 6,
+      healthDrop: 3,
+      desc: 'Bertugas mengawal premis atau syif lewat malam dengan bayaran sambilan lebih tinggi.'
+    }
+  ],
 
   // 12 Senario Penolakan / Ghosting HR Realistik (Tahap 1: Saringan CV)
   REJECTION_SCENARIOS: [
@@ -953,58 +1024,159 @@ window.EduCareerEngine = {
     this.ensureFields(s);
     const cm = s.careerMarket;
 
-    if (!opts.isRefresh) {
-      cm.refreshesLeft = this.MAX_MARKET_REFRESHES;
-      cm.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
-      cm.appliedJobIdsThisYear = [];
-      cm.lastMarketYear = s.year;
-      if (cm.openings.length > 0) {
-        cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 24);
-      }
-    } else if (cm.openings.length > 0) {
-      cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 24);
+    // Jika papan tahun ini sudah dijana, jangan jana semula apabila modal ditutup & dibuka
+    if (!opts.force && cm.lastMarketYear === s.year && Array.isArray(cm.openings) && cm.openings.length > 0 && Array.isArray(cm.partTimeOpenings)) {
+      return cm.openings;
+    }
+
+    cm.refreshesLeft = 0;
+    cm.applicationsLeft = this.MAX_APPLICATIONS_YEAR;
+    cm.appliedJobIdsThisYear = [];
+    cm.lastMarketYear = s.year;
+    s.jobAppsThisYear = 0;
+
+    if (cm.openings.length > 0) {
+      cm.recentJobIds = [...cm.openings, ...cm.recentJobIds].slice(0, 20);
     }
 
     const recentSet = new Set(cm.recentJobIds || []);
     const all = CareersData.CAREERS;
     const fresh = all.filter(j => !recentSet.has(j.id));
-    const pool = fresh.length >= 16 ? fresh : all;
+    const pool = fresh.length >= 10 ? fresh : all;
+    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
     const picked = [];
     const addPick = (j) => {
       if (j && !picked.includes(j.id)) picked.push(j.id);
     };
 
-    const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+    // 1) 1–2 jawatan sesuai kelayakan/bidang watak
+    const matching = shuffle(pool.filter(j => !j.isRare && this.isCareerFieldMatched(s, j)));
+    for (const j of matching.slice(0, 2)) addPick(j);
 
-    // 1) 3–4 jawatan sesuai kelayakan/bidang/sijil watak
-    const matching = shuffle(pool.filter(j => !j.isRare && this.isCareerFieldMatched(s, j) && (j.minEducation !== 'none' || (j.preferredCerts || []).some(c => s.education.certificates.includes(c)))));
-    for (const j of matching.slice(0, 3)) addPick(j);
+    // 2) 1 jawatan permulaan / umum
+    const entryPool = shuffle(pool.filter(j => !picked.includes(j.id) && (j.industry === 'unskilled' || j.industry === 'semi_skilled' || j.minEducation === 'none' || j.minEducation === 'high_school')));
+    if (entryPool[0]) addPick(entryPool[0]);
 
-    // 2) Pastikan sekurang-kurangnya 2 kerja Tak Mahir & 2 kerja Separa Mahir sentiasa tersedia di Pasaran Kerja
-    const unskilledPool = shuffle(all.filter(j => j.industry === 'unskilled' && !picked.includes(j.id)));
-    for (const j of unskilledPool.slice(0, 2)) addPick(j);
-
-    const semiSkilledPool = shuffle(all.filter(j => j.industry === 'semi_skilled' && !picked.includes(j.id)));
-    for (const j of semiSkilledPool.slice(0, 2)) addPick(j);
-
-    // 3) 2–3 jawatan umum, kemahiran, hospitaliti atau kreatif pelbagai industri
-    const general = shuffle(pool.filter(j => !j.isRare && !picked.includes(j.id) && (j.minEducation === 'none' || j.minEducation === 'high_school' || j.industry === 'trades' || j.industry === 'creative' || j.industry === 'hospitality')));
-    for (const j of general.slice(0, 3)) addPick(j);
-
-    // 4) 2 jawatan berprestij / nadir ("Peluang Terhad / Headhunter")
-    const rareOrHigh = shuffle(pool.filter(j => !picked.includes(j.id) && (j.isRare || j.baseSalary >= 70000)));
-    for (const j of rareOrHigh.slice(0, 2)) addPick(j);
-
-    // 5) Cukupkan sehingga 12–14 jawatan aktif
-    const targetCount = Utils.randInt(12, 14);
+    // 3) Cukupkan kepada tepat 4–5 kekosongan sepenuh masa tahun ini
+    const targetFullTime = Utils.randInt(4, 5);
     for (const j of shuffle(pool)) {
-      if (picked.length >= targetCount) break;
+      if (picked.length >= targetFullTime) break;
       addPick(j);
     }
-
     cm.openings = picked;
+
+    // 4) Jana 2–3 kekosongan Pekerjaan Sambilan mengikut umur
+    const age = s.age || 0;
+    const ptEligible = this.PART_TIME_JOBS.filter(pt => age >= pt.minAge);
+    const ptSource = ptEligible.length > 0 ? ptEligible : this.PART_TIME_JOBS.filter(pt => pt.minAge <= 15);
+    const ptTarget = Math.min(ptSource.length, Utils.randInt(2, 3));
+    cm.partTimeOpenings = shuffle(ptSource).slice(0, ptTarget).map(pt => pt.id);
+
     return picked;
+  },
+
+  getPartTimeSalaryLocal(s, ptJob) {
+    const c = Utils.getCountry(s.countryId);
+    const entryBaseUsd = 14000 * Math.max(0.28, c.salaryMultiplier || 0.55);
+    const ratio = (ptJob && ptJob.payRatio) || 0.30;
+    return Math.max(80, Utils.usdToLocal(Math.round(entryBaseUsd * ratio), s.countryId));
+  },
+
+  applyForPartTimeJob(ptId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    if (s.prison && s.prison.inPrison) {
+      return { ok: false, msg: 'Tidak boleh memohon pekerjaan sambilan semasa berada dalam tahanan.' };
+    }
+    if (s.fugitive && s.fugitive.isFugitive) {
+      return { ok: false, msg: 'Majikan sah menolak permohonan anda kerana status buruan polis.' };
+    }
+    if (s.age < 15) {
+      return { ok: false, msg: 'Umur minimum untuk pekerjaan sambilan ialah 15 tahun.' };
+    }
+    if (s.partTimeJob) {
+      return { ok: false, msg: `Anda sudah bekerja sambilan sebagai ${s.partTimeJob.title}. Berhenti dahulu sebelum memohon kerja sambilan lain.` };
+    }
+    const appsUsed = typeof s.jobAppsThisYear === 'number' ? s.jobAppsThisYear : 0;
+    if (appsUsed >= this.MAX_APPLICATIONS_YEAR) {
+      return { ok: false, msg: 'Had Permohonan Tahun Ini Tamat. Cuba lagi tahun hadapan.' };
+    }
+    if (s.careerMarket.appliedJobIdsThisYear.includes(ptId)) {
+      return { ok: false, msg: 'Anda sudah memohon kekosongan ini tahun ini.' };
+    }
+
+    const pt = this.PART_TIME_JOBS.find(x => x.id === ptId);
+    if (!pt) return { ok: false, msg: 'Kekosongan sambilan tidak ditemui.' };
+    if (s.age < pt.minAge) {
+      return { ok: false, msg: `Umur minimum untuk jawatan ini ialah ${pt.minAge} tahun.` };
+    }
+
+    const isCollegeStudent = Boolean(s.education && (s.education.activeStudy || s.education.stage === 'university'));
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    if (pt.reqSmarts > 0 && smarts < pt.reqSmarts && !(pt.allowStudentBypass && isCollegeStudent)) {
+      return { ok: false, msg: 'Kelayakan kepintaran anda belum mencukupi untuk jawatan sambilan ini.' };
+    }
+
+    // Guna 1 kuota permohonan tahunan JobHunter
+    s.jobAppsThisYear = appsUsed + 1;
+    s.careerMarket.applicationsLeft = Math.max(0, this.MAX_APPLICATIONS_YEAR - s.jobAppsThisYear);
+    s.careerMarket.appliedJobIdsThisYear.push(ptId);
+
+    // Penilaian pengambilan realistik (tersembunyi)
+    const looks = (s.stats && s.stats.looks) || 50;
+    const karma = (s.alignment && s.alignment.karma) || 0;
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+    let chance = 0.68;
+    if (smarts < 45) chance -= 0.20;
+    if (looks < 40) chance -= 0.14;
+    if (karma < 0) chance -= 0.14;
+    if (heat >= 35) chance -= 0.28;
+    if (s.hasCriminalRecord) chance -= 0.24;
+    chance = Utils.clamp(chance, 0.08, 0.88);
+
+    if (!Utils.chance(chance)) {
+      const reason = (s.hasCriminalRecord || heat >= 35)
+        ? 'Majikan menolak permohonan selepas semakan latar belakang mendapati rekod anda membimbangkan.'
+        : (looks < 40)
+          ? 'Penemu duga merasakan imej dan penampilan anda kurang meyakinkan bagi posisi ini.'
+          : (karma < 0)
+            ? 'Semakan rujukan dan perwatakan tidak memihak kepada permohonan anda.'
+            : 'Majikan memilih calon lain yang dirasakan lebih sesuai untuk syif kali ini.';
+      GameState.adjustStats({ happiness: -3 });
+      GameState.addJournalEntry(`📄 Permohonan sambilan (${pt.title}) ditolak: ${reason}`, 'warning');
+      GameState.save();
+      return { ok: false, msg: `Permohonan ditolak: ${reason}` };
+    }
+
+    const salary = this.getPartTimeSalaryLocal(s, pt);
+    s.partTimeJob = {
+      id: pt.id,
+      title: pt.title,
+      icon: pt.icon,
+      salary,
+      years: 0,
+      stressGain: pt.stressGain,
+      healthDrop: pt.healthDrop,
+      countryId: s.countryId
+    };
+    GameState.adjustStats({ happiness: 5 });
+    GameState.addJournalEntry(
+      `🕒 Anda diterima bekerja sambilan sebagai ${pt.icon} ${pt.title} dengan upah ${Utils.formatMoney(salary, s.countryId)}/thn!`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `Tahniah! Anda diterima bekerja sambilan sebagai ${pt.title}.` };
+  },
+
+  quitPartTimeJob() {
+    const s = GameState.current;
+    if (!s || !s.partTimeJob) return { ok: false, msg: 'Tiada pekerjaan sambilan aktif.' };
+    const title = s.partTimeJob.title;
+    s.partTimeJob = null;
+    GameState.addJournalEntry(`🚪 Anda telah berhenti daripada pekerjaan sambilan sebagai ${title}.`);
+    GameState.save();
+    return { ok: true, msg: `Anda telah berhenti daripada kerja sambilan (${title}).` };
   },
 
   refreshJobMarket() {
@@ -1099,11 +1271,23 @@ window.EduCareerEngine = {
       mod += matchedCerts.length >= 2 ? 14 : 9;
     }
 
-    // 3) Kepintaran / Rupa / Pengalaman Tinggi (+5% hingga +12%)
+    // 3) Kepintaran / Penampilan / Karma / Pengalaman (Penalti berat jika lemah)
     let statBoost = 0;
-    if (s.stats.smarts >= 75) statBoost += 5;
-    if (s.stats.smarts >= 90) statBoost += 3;
-    if (s.stats.looks >= 75) statBoost += 2;
+    const smarts = (s.stats && s.stats.smarts) || 50;
+    const looks = (s.stats && s.stats.looks) || 50;
+    const karma = (s.alignment && s.alignment.karma) || 0;
+    const heat = (s.alignment && s.alignment.notoriety) || 0;
+
+    if (smarts >= 75) statBoost += 5;
+    if (smarts >= 90) statBoost += 3;
+    if (smarts < 45) mod -= 24;
+    if (looks >= 75) statBoost += 2;
+    if (looks < 40) {
+      const looksSensitive = ['finance', 'creative', 'hospitality', 'business'].includes(career.industry);
+      mod -= looksSensitive ? 22 : 12;
+    }
+    if (karma < 0) mod -= Math.min(20, Math.round(Math.abs(karma) * 0.35));
+    if (heat >= 35) mod -= Math.min(35, Math.round(heat * 0.45));
     if ((s.age - 18) >= 6) statBoost += 2;
     mod += Math.min(12, statBoost);
 
@@ -1179,8 +1363,8 @@ window.EduCareerEngine = {
     if (s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
       return { ok: false, msg: '❌ Permohonan anda untuk jawatan ini telah ditolak / tiada maklum balas tahun ini.' };
     }
-    if (s.careerMarket.applicationsLeft <= 0) {
-      return { ok: false, msg: '⏳ Kuota permohonan kerja tahun ini (5/5) telah habis! Cuba lagi tahun hadapan.' };
+    if ((typeof s.jobAppsThisYear === 'number' ? s.jobAppsThisYear : 0) >= this.MAX_APPLICATIONS_YEAR) {
+      return { ok: false, msg: 'Had Permohonan Tahun Ini Tamat. Cuba lagi tahun hadapan.' };
     }
 
     if (!EducationData.hasMinLevel(s.education.educationLevel, career.minEducation)) {
@@ -1290,36 +1474,36 @@ window.EduCareerEngine = {
   maybeTriggerUndergroundRaidEvent(s) {
     if (!s || !s.job || !s.job.isUnderground) return null;
     if (s.prison && s.prison.inPrison) return null;
-    if (!(s.fugitive && s.fugitive.isFugitive)) return null;
 
-    const meta = s.job.undergroundMeta || { raidChance: 0.18 };
+    const meta = s.job.undergroundMeta || { raidChance: 0.45 };
+    const isFug = Boolean(s.fugitive && s.fugitive.isFugitive);
     const heat = (s.alignment && s.alignment.notoriety) || 0;
-    const chance = Math.min(0.45, (meta.raidChance || 0.18) + (heat > 70 ? 0.08 : 0));
+    const baseRisk = Math.max(0.40, Math.min(0.60, (meta.raidChance || 0.20) + 0.30));
+    const chance = Math.min(0.85, baseRisk + (isFug ? 0.10 : 0) + (heat > 50 ? 0.10 : 0));
     if (!Utils.chance(chance)) return null;
 
-    const c = Utils.getCountry(s.countryId);
-    const bribeCost = Math.max(Utils.usdToLocal(450, s.countryId), Math.round((s.job.salary || 1000) * 0.45));
+    const bribeCost = Math.max(Utils.usdToLocal(450, s.countryId), Math.round((s.job.salary || 1000) * 0.55));
     const jobTitle = s.job.title;
 
     return {
       id: `ug_raid_${s.age}_${Date.now()}`,
       icon: '🚨',
-      title: 'Serbuan Polis & Majikan Belot!',
+      title: 'Serbuan Polis & Perangkap Siasatan!',
       text: `Lampu biru polis berkelip di lorong belakang tempat anda bekerja sebagai ${jobTitle}! Majikan anda kelihatan cemas dan sedia menyerahkan anda kepada pihak berkuasa demi menyelamatkan dirinya sendiri.`,
       choices: [
         {
-          label: '🏃 Lari Tinggalkan Tempat Kerja',
+          label: '🏃 Lari Tinggalkan Lokasi',
           journalType: 'warning',
           customAction: (st) => {
             const health = (st.stats && st.stats.health) || 55;
             const curHeat = (st.alignment && st.alignment.notoriety) || 0;
             const fastVeh = (window.AssetsEngine && AssetsEngine.hasFastWorkingVehicle && AssetsEngine.hasFastWorkingVehicle(st)) ? 0.10 : 0;
-            const escapeChance = Math.max(0.18, Math.min(0.78, 0.34 + (health / 240) + fastVeh - (curHeat * 0.0025)));
+            const escapeChance = Math.max(0.14, Math.min(0.62, 0.24 + (health / 260) + fastVeh - (curHeat * 0.003)));
 
             if (Utils.chance(escapeChance)) {
               st.job = null;
-              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 14 });
-              GameState.adjustStats({ happiness: -6 });
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 16, stress: 16 });
+              GameState.adjustStats({ happiness: -8 });
               GameState.save();
               return {
                 outcome: 'Anda merempuh pintu belakang dan berjaya meloloskan diri ke lorong gelap! Anda kehilangan kerja bawah tanah itu dan buruan polis semakin ketat.',
@@ -1327,14 +1511,31 @@ window.EduCareerEngine = {
               };
             }
 
+            st.job = null;
             const extraYears = Utils.randInt(4, 8);
             if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
-              PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula (Serbuan Tempat Kerja Haram)', extraYears, 'maximum');
+              PrisonFugitive.enterPrisonState(st, 'Ditangkap Semasa Serbuan Tempat Kerja Haram', extraYears, 'maximum');
             }
             GameState.save();
             return {
-              outcome: `Anda dikepung di hujung lorong dan diberkas semula! Mahkamah menjatuhkan hukuman penjara tambahan selama ${extraYears} tahun.`,
+              outcome: `Anda dikepung di hujung lorong dan diberkas! Mahkamah menjatuhkan hukuman penjara tambahan selama ${extraYears} tahun.`,
               toastType: 'error'
+            };
+          }
+        },
+        {
+          label: '⚖️ Serah Diri Kepada Polis',
+          journalType: 'warning',
+          customAction: (st) => {
+            st.job = null;
+            const yrs = Utils.randInt(2, 5);
+            if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
+              PrisonFugitive.enterPrisonState(st, 'Serah Diri Semasa Serbuan Kerja Haram', yrs, 'medium');
+            }
+            GameState.save();
+            return {
+              outcome: `Anda mengangkat tangan dan menyerah diri tanpa melawan. Anda dibawa ke balai dan dijatuhi hukuman tahanan selama ${yrs} tahun.`,
+              toastType: 'warning'
             };
           }
         },
@@ -1343,32 +1544,34 @@ window.EduCareerEngine = {
           journalType: 'warning',
           customAction: (st) => {
             if ((st.money || 0) < bribeCost) {
+              st.job = null;
               const extraYears = Utils.randInt(3, 6);
               if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
-                PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula (Gagal Rasuah)', extraYears, 'maximum');
+                PrisonFugitive.enterPrisonState(st, 'Ditangkap Semasa Serbuan Kerja Haram', extraYears, 'maximum');
               }
               GameState.save();
               return {
-                outcome: `Wang tunai tidak mencukupi untuk menutup mulut mereka — majikan terus menyerahkan anda kepada polis dan anda dipenjara ${extraYears} tahun!`,
+                outcome: `Wang tunai tidak mencukupi untuk menutup mulut mereka — anda terus digari dan dijatuhi hukuman penjara ${extraYears} tahun!`,
                 toastType: 'error'
               };
             }
             st.money -= bribeCost;
-            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -8, stress: 8 });
-            if (Utils.chance(0.72)) {
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ karma: -10, stress: 10 });
+            if (Utils.chance(0.52)) {
               GameState.save();
               return {
                 outcome: `Wang ${Utils.formatMoney(bribeCost, st.countryId)} bertukar tangan di belakang stor — mereka mengalihkan perhatian serbuan dan anda kekal bersembunyi buat setahun lagi.`,
                 toastType: 'culture'
               };
             }
+            st.job = null;
             const extraYears = Utils.randInt(4, 7);
             if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
-              PrisonFugitive.enterPrisonState(st, 'Pelarian Ditangkap Semula + Cubaan Rasuah', extraYears, 'maximum');
+              PrisonFugitive.enterPrisonState(st, 'Serbuan Kerja Haram + Cubaan Rasuah', extraYears, 'maximum');
             }
             GameState.save();
             return {
-              outcome: `Wang ${Utils.formatMoney(bribeCost, st.countryId)} lesap dan pegawai tersebut tetap menggari anda! Anda dihantar semula ke penjara selama ${extraYears} tahun.`,
+              outcome: `Wang ${Utils.formatMoney(bribeCost, st.countryId)} dirampas sebagai bahan bukti dan anda terus digari! Hukuman penjara ditambah ${extraYears} tahun.`,
               toastType: 'error'
             };
           }
@@ -1386,8 +1589,12 @@ window.EduCareerEngine = {
     const elig = this.checkJobEligibility(s, career);
     if (!elig.ok) return elig;
 
-    // Tolak kuota permohonan tahunan (5/5)
-    s.careerMarket.applicationsLeft = Math.max(0, s.careerMarket.applicationsLeft - 1);
+    // Tolak kuota permohonan tahunan JobHunter (maksimum 2/2)
+    s.jobAppsThisYear = (typeof s.jobAppsThisYear === 'number' ? s.jobAppsThisYear : 0) + 1;
+    s.careerMarket.applicationsLeft = Math.max(0, this.MAX_APPLICATIONS_YEAR - s.jobAppsThisYear);
+    if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
+      s.careerMarket.appliedJobIdsThisYear.push(career.id);
+    }
 
     // TAHAP 1: SARINGAN CV BERPEMBERAT (termasuk kesan PNGK & Anugerah Dekan)
     const screeningPct = this.calculateScreeningChance(s, career);
@@ -1395,26 +1602,27 @@ window.EduCareerEngine = {
     const cgpa = this.getEffectiveCgpa(s);
 
     if (!shortlisted) {
-      if (!s.careerMarket.appliedJobIdsThisYear.includes(career.id)) {
-        s.careerMarket.appliedJobIdsThisYear.push(career.id);
-      }
       const hasCleanId = Boolean(s.fugitive && (s.fugitive.fakeIdentityTier === 'pro' || s.fugitive.hiddenPast));
       const hasAdultRecord = Boolean(s.hasCriminalRecord || ((s.criminalRecord || 0) > 0 && s.age >= 18));
-      const isHighTierOrGov = Boolean(
-        career.isRare ||
-        career.baseSalary >= 45000 ||
-        ['government', 'law', 'finance', 'healthcare', 'education'].includes(career.industry) ||
-        ['bachelor', 'master', 'phd'].includes(career.minEducation)
-      );
-      const reason = (hasAdultRecord && !hasCleanId && isHighTierOrGov && Utils.chance(0.80))
-        ? 'Semakan latar belakang mengesan rekod jenayah dewasa anda — permohonan bagi jawatan korporat/kerajaan ini ditolak.'
-        : (cgpa !== null && cgpa < 3.0 && Utils.chance(0.75))
-          ? `PNGK bawah 3.00 (${cgpa.toFixed(2)}) tidak melepasi saringan majikan.`
-          : Utils.pick(this.REJECTION_SCENARIOS);
+      const heat = (s.alignment && s.alignment.notoriety) || 0;
+      const smarts = (s.stats && s.stats.smarts) || 50;
+      const looks = (s.stats && s.stats.looks) || 50;
+      const karma = (s.alignment && s.alignment.karma) || 0;
+      const reason = ((hasAdultRecord || heat >= 35) && !hasCleanId)
+        ? 'Gagal tapisan latar belakang kerana rekod jenayah atau pemantauan pihak berkuasa.'
+        : (smarts < 45)
+          ? 'Prestasi penilaian dan temu duga teknikal anda dinilai masih lemah oleh panel HR.'
+          : (looks < 40)
+            ? 'Imej profesional dan keyakinan diri anda kurang meyakinkan di hadapan penemu duga.'
+            : (karma < 0)
+              ? 'Semakan rujukan peribadi memberikan maklum balas negatif terhadap perwatakan anda.'
+              : (cgpa !== null && cgpa < 3.0)
+                ? 'Keputusan akademik terdahulu anda tidak melepasi tahap saringan majikan.'
+                : Utils.pick(this.REJECTION_SCENARIOS);
       const hapDip = Utils.randInt(2, 4);
       GameState.adjustStats({ happiness: -hapDip });
       GameState.addJournalEntry(
-        `📄 Permohonan ditolak (${career.title}): ${reason} (Gembira -${hapDip}%)`,
+        `📄 Permohonan JobHunter ditolak (${career.title}): ${reason}`,
         'warning'
       );
       GameState.save();

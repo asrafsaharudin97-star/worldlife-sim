@@ -101,8 +101,9 @@ window.CareerModals = {
       const currentTenure = s.yearsInCurrentJob ?? s.job.years ?? 0;
       const totalYrs = Math.max(s.totalYearsWorked || 0, currentTenure);
       const retElig = EduCareerEngine.canRetire(s);
-      const isPensionEligible = s.age >= 55 && totalYrs >= 15;
-      const yrsLeftForPension = Math.max(0, 15 - totalYrs);
+      const PENSION_MIN_YEARS = 20;
+      const isPensionEligible = retElig.ok;
+      const yrsLeftForPension = Math.max(0, PENSION_MIN_YEARS - totalYrs);
       const ageLeftForPension = Math.max(0, 55 - s.age);
       const pensionBadgeText = isPensionEligible
         ? '✅ Layak Pencen'
@@ -231,31 +232,40 @@ window.CareerModals = {
 
     // BANNER AMARAN KUNCI PERANAN KETAT ("WAJIB LETAK JAWATAN DAHULU")
     if (roleLock.locked) {
-      html += `
-        <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:10px;">
-          <strong>🔒 WAJIB LETAK JAWATAN DAHULU!</strong><br/>
-          Anda sedang memegang jawatan <strong>${Utils.escapeHtml(roleLock.roleName)}</strong>. Anda mesti letak jawatan atau keluar daripada mod semasa terlebih dahulu sebelum boleh memohon pekerjaan lain.
-          <div style="margin-top:8px;">
-            ${roleLock.type === 'special_mode'
-              ? `<button type="button" class="ghost-btn" id="btn-jump-special-mode-exit" style="border-color:#dc2626;color:#dc2626;font-weight:800;padding:6px 10px;">🚪 Pergi Ke Mod ${Utils.escapeHtml(roleLock.shortName)} Untuk Keluar →</button>`
-              : `<button type="button" class="ghost-btn" id="btn-jump-resign-job" style="border-color:#dc2626;color:#dc2626;font-weight:800;padding:6px 10px;">🚪 Letak Jawatan ${Utils.escapeHtml(roleLock.shortName)} Sekarang</button>`
-            }
+      if (roleLock.type === 'special_mode') {
+        html += `
+          <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:10px;">
+            <strong>🔒 WAJIB KELUAR MOD SEMASA DAHULU!</strong><br/>
+            Anda sedang aktif dalam <strong>${Utils.escapeHtml(roleLock.roleName)}</strong>. Keluar daripada mod semasa terlebih dahulu sebelum memohon pekerjaan lain.
+            <div style="margin-top:8px;">
+              <button type="button" class="ghost-btn" id="btn-jump-special-mode-exit" style="border-color:#dc2626;color:#dc2626;font-weight:800;padding:6px 10px;">🚪 Pergi Ke Mod ${Utils.escapeHtml(roleLock.shortName)} Untuk Keluar →</button>
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      } else {
+        html += `
+          <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-bottom:10px;font-size:12px;">
+            🔒 Anda sedang memegang jawatan <strong>${Utils.escapeHtml(roleLock.roleName)}</strong>. Gunakan butang <em>Letak Jawatan / Berhenti Kerja</em> di atas sebelum memohon kerja lain.
+          </div>
+        `;
+      }
     }
 
     const isFugitiveNow = Boolean(s.fugitive && s.fugitive.isFugitive);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
     const hasCrimNoJob = Boolean((s.hasCriminalRecord || (s.criminalRecord || 0) > 0) && !s.job);
-    const showUnderground = (isFugitiveNow || hasCrimNoJob) && !(s.prison && s.prison.inPrison);
+    const showUnderground = (isFugitiveNow || hasCrimNoJob) && !inPrison;
+    const appsUsed = typeof s.jobAppsThisYear === 'number' ? s.jobAppsThisYear : 0;
+    const appsLeftJH = Math.max(0, EduCareerEngine.MAX_APPLICATIONS_YEAR - appsUsed);
+    const quotaFull = appsLeftJH <= 0;
 
     if (showUnderground && Array.isArray(EduCareerEngine.UNDERGROUND_JOBS)) {
       html += `
         <div class="section-heading">🕶️ Kerja Bawah Tanah (Tanpa Dokumen)</div>
         <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;color:#334155;margin-bottom:8px;">
           ${isFugitiveNow
-            ? '🚨 <strong>Status Buruan Polis:</strong> Majikan sah menolak permohonan anda. Kerja bawah tanah menawarkan upah kecil sekadar bertahan hidup tanpa semakan dokumen, namun berisiko serbuan polis.'
-            : '🕶️ <strong>Pilihan Alternatif Tanpa Semakan:</strong> Kerja bawah tanah terbuka tanpa syarat kelayakan atau semakan latar belakang, dengan upah sekadar sara hidup.'}
+            ? '🚨 <strong>Status Buruan Polis:</strong> Majikan sah menolak permohonan anda. Kerja bawah tanah menawarkan upah kecil sekadar bertahan hidup tanpa semakan dokumen, namun berisiko tinggi diserbu polis.'
+            : '🕶️ <strong>Pilihan Alternatif Tanpa Semakan:</strong> Kerja bawah tanah terbuka tanpa syarat kelayakan atau semakan latar belakang, dengan upah sekadar sara hidup dan risiko serbuan.'}
         </div>
         <div class="action-list" style="margin-bottom:12px;">
           ${EduCareerEngine.UNDERGROUND_JOBS.map(ug => {
@@ -283,26 +293,64 @@ window.CareerModals = {
       <div class="act-engine-header" style="margin-top:4px;">
         <div class="aeh-top">
           <div>
-            <div class="aeh-title">💼 Pasaran Kerja ${c.name} ${c.flag} (${openingObjs.length} Jawatan Aktif)</div>
-            <div class="aeh-sub">Kuota Permohonan Tahun Ini: <strong>${appsLeft}/${EduCareerEngine.MAX_APPLICATIONS_YEAR}</strong> • Persaingan realistik!</div>
+            <div class="aeh-title" style="display:flex;align-items:center;gap:6px;">💼 JobHunter — Portal Kerjaya ${Utils.renderFlagHtml(c.id, c.flag)}</div>
+            <div class="aeh-sub">Baki Permohonan Tahun Ini: <strong>${appsLeftJH}/${EduCareerEngine.MAX_APPLICATIONS_YEAR}</strong> • Kekosongan dikemas kini setiap tahun</div>
           </div>
-          <button type="button" class="reroll-idea-btn" id="btn-refresh-job-market" ${rLeft <= 0 ? 'disabled' : ''}>
-            🔄 Segarkan Pasaran (${rLeft}/2)
-          </button>
         </div>
-      </div>
-
-      <div class="tab-pills" style="margin-bottom:10px;">
-        ${CareersData.INDUSTRIES.map(ind => `
-          <button type="button" class="tab-pill ind-filter-pill ${ind.id === indFilter ? 'active' : ''}" data-ind="${ind.id}">
-            ${ind.icon} ${Utils.escapeHtml(ind.label)}
-          </button>
-        `).join('')}
       </div>
     `;
 
+    // BAHAGIAN PEKERJAAN SAMBILAN (UMUR 15+)
+    if (s.age >= 15) {
+      html += `<div class="section-heading">🕒 Pekerjaan Sambilan</div>`;
+      if (s.partTimeJob) {
+        html += `
+          <div class="migration-card" style="border-color:#3b82f6;margin-bottom:10px;">
+            <div class="mig-head">
+              <div class="mig-title">${s.partTimeJob.icon || '🕒'} ${Utils.escapeHtml(s.partTimeJob.title)} <span class="cat-badge synergy">Aktif</span></div>
+              <strong>${Utils.formatMoney(s.partTimeJob.salary, s.countryId)}/thn</strong>
+            </div>
+            <div style="font-size:11.5px;color:#475569;margin-bottom:8px;">
+              Tempoh berkhidmat: <strong>${s.partTimeJob.years || 0} tahun</strong> • Maksimum 1 pekerjaan sambilan pada satu masa.
+            </div>
+            <button type="button" class="btn-sm secondary" id="btn-quit-part-time" style="width:100%;color:#dc2626;">🚪 Berhenti Kerja Sambilan</button>
+          </div>
+        `;
+      } else if (isFugitiveNow || inPrison) {
+        html += `<div class="info-banner" style="margin-bottom:10px;">🔒 Pekerjaan sambilan rasmi tidak tersedia bagi status tahanan atau buruan polis.</div>`;
+      } else {
+        const ptIds = Array.isArray(s.careerMarket.partTimeOpenings) ? s.careerMarket.partTimeOpenings : [];
+        const ptList = ptIds.map(id => EduCareerEngine.PART_TIME_JOBS.find(x => x.id === id)).filter(Boolean);
+        html += `<div class="action-list" style="margin-bottom:12px;">`;
+        ptList.forEach(pt => {
+          const ptSal = EduCareerEngine.getPartTimeSalaryLocal(s, pt);
+          const ptRejected = rejectedIds.includes(pt.id);
+          const ptDisabled = ptRejected || quotaFull || s.age < pt.minAge;
+          html += `
+            <button type="button" class="action-item pt-apply-btn ${ptRejected ? 'act-done-card' : ''}" data-pt-id="${pt.id}" ${ptDisabled ? 'disabled' : ''}>
+              <span class="ai-icon">${pt.icon}</span>
+              <span class="ai-content">
+                <span class="ai-title">${Utils.escapeHtml(pt.title)}</span>
+                <span class="ai-desc">${ptRejected ? 'Sudah dimohon tahun ini' : Utils.escapeHtml(pt.desc)}</span>
+              </span>
+              <span class="ai-right">
+                <span class="act-status-pill ${ptRejected ? 'done' : quotaFull ? 'cost' : 'free'}">
+                  ${ptRejected ? 'Ditolak' : quotaFull ? 'Had Permohonan Tahun Ini Tamat' : `${Utils.formatMoney(ptSal, s.countryId)}/thn`}
+                </span>
+              </span>
+            </button>
+          `;
+        });
+        html += `</div>`;
+      }
+    }
+
+    html += `
+      <div class="section-heading">💼 Kekosongan Sepenuh Masa (${openingObjs.length} Tawaran Tahun Ini)</div>
+    `;
+
     if (filtered.length === 0) {
-      html += `<div class="info-banner">Tiada jawatan dalam industri ini pada papan semasa. Pilih <strong>Semua</strong> atau klik <strong>🔄 Segarkan Pasaran Kerja</strong>!</div>`;
+      html += `<div class="info-banner">Tiada kekosongan sepenuh masa tahun ini. Semak semula pada tahun hadapan!</div>`;
       return html;
     }
 
@@ -311,9 +359,8 @@ window.CareerModals = {
       const matched = EduCareerEngine.isCareerFieldMatched(s, j);
       const salary = EduCareerEngine.getCareerSalaryLocal(s, j, 0);
       const reqLvl = EducationData.LEVEL_INFO[j.minEducation] || EducationData.LEVEL_INFO.none;
-      const hasCertBonus = (j.preferredCerts || []).some(cid => (s.education.certificates || []).includes(cid));
       const wasRejected = rejectedIds.includes(j.id);
-      const isDisabled = roleLock.locked || wasRejected || appsLeft <= 0;
+      const isDisabled = roleLock.locked || wasRejected || quotaFull || isFugitiveNow || inPrison;
       const fieldStr = j.requiredFields === 'any'
         ? 'Mana-mana bidang'
         : j.requiredFields.map(fid => (EducationData.getField(fid) || { short: fid }).short).join('/');
@@ -331,13 +378,12 @@ window.CareerModals = {
                 ? '<span class="cat-badge" style="background:#fee2e2;color:#b91c1c;">❌ Ditolak / Tiada Maklum Balas</span>'
                 : (matched ? '<span class="cat-badge synergy">✓ Sesuai Kelayakan</span>' : `<span class="cat-badge">🔒 ${reqLvl.short}${j.requiredFields !== 'any' ? ` (${fieldStr})` : ''}</span>`)
               }
-              ${hasCertBonus && !wasRejected ? '<span class="cat-badge rare">📜 Bonus Sijil!</span>' : ''}
               <br/>${Utils.escapeHtml(j.desc)}
             </span>
           </span>
           <span class="ai-right">
-            <span class="act-status-pill ${wasRejected ? 'done' : roleLock.locked ? 'cost' : 'free'}">
-              ${wasRejected ? 'Ditolak' : roleLock.locked ? '🔒 Dikunci' : `${Utils.formatMoney(salary, s.countryId)}/thn`}
+            <span class="act-status-pill ${wasRejected ? 'done' : (roleLock.locked || quotaFull) ? 'cost' : 'free'}">
+              ${wasRejected ? 'Ditolak' : quotaFull ? 'Had Permohonan Tahun Ini Tamat' : roleLock.locked ? '🔒 Dikunci' : `${Utils.formatMoney(salary, s.countryId)}/thn`}
             </span>
           </span>
         </button>
@@ -793,6 +839,25 @@ window.CareerModals = {
           App.toast(res.msg, res.ok ? 'success' : 'error');
           App.renderAll();
           if (res.ok) this._browsingNewJob = false;
+          this.showHub('jobs');
+        });
+      });
+
+      const quitPtBtn = document.getElementById('btn-quit-part-time');
+      if (quitPtBtn) {
+        quitPtBtn.addEventListener('click', () => {
+          const res = EduCareerEngine.quitPartTimeJob();
+          App.toast(res.msg, res.ok ? 'culture' : 'error');
+          App.renderAll();
+          this.showHub('jobs');
+        });
+      }
+
+      document.querySelectorAll('.pt-apply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const res = EduCareerEngine.applyForPartTimeJob(btn.dataset.ptId);
+          App.toast(res.msg, res.ok ? 'success' : 'error');
+          App.renderAll();
           this.showHub('jobs');
         });
       });

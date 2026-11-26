@@ -167,6 +167,13 @@ window.CharacterStatus = {
       breakdown.push({ label: s.job.title, gross: g, net: g - t - Math.round(ret * 0.5), icon: s.job.icon || '💼' });
     }
 
+    // 1B) Pendapatan Pekerjaan Sambilan (hanya jika tidak ditahan & bukan pelarian)
+    if (s.partTimeJob && s.partTimeJob.salary > 0 && !(s.fugitive && s.fugitive.isFugitive)) {
+      const ptGross = Math.round(s.partTimeJob.salary);
+      grossLocal += ptGross;
+      breakdown.push({ label: `Sambilan: ${s.partTimeJob.title}`, gross: ptGross, net: ptGross, icon: s.partTimeJob.icon || '🕒' });
+    }
+
     // 2) Pendapatan Mod Khas Aktif (Politik / CEO / Trader Pro / Selebriti / Atlet Pro)
     if (s.activeSpecialMode && window.SpecialModesEngine) {
       const info = SpecialModesEngine.getActiveInfo(s);

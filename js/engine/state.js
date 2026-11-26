@@ -197,6 +197,8 @@ window.GameState = {
         examGrade: null
       },
       job: null,
+      partTimeJob: null,
+      jobAppsThisYear: 0,
       peakSalaryUsd: 0,
 
       assets: {
@@ -377,6 +379,8 @@ window.GameState = {
     if (typeof s.hasCriminalRecord !== 'boolean') {
       s.hasCriminalRecord = Boolean((s.criminalRecord || 0) > 0 && s.age >= 18);
     }
+    if (!('partTimeJob' in s)) s.partTimeJob = null;
+    if (typeof s.jobAppsThisYear !== 'number') s.jobAppsThisYear = 0;
 
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.ensureLegalFields) {
       LegalInheritanceEngine.ensureLegalFields(s);
