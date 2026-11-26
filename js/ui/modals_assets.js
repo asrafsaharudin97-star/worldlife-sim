@@ -28,8 +28,8 @@ window.AssetModals = {
           <span class="lbl">Jumlah Nilai Aset</span>
           <span class="val">${Utils.formatMoney(sum.totalAssetValue, s.countryId, true)}</span>
         </div>
-        <div class="summary-stat">
-          <span class="lbl">Pendapatan Pasif/Thn</span>
+        <div class="summary-stat" id="btn-passive-breakdown" role="button" tabindex="0" style="cursor:pointer;border:1px solid #cbd5e1;" title="Klik untuk lihat pecahan pendapatan pasif">
+          <span class="lbl">Pendapatan Pasif/Thn <span style="font-size:10px;opacity:0.75;">ℹ️</span></span>
           <span class="val" style="color:${sum.rentalGross + sum.dividendGross > 0 ? '#16a34a' : '#334155'};">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross, s.countryId, true)}</span>
         </div>
         <div class="summary-stat">
@@ -40,6 +40,15 @@ window.AssetModals = {
           <span class="lbl">Nilai Bersih (${c.currency.code})</span>
           <span class="val">${Utils.formatMoney(netWorth, s.countryId, true)}</span>
         </div>
+      </div>
+
+      <div id="passive-breakdown-panel" class="info-banner hidden" style="background:#f8fafc;border-color:#cbd5e1;font-size:12px;line-height:1.65;margin-bottom:0;">
+        <strong>📊 Pecahan Pendapatan Pasif Tahunan</strong><br/>
+        🏠 Sewaan Hartanah: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.rentalGross, s.countryId)}</strong><br/>
+        📈 Dividen &amp; Faedah Pelaburan: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.dividendGross, s.countryId)}</strong><br/>
+        💼 Keuntungan Perniagaan / Aset Lain: <strong>+${Utils.formatMoney(0, s.countryId)}</strong><br/>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:4px 0;" />
+        Jumlah Pendapatan Pasif/Thn: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross, s.countryId)}</strong>
       </div>
 
       <div class="info-banner" style="border-left:4px solid ${trend.color};padding:8px 10px;margin-bottom:0;">
@@ -859,6 +868,14 @@ window.AssetModals = {
     document.querySelectorAll('.asset-tab-pill').forEach(pill => {
       pill.addEventListener('click', () => this.showHub(pill.dataset.atab));
     });
+
+    const passiveBtn = document.getElementById('btn-passive-breakdown');
+    const passivePanel = document.getElementById('passive-breakdown-panel');
+    if (passiveBtn && passivePanel) {
+      passiveBtn.addEventListener('click', () => {
+        passivePanel.classList.toggle('hidden');
+      });
+    }
 
     const refBtn = document.getElementById('btn-refresh-asset-market');
     if (refBtn) {

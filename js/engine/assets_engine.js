@@ -76,6 +76,18 @@ window.AssetsEngine = {
     if (!s.assetMarket.invPrices || typeof s.assetMarket.invPrices !== 'object') {
       s.assetMarket.invPrices = {};
     }
+    // Pemulihan automatik untuk simpanan lama: Simpanan Tetap Bank (FD) tidak boleh rugi pokok
+    const fdPos = s.assets && s.assets.portfolio && s.assets.portfolio.inv_fd_bank;
+    if (fdPos && fdPos.units > 0) {
+      const avgBuy = Math.round(fdPos.totalCost / fdPos.units);
+      const curFd = s.assetMarket.invPrices.inv_fd_bank;
+      if (!curFd || (curFd.price || 0) < avgBuy || (curFd.changePct || 0) < 0) {
+        s.assetMarket.invPrices.inv_fd_bank = {
+          price: Math.max(avgBuy, (curFd && curFd.price) || 0),
+          changePct: Math.max(0, (curFd && curFd.changePct) || 0)
+        };
+      }
+    }
   },
 
   _scaleUsdToLocal(usd, countryId, useCol = true) {
@@ -196,6 +208,14 @@ window.AssetsEngine = {
       const basePrice = this._scaleUsdToLocal(inst.baseUnitUsd, s.countryId, false);
       if (!prev || opts.isRefresh) {
         if (!prev) m.invPrices[inst.id] = { price: basePrice, changePct: 0 };
+        return;
+      }
+      // Simpanan Tetap Bank (FD): modal dilindungi sepenuhnya (0% risiko rugi pokok)
+      if (inst.id === 'inv_fd_bank') {
+        const pos = s.assets && s.assets.portfolio && s.assets.portfolio[inst.id];
+        const avgBuy = (pos && pos.units > 0) ? Math.round(pos.totalCost / pos.units) : basePrice;
+        const protectedFloor = Math.max(basePrice, prev.price || 0, avgBuy);
+        m.invPrices[inst.id] = { price: protectedFloor, changePct: 0 };
         return;
       }
       let range = [inst.minRet, inst.maxRet];
