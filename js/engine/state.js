@@ -232,6 +232,7 @@ window.GameState = {
       yearlyActions: {},
       seenEventIds: [],
       recentPopupIds: [],
+      secrets: [],
 
       journal: [
         {
@@ -284,6 +285,24 @@ window.GameState = {
       year: s.year,
       playerAge: s.age
     });
+  },
+
+  recordSecret(type, s = this.current) {
+    if (!s || !type) return null;
+    if (!Array.isArray(s.secrets)) s.secrets = [];
+    if (s.secrets.some(x => x && x.type === type && x.yearCreated === s.year && !x.resolved && !x.exposed)) {
+      return null;
+    }
+    const entry = {
+      id: `sec_${type}_${s.year || 2026}_${Utils.randInt(10, 99)}`,
+      type,
+      yearCreated: s.year || 2026,
+      ageCreated: s.age || 0,
+      exposed: false,
+      resolved: false
+    };
+    s.secrets.push(entry);
+    return entry;
   },
 
   addJournalEntry(text, type = 'normal') {
@@ -434,6 +453,7 @@ window.GameState = {
     if (typeof s.scholarshipIvUsedThisYear !== 'boolean') s.scholarshipIvUsedThisYear = false;
     if (typeof s.hasTakenFoundation !== 'boolean') s.hasTakenFoundation = false;
     if (!Array.isArray(s.recentPopupIds)) s.recentPopupIds = [];
+    if (!Array.isArray(s.secrets)) s.secrets = [];
     if (!s.homeCountry) s.homeCountry = s.birthCountryId || s.countryId || 'MY';
     if (typeof s.prYearsSinceRenewal !== 'number' || Number.isNaN(s.prYearsSinceRenewal)) s.prYearsSinceRenewal = 0;
     if (s.residencyStatus === 'PR') {
@@ -754,6 +774,7 @@ window.GameState = {
       yearlyActions: {},
       seenEventIds: [],
       recentPopupIds: [],
+      secrets: [],
 
       journal: [
         {

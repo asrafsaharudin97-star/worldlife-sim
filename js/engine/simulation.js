@@ -1667,6 +1667,9 @@ window.Sim = {
       }
     }
 
+    const bmEv = this.buildBlackmailEvent(s);
+    if (bmEv) return bmEv;
+
     // 6. Dek Anti-Ulangan (Shuffle Bag — 20 popup terakhir + Slot Konteks Dinamik)
     if (!Array.isArray(s.recentPopupIds)) s.recentPopupIds = [];
     if (!Array.isArray(s.recentRandomEventIds)) s.recentRandomEventIds = [];
@@ -2260,6 +2263,75 @@ window.Sim = {
     return {
       ...ev,
       choices: newChoices
+    };
+  },
+
+  buildBlackmailEvent(s) {
+    if (!s || !s.alive || (s.prison && s.prison.inPrison)) return null;
+    if (!Array.isArray(s.secrets) || s.secrets.length === 0) return null;
+    const eligible = s.secrets.filter(sec => sec && !sec.exposed && !sec.resolved && ((s.age || 0) - (sec.ageCreated || 0)) >= 3);
+    if (eligible.length === 0 || !Utils.chance(0.22)) return null;
+
+    const sec = Utils.pick(eligible);
+    const pnw = (window.GameState && GameState.getPersonalNetWorth) ? Math.max(0, GameState.getPersonalNetWorth(s)) : Math.max(0, s.money || 0);
+    const minDem = Utils.usdToLocal(2500, s.countryId);
+    const maxDem = Utils.usdToLocal(500000, s.countryId);
+    const demand = Math.min(maxDem, Math.max(minDem, Math.round(pnw * 0.05)));
+    const lightFine = Math.max(Utils.usdToLocal(800, s.countryId), Math.round(demand * 0.35));
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+
+    const descMap = {
+      audit_coverup: 'Seseorang mendakwa mempunyai salinan dokumen audit lama yang anda sorokkan dahulu dan menuntut wang tutup mulut.',
+      shadow_proxy: 'Pihak tidak dikenali mengugut mahu mendedahkan aliran pemindahan dana luar pesisir anda melalui proksi bayangan.',
+      mafia_tie: 'Bekas kenalan sindiket mengugut untuk membongkar sejarah kaitan anda dengan mafia kepada pihak berkuasa.'
+    };
+
+    return {
+      id: `blackmail_${sec.id}_${s.year}`,
+      icon: '🕶️',
+      title: 'Ugutan Rahsia Masa Lalu!',
+      text: `${descMap[sec.type] || 'Seseorang mengugut mahu membongkar rahsia lama anda.'} Mereka menuntut bayaran sebanyak ${fmt(demand)} untuk menutup mulut.`,
+      choices: [
+        {
+          label: `💵 Bayar Tutup Mulut (${fmt(demand)})`,
+          customAction: (st) => {
+            if ((st.money || 0) < demand) {
+              return { outcome: `Baki tunai peribadi anda tidak mencukupi (${fmt(demand)}). Pengugut itu masih memerhati gerak-geri anda.` };
+            }
+            st.money -= demand;
+            sec.resolved = true;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 6 });
+            return { outcome: `Anda membayar ${fmt(demand)} secara senyap. Pengugut itu memadamkan bukti dan hilang tanpa jejak.` };
+          }
+        },
+        {
+          label: '🚫 Tolak & Abaikan',
+          customAction: (st) => {
+            if (Utils.chance(0.55)) {
+              sec.exposed = true;
+              if (st.familyTrust && st.familyTrust.active) {
+                st.familyTrust.auditHeat = Math.min(5, Number(((st.familyTrust.auditHeat || 0) + 2).toFixed(2)));
+              }
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 18, stress: 16, karma: -6 });
+              if (window.Dynasty) Dynasty.adjustReputation(-8);
+              return { outcome: 'Rahsia lama anda terbongkar! Reputasi anda terjejas dan pihak berkuasa mula memantau rapat rekod anda.' };
+            }
+            sec.resolved = true;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 4 });
+            return { outcome: 'Ugutan itu ternyata gertakan kosong semata-mata — pengugut berundur tanpa sebarang tindakan.' };
+          }
+        },
+        {
+          label: '⚖️ Hadapi Secara Terbuka',
+          customAction: (st) => {
+            sec.resolved = true;
+            const paid = Math.min(Math.max(0, st.money || 0), lightFine);
+            st.money -= paid;
+            if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 8, karma: 4 });
+            return { outcome: `Anda tampil menyelesaikan isu ini secara terbuka bersama peguam (kos & kompaun ringan ${fmt(paid)}). Anda kini bebas daripada ugutan berulang.` };
+          }
+        }
+      ]
     };
   },
 

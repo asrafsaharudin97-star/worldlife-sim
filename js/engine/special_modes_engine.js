@@ -323,6 +323,7 @@ window.SpecialModesEngine = {
       ? Math.max(def.metric1.init, Math.min(100, Math.round((s.countriesVisited.length / 60) * 100)))
       : def.metric1.init;
 
+    if (modeId === 'mafia' && window.GameState && GameState.recordSecret) GameState.recordSecret('mafia_tie', s);
     if (modeId === 'royalty') {
       if (s.honors && (s.honors.currentTitle || s.honors.currentRank)) {
         s.honors.currentTitle = null;

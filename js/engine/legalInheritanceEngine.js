@@ -1210,6 +1210,7 @@ window.LegalInheritanceEngine = {
 
     ft.offshoreAuditRisk = Math.min(0.60, Number(((ft.offshoreAuditRisk || 0) + 0.08).toFixed(2)));
     ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
+    if (window.GameState && GameState.recordSecret) GameState.recordSecret('shadow_proxy', s);
     if (window.Utils && Utils.chance && Utils.chance(triggerProb)) {
       ft.underAudit = true;
       ft.offshoreAuditRisk = Math.min(0.85, Number(((ft.offshoreAuditRisk || 0) + 0.35).toFixed(2)));
@@ -1867,6 +1868,7 @@ window.LegalInheritanceEngine = {
               ft.underAudit = false;
               if (Utils.chance(hideSuccessChance)) {
                 ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
+                if (window.GameState && GameState.recordSecret) GameState.recordSecret('audit_coverup', s);
                 if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 10, stress: 12 });
                 return 'Anda berjaya menyembunyikan rekod kewangan dan melepasi audit tanpa dikenakan denda!';
               }
