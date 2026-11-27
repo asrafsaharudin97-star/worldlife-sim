@@ -231,6 +231,8 @@ window.LegalInheritanceEngine = {
     }
     if (typeof ft.prevTotalValue !== 'number' || Number.isNaN(ft.prevTotalValue)) ft.prevTotalValue = 0;
     if (typeof ft.baselineValue !== 'number' || Number.isNaN(ft.baselineValue)) ft.baselineValue = 0;
+    if (typeof ft.unpaidFees !== 'number' || Number.isNaN(ft.unpaidFees) || ft.unpaidFees < 0) ft.unpaidFees = 0;
+    ft.unpaidFees = Math.round(ft.unpaidFees);
 
     // Migrasi selamat untuk simpanan lama yang pernah memilih pewaris tunggal 100%
     if (s.legal && s.legal.wasiat && (s.legal.wasiat.mode === 'sole_heir' || s.legal.wasiat.mode === 'single_child' || s.legal.wasiat.willType === 'sole_heir' || s.legal.wasiat.willType === 'single_child')) {
@@ -242,12 +244,65 @@ window.LegalInheritanceEngine = {
     return ft;
   },
 
-  getCorporateTaxRate(s) {
-    const c = (s && window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
-    const raw = (c && typeof c.corporateTaxRate === 'number')
+  TAX_HAVEN_ISLAND_IDS: [
+    'BS', 'BB', 'SC', 'MV', 'MU', 'VU',
+    'AG', 'KN', 'LC', 'GD', 'DM',
+    'PW', 'MH', 'NR', 'WS', 'TO', 'TV', 'KI', 'FJ',
+    'MT', 'CY'
+  ],
+
+  getTrustCountryRates(countryOrId) {
+    let c = null;
+    if (countryOrId && typeof countryOrId === 'object' && countryOrId.id) {
+      c = countryOrId;
+    } else if (typeof countryOrId === 'string' && window.Utils && Utils.getCountry) {
+      c = Utils.getCountry(countryOrId);
+    } else if (countryOrId && typeof countryOrId === 'object' && countryOrId.countryId && window.Utils && Utils.getCountry) {
+      c = Utils.getCountry(countryOrId.countryId);
+    }
+    const cid = c && c.id ? String(c.id).toUpperCase() : '';
+    if (cid && this.TAX_HAVEN_ISLAND_IDS.includes(cid)) {
+      return {
+        categoryLabel: 'Negara Pulau Bebas Cukai',
+        annualFeeRate: 0,
+        corporateTaxRate: 0,
+        isTaxHaven: true
+      };
+    }
+
+    const rawCorp = (c && typeof c.corporateTaxRate === 'number')
       ? c.corporateTaxRate
       : (c && typeof c.taxRate === 'number' ? c.taxRate : 0.20);
-    return Math.min(0.25, Math.max(0.15, Number(raw) || 0.20));
+    const corporateTaxRate = Math.min(0.25, Math.max(0.15, Number(rawCorp) || 0.20));
+    const salMult = Number((c && c.salaryMultiplier) || 0.5);
+
+    if (salMult >= 1.1) {
+      return {
+        categoryLabel: 'Negara Maju',
+        annualFeeRate: 0.015,
+        corporateTaxRate,
+        isTaxHaven: false
+      };
+    }
+    if (salMult >= 0.45) {
+      return {
+        categoryLabel: 'Negara Membangun',
+        annualFeeRate: 0.005,
+        corporateTaxRate,
+        isTaxHaven: false
+      };
+    }
+    return {
+      categoryLabel: 'Negara Mundur',
+      annualFeeRate: 0.001,
+      corporateTaxRate,
+      isTaxHaven: false
+    };
+  },
+
+  getCorporateTaxRate(s) {
+    const c = (s && window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    return this.getTrustCountryRates(c).corporateTaxRate;
   },
 
   getTrustAssetsValue(s) {
@@ -312,10 +367,11 @@ window.LegalInheritanceEngine = {
   getTrustAnnualFee(s) {
     if (!s) return 0;
     this.ensureFamilyTrust(s);
-    const cid = s.countryId || 'MY';
-    const baseFee = Utils.usdToLocal(450, cid);
+    const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    const rates = this.getTrustCountryRates(c);
+    if (!rates || rates.annualFeeRate <= 0) return 0;
     const trustWealth = this.getTrustNetWorth(s);
-    return Math.max(baseFee, Math.round(trustWealth * 0.015));
+    return Math.max(0, Math.round(trustWealth * rates.annualFeeRate));
   },
 
   getFundManagerOffers(s, selectedYears = 1) {
@@ -398,6 +454,9 @@ window.LegalInheritanceEngine = {
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan aset disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pemindahan aset dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
 
     const listKey = assetType === 'property' ? 'properties' : assetType === 'collectible' ? 'collectibles' : 'vehicles';
     if (!s.assets || !Array.isArray(s.assets[listKey])) return { ok: false, msg: 'Aset tidak ditemui.' };
@@ -650,6 +709,9 @@ window.LegalInheritanceEngine = {
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Transaksi yayasan disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Kemasukan dana dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
     const amt = Math.round(Number(amount) || 0);
     if (amt <= 0) return { ok: false, msg: 'Masukkan jumlah dana yang sah.' };
     if (s.money < amt) return { ok: false, msg: 'Baki bank tidak mencukupi.' };
@@ -667,6 +729,9 @@ window.LegalInheritanceEngine = {
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Transaksi yayasan disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pengeluaran dana dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
     const amt = Math.round(Number(amount) || 0);
     if (amt <= 0) return { ok: false, msg: 'Masukkan jumlah pengeluaran yang sah.' };
     if (s.familyTrust.balance < amt) return { ok: false, msg: 'Dana dalam Yayasan Keluarga tidak mencukupi.' };
@@ -678,24 +743,72 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dikeluarkan ke akaun bank.` };
   },
 
-  payTrustArrearsAndReactivate(s) {
+  payTrustUnpaidFees(s, amount = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
-    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh mengaktifkan semula yayasan semasa dalam tahanan.' };
-    if (!s.familyTrust.active || !s.familyTrust.lapsed) return { ok: false, msg: 'Yayasan tidak mempunyai tunggakan yuran.' };
-    const fee = this.getTrustAnnualFee(s);
-    if (s.money >= fee) {
-      s.money -= fee;
-    } else if (s.familyTrust.balance >= fee) {
-      s.familyTrust.balance -= fee;
-    } else {
-      return { ok: false, msg: `Baki tidak mencukupi — perlukan ${Utils.formatMoney(fee, s.countryId)} untuk melangsaikan yuran.` };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membayar tunggakan yayasan semasa dalam tahanan.' };
+    const ft = s.familyTrust;
+    const due = Math.max(0, Math.round(ft.unpaidFees || 0));
+    if (!ft.active || due <= 0) {
+      ft.unpaidFees = 0;
+      ft.lapsed = false;
+      return { ok: false, msg: 'Yayasan tidak mempunyai tunggakan yuran.' };
     }
-    s.familyTrust.lapsed = false;
-    s.familyTrust.lastPaidAge = s.age;
-    GameState.addJournalEntry(`🔄 Tunggakan yuran Tabung Yayasan Keluarga (${Utils.formatMoney(fee, s.countryId)}) dilangsaikan. Perlindungan bebas cukai pusaka kini aktif semula!`, 'milestone');
+    const availableTotal = Math.max(0, Math.round(ft.balance || 0)) + Math.max(0, Math.round(s.money || 0));
+    if (availableTotal <= 0) {
+      return { ok: false, msg: 'Tiada baki tunai peribadi atau tunai Yayasan untuk membayar tunggakan.' };
+    }
+    const requested = (amount !== null && amount !== undefined && Number(amount) > 0)
+      ? Math.round(Number(amount))
+      : due;
+    const payAmt = Math.min(due, requested, availableTotal);
+    if (payAmt <= 0) return { ok: false, msg: 'Masukkan jumlah bayaran yang sah.' };
+
+    // Guna baki tunai Yayasan dahulu, selebihnya daripada tunai peribadi
+    const fromTrust = Math.min(Math.max(0, Math.round(ft.balance || 0)), payAmt);
+    const fromPersonal = payAmt - fromTrust;
+    ft.balance = Math.max(0, Math.round((ft.balance || 0) - fromTrust));
+    s.money = Math.round((s.money || 0) - fromPersonal);
+    ft.unpaidFees = Math.max(0, due - payAmt);
+
+    if (ft.unpaidFees <= 0) {
+      ft.unpaidFees = 0;
+      ft.lapsed = false;
+      ft.lastPaidAge = s.age;
+      GameState.addJournalEntry(
+        `🔄 Tunggakan yuran Tabung Yayasan Keluarga (${Utils.formatMoney(payAmt, s.countryId)}) telah dilangsaikan sepenuhnya. Semua transaksi & perlindungan Yayasan dibuka semula!`,
+        'milestone'
+      );
+      GameState.save();
+      return { ok: true, cleared: true, paid: payAmt, msg: 'Semua tunggakan yuran Yayasan dilangsaikan! Akses dibuka semula.' };
+    }
+
+    GameState.addJournalEntry(
+      `🏛️ Bayaran separa tunggakan yuran Yayasan (${Utils.formatMoney(payAmt, s.countryId)}) direkodkan. Baki tunggakan: ${Utils.formatMoney(ft.unpaidFees, s.countryId)}.`
+    );
     GameState.save();
-    return { ok: true, msg: 'Tabung Yayasan Keluarga berjaya diaktifkan semula!' };
+    return {
+      ok: true,
+      cleared: false,
+      paid: payAmt,
+      remaining: ft.unpaidFees,
+      msg: `Bayaran separa ${Utils.formatMoney(payAmt, s.countryId)} berjaya. Baki tunggakan: ${Utils.formatMoney(ft.unpaidFees, s.countryId)}.`
+    };
+  },
+
+  payTrustArrearsAndReactivate(s, amount = null) {
+    return this.payTrustUnpaidFees(s, amount);
+  },
+
+  // Cangkuk (hook) pembubaran paksa akibat tunggakan mencapai 100% nilai Yayasan — dilengkapkan pada Prompt 2
+  forceDissolveTrustForDebt(state) {
+    if (!state || !state.familyTrust) return { triggered: false };
+    const ft = state.familyTrust;
+    GameState.addJournalEntry(
+      `🚨🏛️ AMARAN KRITIKAL YAYASAN: Tunggakan yuran (${Utils.formatMoney(ft.unpaidFees || 0, state.countryId)}) telah mencapai siling 100% nilai bersih Tabung Yayasan Keluarga! Yayasan kini berada di ambang pembubaran paksa.`,
+      'warning'
+    );
+    return { triggered: true, unpaidFees: ft.unpaidFees || 0 };
   },
 
   dissolveFamilyTrust(s) {
@@ -703,6 +816,9 @@ window.LegalInheritanceEngine = {
     this.ensureFamilyTrust(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membubarkan yayasan semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pembubaran sukarela dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
     const returned = Math.max(0, Math.round(s.familyTrust.balance || 0));
     s.money += returned;
     if (!s.assets) s.assets = { properties: [], vehicles: [], collectibles: [], portfolio: {} };
@@ -728,6 +844,7 @@ window.LegalInheritanceEngine = {
     s.familyTrust.assets = [];
     s.familyTrust.investments = [];
     s.familyTrust.balance = 0;
+    s.familyTrust.unpaidFees = 0;
     s.familyTrust.active = false;
     s.familyTrust.lapsed = false;
     s.familyTrust.underAudit = false;
@@ -808,27 +925,41 @@ window.LegalInheritanceEngine = {
       }
     }
 
-    // 2. Yuran pengurusan tahunan tetap 1.5% setahun
+    // 2. Yuran pengurusan tahunan mengikut kategori ekonomi negara
     ft.yearsActive = (ft.yearsActive || 0) + 1;
-    ft.feeRate = 1.5;
+    const curCountry = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    const rates = this.getTrustCountryRates(curCountry);
+    ft.feeRate = Number((rates.annualFeeRate * 100).toFixed(2));
 
-    const fee = this.getTrustAnnualFee(s);
-    if (s.money >= fee) {
-      s.money -= fee;
-      ft.lapsed = false;
-      ft.lastPaidAge = s.age;
-      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (1.5% setahun) telah ditolak (-${Utils.formatMoney(fee, s.countryId)}).`);
-    } else if (ft.balance >= fee) {
-      ft.balance -= fee;
-      ft.lapsed = false;
-      ft.lastPaidAge = s.age;
-      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (1.5% setahun) telah ditolak daripada dana yayasan (-${Utils.formatMoney(fee, s.countryId)}).`);
-    } else {
-      ft.lapsed = true;
-      GameState.addJournalEntry(
-        `⚠️ Gagal membayar yuran tahunan Tabung Yayasan Keluarga (${Utils.formatMoney(fee, s.countryId)}). Perlindungan bebas cukai kini digantung sehingga tunggakan dilangsaikan.`,
-        'warning'
-      );
+    if (rates.annualFeeRate > 0) {
+      const fee = this.getTrustAnnualFee(s);
+      if (fee > 0) {
+        const paidFromTrust = Math.min(Math.max(0, Math.round(ft.balance || 0)), fee);
+        ft.balance = Math.max(0, Math.round((ft.balance || 0) - paidFromTrust));
+        const shortfall = Math.max(0, fee - paidFromTrust);
+        if (shortfall === 0) {
+          ft.lastPaidAge = s.age;
+          if ((ft.unpaidFees || 0) <= 0) ft.lapsed = false;
+          GameState.addJournalEntry(
+            `🏛️ Yuran tahunan Tabung Yayasan Keluarga (${rates.categoryLabel} • ${ft.feeRate}%/thn) ditolak daripada dana Yayasan (-${Utils.formatMoney(fee, s.countryId)}).`
+          );
+        } else {
+          ft.unpaidFees = Math.round((ft.unpaidFees || 0) + shortfall);
+          ft.lapsed = true;
+          GameState.addJournalEntry(
+            `⚠️ Baki tunai Yayasan tidak mencukupi untuk yuran tahunan (${Utils.formatMoney(fee, s.countryId)}). Baki ${Utils.formatMoney(shortfall, s.countryId)} ditambah ke tunggakan yuran (Jumlah tunggakan: ${Utils.formatMoney(ft.unpaidFees, s.countryId)}).`,
+            'warning'
+          );
+        }
+      }
+    }
+
+    // Had siling kumulatif tunggakan: berhenti apabila unpaidFees >= getTrustNetWorth(s)
+    const trustNetAfterFee = this.getTrustNetWorth(s);
+    if ((ft.unpaidFees || 0) > 0 && (ft.unpaidFees >= trustNetAfterFee || trustNetAfterFee <= 0)) {
+      ft.unpaidFees = Math.max(0, trustNetAfterFee);
+      this.forceDissolveTrustForDebt(s);
+      return null;
     }
 
     // 3. Kontrak Pengurus Dana

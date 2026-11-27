@@ -1575,7 +1575,12 @@ window.Modals = {
     const trustInvsVal = LegalInheritanceEngine.getTrustInvestmentsValue(s);
     const trustNetWorth = LegalInheritanceEngine.getTrustNetWorth(s);
     const perf = LegalInheritanceEngine.getTrustPerformancePct(s);
-    const corpTaxPct = Math.round(LegalInheritanceEngine.getCorporateTaxRate(s) * 100);
+    const trustRates = LegalInheritanceEngine.getTrustCountryRates(Utils.getCountry(s.countryId));
+    const annualFeePctStr = trustRates.annualFeeRate === 0 ? '0%' : `${Number((trustRates.annualFeeRate * 100).toFixed(2))}%`;
+    const corpTaxPct = Math.round(trustRates.corporateTaxRate * 100);
+    const unpaidFees = Math.max(0, Math.round(ft.unpaidFees || 0));
+    const hasArrears = unpaidFees > 0;
+    const arrearsRatioPct = trustNetWorth > 0 ? Math.min(100, Math.round((unpaidFees / trustNetWorth) * 100)) : (hasArrears ? 100 : 0);
     const selectedMgrYears = [1, 2, 3, 5].includes(Number(this._trustMgrYears)) ? Number(this._trustMgrYears) : 1;
     this._trustMgrYears = selectedMgrYears;
     const mgrOffers = LegalInheritanceEngine.getFundManagerOffers(s, selectedMgrYears);
@@ -1586,11 +1591,11 @@ window.Modals = {
     const trustInvs = Array.isArray(ft.investments) ? ft.investments.filter(h => h && h.units > 0) : [];
     const trustStatusLabel = !ft.active
       ? 'Tidak Aktif'
-      : ft.lapsed
+      : hasArrears || ft.lapsed
         ? '⚠️ Tergantung (Tunggakan Yuran)'
         : 'Aktif (Bebas Cukai Pusaka)';
-    const trustStatusBg = !ft.active ? '#f1f5f9' : ft.lapsed ? '#fef3c7' : '#dcfce7';
-    const trustStatusColor = !ft.active ? '#475569' : ft.lapsed ? '#92400e' : '#166534';
+    const trustStatusBg = !ft.active ? '#f1f5f9' : (hasArrears || ft.lapsed) ? '#fef3c7' : '#dcfce7';
+    const trustStatusColor = !ft.active ? '#475569' : (hasArrears || ft.lapsed) ? '#92400e' : '#166534';
     const mgrTierLabels = { junior: 'Pengurus Dana Junior', profesional: 'Pengurus Korporat Profesional', elit: 'Pengurus Dana Elit (Padu)' };
     const perfBadge = perf.hasBaseline
       ? `<span class="cat-badge" style="background:${perf.pct >= 0 ? '#dcfce7' : '#fee2e2'};color:${perf.pct >= 0 ? '#166534' : '#991b1b'};">${perf.pct >= 0 ? '📈 +' : '📉 '}${perf.pct}%</span>`
@@ -1613,7 +1618,7 @@ window.Modals = {
         ` : ''}
 
         <div class="section-heading">🏛️ Tabung Yayasan Keluarga (Eksklusif Pewaris Pemain)</div>
-        <div class="migration-card" style="border-color:${ft.active && !ft.lapsed ? '#22c55e' : ft.lapsed ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
+        <div class="migration-card" style="border-color:${ft.active && !hasArrears && !ft.lapsed ? '#22c55e' : (hasArrears || ft.lapsed) ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
           <div class="mig-head">
             <div class="mig-title">🏛️ Tabung Yayasan Keluarga</div>
             <span class="cat-badge" style="background:${trustStatusBg};color:${trustStatusColor};">${trustStatusLabel}</span>
@@ -1633,6 +1638,9 @@ window.Modals = {
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.58;">
               <div>👑 <strong>Pengasas:</strong> ${Utils.escapeHtml(ft.founderName || s.name)} (Gen ${ft.founderGen || s.generation || 1}) • <strong>Aktif: ${ft.yearsActive || 0} tahun</strong></div>
               <div style="font-size:11px;color:#64748b;margin-top:2px;">💱 ${rateLabel}</div>
+              <div style="font-size:11.5px;margin-top:3px;color:${trustRates.isTaxHaven ? '#15803d' : '#334155'};">
+                🏝️ Kategori Negara: <strong>${Utils.escapeHtml(trustRates.categoryLabel)}</strong>${trustRates.isTaxHaven ? ' <span class="cat-badge synergy">Bebas Cukai</span>' : ''}
+              </div>
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:5px;">
                 <div>
                   <span>💰 <strong>Jumlah Nilai Bersih Yayasan:</strong> <strong style="color:#059669;">${fmt(trustNetWorth)}</strong></span>
@@ -1646,12 +1654,13 @@ window.Modals = {
                   ${cashUsdEq ? `<span style="font-size:10.5px;color:#64748b;margin-left:4px;">(${cashUsdEq})</span>` : ''}
                 </div>
                 Pelaburan (${trustInvs.length}): <strong>${fmt(trustInvsVal)}</strong> • Aset (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
-                Kadar Yuran Tetap: <strong>1.5% setahun</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
+                Kadar Yuran Tahunan: <strong>${annualFeePctStr}/thn</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
               </div>
             </div>`;
           })() : `
             <div style="font-size:12px;color:#475569;line-height:1.55;margin-bottom:10px;">
-              Tubuhkan Tabung Yayasan Keluarga untuk melindungi tunai, hartanah, kenderaan &amp; pelaburan agar 100% diwarisi eksklusif oleh watak pemain generasi seterusnya (0% cukai pusaka &amp; 0% bahagian NPC).
+              Tubuhkan Tabung Yayasan Keluarga untuk melindungi tunai, hartanah, kenderaan &amp; pelaburan agar 100% diwarisi eksklusif oleh watak pemain generasi seterusnya (0% cukai pusaka &amp; 0% bahagian NPC).<br/>
+              <span style="font-size:11.5px;color:#334155;">🏝️ Kategori Negara Semasa: <strong>${Utils.escapeHtml(trustRates.categoryLabel)}</strong> • Yuran: <strong>${annualFeePctStr}/thn</strong> • Cukai Korporat: <strong>${corpTaxPct}%</strong></span>
             </div>
           `}
           ${trustLocked ? `
@@ -1663,17 +1672,21 @@ window.Modals = {
               🏛️ Tubuhkan Yayasan Keluarga (${fmt(setupFee)})
             </button>
           ` : `
-            ${ft.lapsed ? `
+            ${hasArrears ? `
+              <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;font-size:12px;line-height:1.5;margin-bottom:8px;">
+                <strong>⚠️ Tunggakan Yuran Yayasan: ${fmt(unpaidFees)} (${arrearsRatioPct}% daripada Nilai Bersih Yayasan)</strong><br/>
+                Kemasukan/pengeluaran dana, pemindahan aset, dan pembubaran sukarela dikunci sehingga semua tunggakan dilangsaikan. Masukkan jumlah di bawah untuk bayaran separa atau kosongkan untuk bayar penuh.
+              </div>
               <button type="button" class="primary-btn" id="btn-trust-reactivate" style="width:100%;margin-bottom:8px;background:#d97706;">
-                🔄 Langsaikan Yuran &amp; Aktifkan Semula (${fmt(annualFee)})
+                💳 Langsaikan Tunggakan Yuran (${fmt(unpaidFees)})
               </button>
             ` : ''}
             <div style="display:flex;gap:6px;margin-bottom:8px;">
-              <input type="number" id="input-trust-amount" class="form-input" min="1" placeholder="Jumlah (${Utils.getCountry(s.countryId).currency.symbol})" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);" />
+              <input type="number" id="input-trust-amount" class="form-input" min="1" placeholder="${hasArrears ? 'Jumlah bayaran tunggakan (kosong = bayar penuh)' : `Jumlah (${Utils.getCountry(s.countryId).currency.symbol})`}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);" />
             </div>
             <div style="display:flex;gap:6px;margin-bottom:10px;">
-              <button type="button" class="btn-sm primary" id="btn-trust-deposit" style="flex:1;">💰 Masukkan Dana ke Yayasan</button>
-              <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;">💵 Keluarkan Dana Yayasan</button>
+              <button type="button" class="btn-sm primary" id="btn-trust-deposit" style="flex:1;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Masukkan Dana' : '💰 Masukkan Dana ke Yayasan'}</button>
+              <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Keluarkan Dana' : '💵 Keluarkan Dana Yayasan'}</button>
             </div>
 
             <div class="section-heading" style="margin-top:6px;">👔 Pengurus Dana Yayasan</div>
@@ -1793,8 +1806,8 @@ window.Modals = {
               </div>
             `}
 
-            <button type="button" class="ghost-btn" id="btn-trust-dissolve" style="width:100%;border-color:#fca5a5;color:#dc2626;font-weight:700;">
-              ❌ Bubarkan Yayasan
+            <button type="button" class="ghost-btn" id="btn-trust-dissolve" style="width:100%;border-color:#fca5a5;color:#dc2626;font-weight:700;" ${hasArrears ? 'disabled' : ''}>
+              ${hasArrears ? '🔒 Bubarkan Yayasan (Langsaikan Tunggakan Dahulu)' : '❌ Bubarkan Yayasan'}
             </button>
           `}
         </div>
@@ -1847,7 +1860,9 @@ window.Modals = {
 
     const reactBtn = document.getElementById('btn-trust-reactivate');
     if (reactBtn) reactBtn.addEventListener('click', () => {
-      const res = LegalInheritanceEngine.payTrustArrearsAndReactivate(s);
+      const inp = document.getElementById('input-trust-amount');
+      const amt = inp && inp.value && Number(inp.value) > 0 ? Number(inp.value) : null;
+      const res = LegalInheritanceEngine.payTrustArrearsAndReactivate(s, amt);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
       this.showWasiatModal(onBack);
