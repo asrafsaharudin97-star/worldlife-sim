@@ -431,6 +431,7 @@ window.GameState = {
     if (typeof s.loanBlacklisted !== 'boolean') s.loanBlacklisted = false;
     if (typeof s.cultureVisitedThisYear !== 'boolean') s.cultureVisitedThisYear = false;
     if (typeof s.scholarshipIvUsedThisYear !== 'boolean') s.scholarshipIvUsedThisYear = false;
+    if (typeof s.hasTakenFoundation !== 'boolean') s.hasTakenFoundation = false;
     if (!s.homeCountry) s.homeCountry = s.birthCountryId || s.countryId || 'MY';
     if (typeof s.prYearsSinceRenewal !== 'number' || Number.isNaN(s.prYearsSinceRenewal)) s.prYearsSinceRenewal = 0;
     if (s.residencyStatus === 'PR') {
@@ -718,6 +719,8 @@ window.GameState = {
       countryBans: this._inheritCountryBans(parent, (parent.generation || 1) + 1),
       loans: this._inheritGenerationalDebts(parent, cId),
       pendingDeportation: null,
+      scholarshipIvUsedThisYear: false,
+      hasTakenFoundation: false,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
       alignment: {

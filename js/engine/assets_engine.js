@@ -1110,11 +1110,13 @@ window.AssetsEngine = {
 
     const spend = Math.min(s.money, Math.round(amountLocal));
     if (spend <= 0 || s.money < spend) return { ok: false, msg: 'Baki tunai tidak mencukupi untuk melabur.' };
+    const fxFee = inst.isGlobal ? Math.max(1, Math.round(spend * 0.015)) : 0;
+    const netInvest = Math.max(1, spend - fxFee);
 
-    const unitsBought = spend / mPrice;
+    const unitsBought = netInvest / mPrice;
     const prev = s.assets.portfolio[instId] || { units: 0, totalCost: 0 };
     prev.units += unitsBought;
-    prev.totalCost += spend;
+    prev.totalCost += netInvest;
     s.assets.portfolio[instId] = prev;
     s.money -= spend;
 
