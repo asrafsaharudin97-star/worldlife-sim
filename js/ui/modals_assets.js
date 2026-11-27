@@ -264,7 +264,9 @@ window.AssetModals = {
               </div>
               <strong style="color:#16a34a;">${Utils.formatMoney(col.value, s.countryId, true)}</strong>
             </div>
-            ${col.isDisplayed ? `<div style="font-size:11px;color:#475569;margin-bottom:6px;">🏛️ Royalti: <strong style="color:#16a34a;">+${Utils.formatMoney(fin.annualRoyalty, s.countryId, true)}/thn</strong> • Insurans: <strong>-${Utils.formatMoney(fin.annualInsurance, s.countryId, true)}/thn</strong></div>` : ''}
+            ${col.isDisplayed
+              ? `<div style="font-size:11px;color:#475569;margin-bottom:6px;">🏛️ Dipamerkan di Galeri • Royalti Bersih: <strong style="color:#16a34a;">+${Utils.formatMoney(fin.netRoyalty, s.countryId, true)}/thn</strong> (Insurans: -${Utils.formatMoney(fin.annualInsurance, s.countryId, true)}/thn)</div>`
+              : `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">📦 Disimpan dalam peti • Tekan Pamerkan untuk jana royalti galeri tahunan</div>`}
             <div class="mig-actions" style="grid-template-columns:repeat(2,1fr);gap:6px;">
               <button type="button" class="btn-sm primary col-heir-btn" data-uid="${col.uid}">${col.isHeirloom ? '✓ Pusaka' : '👑 Jadikan Pusaka'}</button>
               <button type="button" class="btn-sm secondary col-disp-btn" data-uid="${col.uid}">${col.isDisplayed ? '📦 Henti Pamer' : '🏛️ Pamerkan'}</button>

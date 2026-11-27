@@ -1211,19 +1211,39 @@ window.AssetsEngine = {
   },
 
   getCollectibleDisplayFinances(s, col) {
-    if (!s || !col) return { royaltyRatePct: 2.5, insuranceRatePct: 0.75, annualRoyalty: 0, annualInsurance: 0 };
+    if (!s || !col) return { royaltyRatePct: 2.5, insuranceRatePct: 0.5, annualRoyalty: 0, annualInsurance: 0, netRoyalty: 0 };
     const val = Math.max(0, Math.round(col.value || 0));
-    const royaltyRate = col.isHeirloom ? 0.035 : 0.025;
-    const insuranceRate = 0.0075;
-    const capRoyalty = Utils.usdToLocal(250000, s.countryId || 'MY');
-    const annualRoyalty = Math.min(capRoyalty, Math.max(1, Math.round(val * royaltyRate)));
-    const annualInsurance = Math.max(1, Math.round(val * insuranceRate));
+    const royaltyRate = 0.025;
+    const insuranceRate = 0.005;
+    const capNet = Utils.usdToLocal(500000, s.countryId || 'MY');
+    const rawNet = Math.max(0, Math.round(val * (royaltyRate - insuranceRate)));
+    const netRoyalty = Math.min(capNet, rawNet);
+    const annualInsurance = Math.min(Math.round(capNet * 0.25), Math.max(0, Math.round(val * insuranceRate)));
+    const annualRoyalty = netRoyalty + annualInsurance;
     return {
-      royaltyRatePct: +(royaltyRate * 100).toFixed(1),
-      insuranceRatePct: +(insuranceRate * 100).toFixed(2),
+      royaltyRatePct: 2.5,
+      insuranceRatePct: 0.5,
       annualRoyalty,
-      annualInsurance
+      annualInsurance,
+      netRoyalty
     };
+  },
+
+  applyCollectibleYearlyAppreciation(s, col) {
+    if (!s || !col) return;
+    const curVal = Math.max(0, Math.round(col.value || 0));
+    if (curVal <= 0) return;
+    const tmpl = (window.AssetsData && Array.isArray(AssetsData.COLLECTIBLES))
+      ? AssetsData.COLLECTIBLES.find(x => x.id === col.id)
+      : null;
+    const baseUsd = (tmpl && tmpl.baseUsd)
+      ? tmpl.baseUsd
+      : Math.max(500, Math.round((window.Utils && Utils.localToUsd) ? Utils.localToUsd(col.purchasePrice || curVal, s.countryId) : (curVal / 4.5)));
+    const maxLocalVal = Utils.usdToLocal(baseUsd * 10, s.countryId || 'MY');
+    // Bekukan pertumbuhan (0%) jika nilai save lama sudah melepasi siling 10x harga asas USD
+    if (curVal >= maxLocalVal) return;
+    const rate = Utils.clamp(Number(col.appRate) || 0.025, 0.01, 0.04);
+    col.value = Math.min(maxLocalVal, Math.round(curVal * (1 + rate)));
   },
 
   displayCollectible(uid) {
@@ -1498,10 +1518,10 @@ window.AssetsEngine = {
       }
     }
 
-    // 4) Kemas kini Koleksi & Pusaka Keluarga (naik nilai setiap tahun + royalti/insurans pameran!)
+    // 4) Kemas kini Koleksi & Pusaka Keluarga (had kenaikan 1%–4%/thn + siling 10x + royalti pameran)
+    let personalDisplayedCount = 0;
     for (const col of s.assets.collectibles) {
-      const heirBonus = col.isHeirloom ? 0.03 : 0;
-      col.value = Math.round(col.value * (1 + (col.appRate || 0.06) + heirBonus));
+      this.applyCollectibleYearlyAppreciation(s, col);
       if (col.isDisplayed) {
         const fin = this.getCollectibleDisplayFinances(s, col);
         if (s.money < fin.annualInsurance) {
@@ -1513,11 +1533,15 @@ window.AssetsEngine = {
         } else {
           s.money -= fin.annualInsurance;
           s.money += fin.annualRoyalty;
+          personalDisplayedCount++;
           GameState.addJournalEntry(
-            `🏛️ Royalti Pameran Galeri (${col.name}): +${Utils.formatMoney(fin.annualRoyalty, s.countryId)} (Insurans & Penjagaan: -${Utils.formatMoney(fin.annualInsurance, s.countryId)}).`
+            `🏛️ Royalti Pameran Galeri (${col.name}): +${Utils.formatMoney(fin.netRoyalty, s.countryId)} bersih (Insurans: -${Utils.formatMoney(fin.annualInsurance, s.countryId)}).`
           );
         }
       }
+    }
+    if (personalDisplayedCount > 0 && window.KarmaEndings) {
+      KarmaEndings.adjustAlignment({ fame: 1 });
     }
   },
 

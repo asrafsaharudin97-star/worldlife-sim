@@ -1813,6 +1813,12 @@ window.Modals = {
                   ${cashUsdEq ? `<span style="font-size:10.5px;color:#64748b;margin-left:4px;">(${cashUsdEq})</span>` : ''}
                 </div>
                 Pelaburan (${trustInvs.length}): <strong>${fmt(trustInvsVal)}</strong> • Aset (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
+                ${(() => {
+                  const totalGalleryNet = (window.AssetsEngine && AssetsEngine.getCollectibleDisplayFinances)
+                    ? trustAssets.filter(x => x && x.trustAssetType === 'collectible' && x.isDisplayed).reduce((acc, x) => acc + (AssetsEngine.getCollectibleDisplayFinances(s, x).netRoyalty || 0), 0)
+                    : 0;
+                  return totalGalleryNet > 0 ? `Royalti Pameran Galeri: <strong style="color:#16a34a;">+${fmt(totalGalleryNet)}/thn</strong><br/>` : '';
+                })()}
                 Kadar Yuran Tahunan: <strong>${annualFeePctStr}/thn</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
               </div>
             </div>`;
@@ -1880,6 +1886,9 @@ window.Modals = {
                 const isCol = a.trustAssetType === 'collectible';
                 const cond = Utils.clamp(typeof a.condition === 'number' ? a.condition : 80, 0, 100);
                 const repairCost = isProp && window.AssetsEngine ? AssetsEngine.getPropertyRepairCost(s, a) : 0;
+                const colFin = (isCol && window.AssetsEngine && AssetsEngine.getCollectibleDisplayFinances)
+                  ? AssetsEngine.getCollectibleDisplayFinances(s, a)
+                  : null;
                 return `
                   <div class="migration-card" style="padding:8px 10px;margin-bottom:8px;">
                     <div class="mig-head">
@@ -1887,7 +1896,13 @@ window.Modals = {
                       <strong>${fmt(a.value || 0)}</strong>
                     </div>
                     <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-                      ${isProp ? `Hartanah Yayasan • Kondisi: <strong>${cond}%</strong>${cond <= 50 ? ' (Perlu baik pulih >50%)' : ''}` : isCol ? 'Koleksi / Pusaka Yayasan' : 'Kenderaan Yayasan'}
+                      ${isProp
+                        ? `Hartanah Yayasan • Kondisi: <strong>${cond}%</strong>${cond <= 50 ? ' (Perlu baik pulih >50%)' : ''}`
+                        : isCol
+                          ? (a.isDisplayed && colFin
+                              ? `🏛️ Dipamerkan di Galeri • Royalti Bersih: <strong style="color:#16a34a;">+${fmt(colFin.netRoyalty)}/thn</strong> (Insurans: -${fmt(colFin.annualInsurance)}/thn)`
+                              : `📦 Disimpan dalam peti • Tekan Pamerkan untuk jana royalti galeri tahunan`)
+                          : 'Kenderaan Yayasan'}
                     </div>
                     <div style="display:flex;gap:5px;flex-wrap:wrap;">
                       ${isProp ? `<button type="button" class="btn-sm primary btn-trust-rent-prop" data-uid="${a.uid}" style="flex:1;">${a.rented ? 'Henti Sewa' : '🔑 Sewakan'}</button>` : ''}

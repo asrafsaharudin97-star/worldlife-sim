@@ -1209,11 +1209,13 @@ window.LegalInheritanceEngine = {
     let trustRentNet = 0;
     let trustDivIncome = 0;
     let trustDisplayNet = 0;
+    let trustDisplayedCount = 0;
     for (const a of ft.assets) {
       if (!a) continue;
       if (a.trustAssetType === 'collectible') {
-        const heirBonus = a.isHeirloom ? 0.03 : 0;
-        a.value = Math.round((a.value || 0) * (1 + (a.appRate || 0.06) + heirBonus));
+        if (window.AssetsEngine && AssetsEngine.applyCollectibleYearlyAppreciation) {
+          AssetsEngine.applyCollectibleYearlyAppreciation(s, a);
+        }
         if (a.isDisplayed && window.AssetsEngine && AssetsEngine.getCollectibleDisplayFinances) {
           const fin = AssetsEngine.getCollectibleDisplayFinances(s, a);
           if (ft.balance < fin.annualInsurance) {
@@ -1223,7 +1225,8 @@ window.LegalInheritanceEngine = {
               'warning'
             );
           } else {
-            trustDisplayNet += (fin.annualRoyalty - fin.annualInsurance);
+            trustDisplayNet += fin.netRoyalty;
+            trustDisplayedCount++;
           }
         }
         continue;
@@ -1253,9 +1256,15 @@ window.LegalInheritanceEngine = {
     const totalTrustYield = trustRentNet + trustDivIncome + trustDisplayNet;
     if (totalTrustYield !== 0) {
       ft.balance = Math.max(0, Math.round(ft.balance + totalTrustYield));
-      if (totalTrustYield > 0) {
-        GameState.addJournalEntry(`🏛️ Pendapatan Pasif Yayasan: +${Utils.formatMoney(totalTrustYield, s.countryId)} (Sewa Bersih & Dividen/Faedah) dikreditkan terus ke Tabung Yayasan Keluarga.`);
+      if (trustRentNet + trustDivIncome > 0) {
+        GameState.addJournalEntry(`🏛️ Pendapatan Pasif Yayasan: +${Utils.formatMoney(trustRentNet + trustDivIncome, s.countryId)} (Sewa Bersih & Dividen/Faedah) dikreditkan terus ke Tabung Yayasan Keluarga.`);
       }
+    }
+    if (trustDisplayNet > 0) {
+      GameState.addJournalEntry(`🏛️ Pameran galeri pusaka Yayasan menjana royalti bersih sebanyak ${Utils.formatMoney(trustDisplayNet, s.countryId)} ke dalam akaun Yayasan.`);
+    }
+    if (trustDisplayedCount > 0 && window.KarmaEndings) {
+      KarmaEndings.adjustAlignment({ fame: 1 });
     }
 
     // 2. Yuran pengurusan tahunan mengikut kategori ekonomi negara domisil Yayasan
