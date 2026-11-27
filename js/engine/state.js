@@ -800,41 +800,66 @@ window.GameState = {
       }
     }
 
-    if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
-      const trustCashLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.balance || 0, parent.countryId, cId)));
-      const transferredAssets = (parent.familyTrust.assets || []).map(a => ({
-        ...JSON.parse(JSON.stringify(a)),
-        value: Math.max(0, Math.round(Utils.convertMoney(a.value || 0, parent.countryId, cId)))
-      }));
-      const transferredInvs = (parent.familyTrust.investments || []).map(h => ({
+    if (Array.isArray(parent.trustHistory)) {
+      state.trustHistory = JSON.parse(JSON.stringify(parent.trustHistory));
+    }
+
+    if (parent.familyTrust && parent.familyTrust.active) {
+      const pft = parent.familyTrust;
+      const trustCashLocal = Math.max(0, Math.round(Utils.convertMoney(pft.balance || 0, parent.countryId, cId)));
+      const transferredAssets = (pft.assets || []).map(a => {
+        const clone = JSON.parse(JSON.stringify(a));
+        clone.value = Math.max(0, Math.round(Utils.convertMoney(a.value || 0, parent.countryId, cId)));
+        if (typeof clone.purchasePrice === 'number') clone.purchasePrice = Math.max(0, Math.round(Utils.convertMoney(clone.purchasePrice, parent.countryId, cId)));
+        if (typeof clone.upkeep === 'number') clone.upkeep = Math.max(0, Math.round(Utils.convertMoney(clone.upkeep, parent.countryId, cId)));
+        return clone;
+      });
+      const transferredInvs = (pft.investments || []).map(h => ({
         ...JSON.parse(JSON.stringify(h)),
         totalCost: Math.max(0, Math.round(Utils.convertMoney(h.totalCost || 0, parent.countryId, cId)))
       }));
-      const prevValLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.prevTotalValue || 0, parent.countryId, cId)));
-      const baseValLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.baselineValue || 0, parent.countryId, cId)));
+      const prevValLocal = Math.max(0, Math.round(Utils.convertMoney(pft.prevTotalValue || 0, parent.countryId, cId)));
+      const baseValLocal = Math.max(0, Math.round(Utils.convertMoney(pft.baselineValue || 0, parent.countryId, cId)));
+      const unpaidFeesLocal = Math.max(0, Math.round(Utils.convertMoney(pft.unpaidFees || 0, parent.countryId, cId)));
+      const isLocked = pft.isDomicileLocked !== false;
+      const inheritedDomicile = isLocked
+        ? (pft.domicileCountry || parent.countryId || cId)
+        : cId;
       state.familyTrust = {
         active: true,
         balance: trustCashLocal,
         assets: transferredAssets,
         investments: transferredInvs,
-        feeRate: 1.5,
-        yearsActive: parent.familyTrust.yearsActive || 0,
-        fundManager: parent.familyTrust.fundManager ? { ...parent.familyTrust.fundManager } : null,
-        underAudit: false,
-        lapsed: false,
-        lastPaidAge: null,
-        founderName: parent.familyTrust.founderName || parent.name,
-        founderGen: parent.familyTrust.founderGen || parent.generation || 1,
-        foundedYear: parent.familyTrust.foundedYear || parent.year,
+        feeRate: pft.feeRate ?? 1.5,
+        yearsActive: pft.yearsActive || 0,
+        fundManager: pft.fundManager ? { ...pft.fundManager } : null,
+        underAudit: Boolean(pft.underAudit),
+        lapsed: unpaidFeesLocal > 0,
+        unpaidFees: unpaidFeesLocal,
+        unpaidStreakYears: unpaidFeesLocal > 0 ? Math.max(0, Math.floor(Number(pft.unpaidStreakYears) || 0)) : 0,
+        auditHeat: Number(pft.auditHeat) || 0,
+        lastPaidAge: pft.lastPaidAge ?? null,
+        founderName: pft.founderName || parent.name,
+        founderGen: pft.founderGen || parent.generation || 1,
+        foundedYear: pft.foundedYear || parent.year,
         prevTotalValue: prevValLocal,
-        baselineValue: baseValLocal
+        baselineValue: baseValLocal,
+        domicileCountry: inheritedDomicile,
+        isDomicileLocked: isLocked,
+        proxyUsedUsdThisYear: { official: 0, shadow: 0 }
       };
       this.addJournalEntry(
         `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)}, ${transferredAssets.length} aset & ${transferredInvs.length} pelaburan yayasan dipindahkan terus ke Generasi ${state.generation}!`,
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, assets: [], investments: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null, founderName: null, founderGen: null, foundedYear: null, prevTotalValue: 0, baselineValue: 0 };
+      state.familyTrust = {
+        active: false, balance: 0, assets: [], investments: [], feeRate: 1.5, yearsActive: 0,
+        fundManager: null, underAudit: false, lapsed: false, unpaidFees: 0, unpaidStreakYears: 0,
+        auditHeat: 0, lastPaidAge: null, founderName: null, founderGen: null, foundedYear: null,
+        prevTotalValue: 0, baselineValue: 0, domicileCountry: cId, isDomicileLocked: true,
+        proxyUsedUsdThisYear: { official: 0, shadow: 0 }
+      };
     }
 
     if (window.Dynasty) {
