@@ -257,8 +257,9 @@ window.SecurityThreats = {
       }
     }
 
-    // 2. Petunjuk halus & risiko serangan bagi ancaman aktif
+    // 2. Petunjuk halus & risiko serangan bagi ancaman aktif (had umur keselamatan kanak-kanak)
     if (s.prison && s.prison.inPrison) return null;
+    if ((s.age || 0) < 12) return null;
     const activeThreats = s.threats.filter(t => t && !t.resolved);
     if (activeThreats.length === 0) return null;
 
@@ -268,6 +269,8 @@ window.SecurityThreats = {
       GameState.addJournalEntry(`👁️ Firasat tidak sedap hati: ${clue}`, 'warning');
     }
 
+    // Serangan fizikal / cubaan bunuh dendam HANYA dibenarkan untuk umur 18 tahun ke atas
+    if ((s.age || 0) < 18) return null;
     if (!Utils.chance(0.18)) return null;
 
     const hasBodyguard = Boolean(s.bodyguard && s.bodyguard.active);
