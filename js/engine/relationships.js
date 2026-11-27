@@ -3,6 +3,24 @@
    ========================================================================== */
 
 window.Relationships = {
+  getRingPrice(s) {
+    return Utils.usdToLocal(900, (s && s.countryId) || 'MY');
+  },
+
+  buyRing(s = GameState.current) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membeli cincin semasa dalam tahanan.' };
+    const price = this.getRingPrice(s);
+    if ((s.money || 0) < price) {
+      return { ok: false, msg: `Baki tidak mencukupi — harga cincin ialah ${Utils.formatMoney(price, s.countryId)}.` };
+    }
+    s.money -= price;
+    s.ringCount = (s.ringCount || 0) + 1;
+    GameState.addJournalEntry(`💍 Anda membeli sebentuk cincin rasmi dengan harga ${Utils.formatMoney(price, s.countryId)} (Jumlah cincin: ${s.ringCount}).`);
+    GameState.save();
+    return { ok: true, msg: `Cincin berjaya dibeli! Anda kini memiliki ${s.ringCount} cincin.` };
+  },
+
 
   ensureRelationshipFields(s) {
     if (!s || !Array.isArray(s.relationships)) return;
@@ -1096,6 +1114,9 @@ window.Relationships = {
 
     // --- Merisik & Bertunang ---
     if (action === 'engage') {
+      if ((s.ringCount || 0) < 1) {
+        return { ok: false, needsRing: true, msg: 'Anda perlu memiliki cincin terlebih dahulu sebelum bertunang atau berkahwin secara formal. Sila beli cincin dahulu atau pilih Kahwin Lompat.' };
+      }
       if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s) && !rel.isRoyal) {
         return { ok: false, msg: 'Mengikut protokol istana, golongan diraja hanya dibenarkan berkahwin dengan kerabat diraja sahaja.' };
       }
@@ -1198,6 +1219,7 @@ window.Relationships = {
       }
 
       s.money -= cost;
+      s.ringCount = Math.max(0, (s.ringCount || 1) - 1);
       rel.stage = 'engaged';
       rel.role = 'Tunang';
       rel.engagedYear = s.year;
@@ -1370,6 +1392,7 @@ window.Relationships = {
         LegalInheritanceEngine.recordMarriageStart(s, rel, usePrenup);
       }
       s.money -= totalCost;
+      s.ringCount = Math.max(0, (s.ringCount || 1) - 1);
       s.married = true;
       s.maritalStatus = null;
       rel.category = 'spouse';
@@ -1661,7 +1684,7 @@ window.Relationships = {
       }
       s.partnerId = null;
       s.married = false;
-      s.maritalStatus = wasMarried ? 'divorced' : 'single';
+      s.maritalStatus = wasMarried ? 'Bercerai' : 'Bujang';
       s.relationships = (s.relationships || []).filter(r => r && r.id !== rel.id);
       if (wasMarried && s.money > 0) {
         const settle = Math.round(s.money * 0.15);

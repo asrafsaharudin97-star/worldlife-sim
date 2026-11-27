@@ -24,6 +24,7 @@ window.Sim = {
     s.yearlyActions = {};
     s.cultureVisitedThisYear = false;
     s.scholarshipIvUsedThisYear = false;
+    if (window.SecurityThreats && SecurityThreats.tickYearlySecurity) SecurityThreats.tickYearlySecurity(s);
     s._pendingImmigrationEnforcement = null;
     if (s.countryBans && typeof s.countryBans === 'object') {
       const curGen = Number(s.generation || 1);
@@ -2314,6 +2315,9 @@ window.Sim = {
               }
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 18, stress: 16, karma: -6 });
               if (window.Dynasty) Dynasty.adjustReputation(-8);
+              if (sec.type === 'mafia_tie' && window.SecurityThreats && SecurityThreats.registerThreat) {
+                SecurityThreats.registerThreat(st, { targetName: 'Bekas Kenalan Sindiket', relationType: 'Sindiket', motive: 'Pendedahan rahsia kaitan mafia', complexity: 'high' });
+              }
               return { outcome: 'Rahsia lama anda terbongkar! Reputasi anda terjejas dan pihak berkuasa mula memantau rapat rekod anda.' };
             }
             sec.resolved = true;
@@ -2747,7 +2751,7 @@ window.Sim = {
       } else {
         s.partnerId = null;
         s.married = false;
-        s.maritalStatus = 'divorced';
+        s.maritalStatus = 'Bercerai';
         s.relationships = (s.relationships || []).filter(r => r && r.id !== spouse.id);
       }
       // Pastikan baki tunai masih mencukupi untuk kos tiket atau benarkan diteruskan selepas penyelesaian harta

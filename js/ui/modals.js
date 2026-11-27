@@ -472,7 +472,7 @@ window.Modals = {
     if (s.maritalStatus && !s.married) {
       html += `
         <div class="info-banner" style="background:#f8fafc;border-color:#cbd5e1;">
-          🕊️ Status Perkahwinan Semasa: <strong>${Utils.escapeHtml(s.maritalStatus)}</strong>
+          🕊️ Status Perkahwinan Semasa: <strong>${Utils.escapeHtml(this._fmtMaritalStatus(s.maritalStatus))}</strong>
         </div>
       `;
     }
@@ -2933,7 +2933,7 @@ window.Modals = {
           Pendidikan Tertinggi: <strong>${edLvlInfo.icon} ${Utils.escapeHtml(edLvlInfo.label)}${edFieldObj ? ` — ${Utils.escapeHtml(edFieldObj.name)}` : ''}</strong>${cgpaLabel}${deansBadge}<br/>
           Pendapatan Tahunan: <strong>${Utils.formatMoney(inc.grossLocal, s.countryId)}/thn</strong> (Bersih: ${Utils.formatMoney(inc.netLocal, s.countryId)}/thn)${incBreakdownStr}<br/>
           Tempat Lahir: ${birthC.flag} ${s.birthCity}, ${birthC.name} (${s.heritageLabel})<br/>
-          Status Perkahwinan: <strong>${s.married ? '💍 Berkahwin' : (s.maritalStatus ? `🕊️ ${Utils.escapeHtml(s.maritalStatus)}` : 'Bujang')}</strong><br/>
+          Status Perkahwinan: <strong>${s.married ? '💍 Berkahwin' : (s.maritalStatus ? `🕊️ ${Utils.escapeHtml(this._fmtMaritalStatus(s.maritalStatus))}` : 'Bujang')}</strong><br/>
           Status Wasiat: <strong>${Utils.escapeHtml(wasiatSummary)}</strong><br/>
           Status Semasa: <strong>${c.flag} ${c.name} — ${App._residencyLabel(s.residencyStatus)}</strong> (${s.yearsInCurrentCountry} tahun)<br/>
           Kewarganegaraan: ${s.citizenships.map(id => `${Utils.getCountry(id).flag} ${Utils.getCountry(id).name}`).join(', ')}
@@ -4207,6 +4207,17 @@ window.Modals = {
   // --------------------------------------------------------------------------
   // 7. RINGKASAN AKHIR HAYAT & SAMBUNG SEBAGAI ANAK
   // --------------------------------------------------------------------------
+  _fmtMaritalStatus(val) {
+    if (!val) return 'Bujang';
+    const low = String(val).trim().toLowerCase();
+    if (low === 'divorced') return 'Bercerai';
+    if (low === 'single') return 'Bujang';
+    if (low === 'widowed') return 'Balu / Duda';
+    if (low === 'married') return 'Berkahwin';
+    if (low === 'engaged') return 'Bertunang';
+    return String(val);
+  },
+
   showDeathSummary() {
     if (window.ModeModals && ModeModals.showLegacyObituary) {
       ModeModals.showLegacyObituary();
@@ -4216,7 +4227,19 @@ window.Modals = {
     const ribbon = GameState.computeRibbon(s);
     const c = Utils.getCountry(s.countryId);
     const birthC = Utils.getCountry(s.birthCountryId);
-    const livingKids = s.relationships.filter(r => (r.role === 'Anak Lelaki' || r.role === 'Anak Perempuan' || r.role === 'Son' || r.role === 'Daughter') && r.alive);
+    const livingKids = (window.GameState && GameState.getEligibleHeirs)
+      ? GameState.getEligibleHeirs(s)
+      : s.relationships.filter(r => (r.role === 'Anak Lelaki' || r.role === 'Anak Perempuan' || r.role === 'Son' || r.role === 'Daughter') && r.alive && !r.disowned);
+    const trustExt = (livingKids.length === 0 && window.LegalInheritanceEngine && LegalInheritanceEngine.extinguishTrustOnNoHeir)
+      ? LegalInheritanceEngine.extinguishTrustOnNoHeir(s)
+      : { extinguished: false, lostValue: 0 };
+    const noHeirBanner = livingKids.length === 0 ? `
+      <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b;font-size:12.5px;line-height:1.6;margin:10px 0;">
+        <strong>🕯️ GAME OVER — Dinasti Terputus Tanpa Pewaris</strong><br/>
+        Perjalanan ${Utils.escapeHtml(s.name)} berakhir pada umur ${s.age} tahun (Generasi ${s.generation || 1}) tanpa sebarang pewaris sah untuk menyambung legasi keluarga.
+        ${trustExt.extinguished ? `<br/>🏛️ <strong>Tabung Yayasan Keluarga Pupus:</strong> Seluruh aset dan dana bernilai <strong>${Utils.formatMoney(trustExt.lostValue, s.countryId, true)}</strong> dalam Yayasan telah terhapus bersama berakhirnya dinasti.` : ''}
+      </div>
+    ` : '';
 
     const kidsHtml = livingKids.length > 0 ? `
       <div class="section-heading">👑 Sambung Legasi Sebagai Anak (Gen ${(s.generation || 1) + 1})</div>
@@ -4271,8 +4294,8 @@ window.Modals = {
             <span class="lbl">Pegangan / Kepercayaan Akhir</span>
           </div>
         </div>
-        ${kidsHtml}
-        <button class="primary-btn" id="btn-death-new-life">✨ Mula Kehidupan Baru</button>
+        ${noHeirBanner}${kidsHtml}
+        <button class="primary-btn" id="btn-death-new-life">✨ Buka Watak Baharu</button>
       `
     });
 

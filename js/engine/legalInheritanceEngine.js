@@ -128,7 +128,7 @@ window.LegalInheritanceEngine = {
 
     s.relationships = (s.relationships || []).filter(r => r && r.id !== partner.id);
     s.married = false;
-    s.maritalStatus = 'divorced';
+    s.maritalStatus = 'Bercerai';
     s.partnerId = null;
     s.legal.prenup = false;
     s.legal.prenupPartnerId = null;
@@ -1450,6 +1450,33 @@ window.LegalInheritanceEngine = {
 
   payTrustArrearsAndReactivate(s, amount = null) {
     return this.payTrustUnpaidFees(s, amount);
+  },
+
+  extinguishTrustOnNoHeir(s) {
+    if (!s || !s.familyTrust || !s.familyTrust.active) return { extinguished: false, lostValue: 0 };
+    const ft = s.familyTrust;
+    const lostValue = this.getTrustNetWorth(s);
+    if (!Array.isArray(s.trustHistory)) s.trustHistory = [];
+    s.trustHistory.push({
+      year: s.year || 2026,
+      age: s.age || 0,
+      generation: s.generation || 1,
+      founderName: ft.founderName || s.name || 'Pengasas',
+      totalTrustValue: lostValue,
+      debtDue: 0,
+      reason: 'Yayasan pupus — dinasti tamat tanpa pewaris sah'
+    });
+    ft.active = false;
+    ft.balance = 0;
+    ft.assets = [];
+    ft.investments = [];
+    ft.unpaidFees = 0;
+    ft.unpaidStreakYears = 0;
+    ft.lapsed = false;
+    ft.fundManager = null;
+    ft.latestFundReport = null;
+    GameState.save();
+    return { extinguished: true, lostValue };
   },
 
   forceDissolveTrustForDebt(state) {

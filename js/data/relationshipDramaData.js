@@ -778,7 +778,7 @@ window.RelationshipDramaData = {
       id: `npc_death_${npc.id}_${s.age}_${Date.now()}`,
       icon: '🕊️',
       title: 'Berita Duka / Kematian',
-      text: `Innalillahi wa inna ilaihi raji'un / Salam takziah. ${npc.role} anda, ${npc.name} (Umur ${npc.age} tahun), telah menghembuskan nafas terakhir akibat ${cause}.${statusNote}${impactNote}`,
+      text: `Salam takziah. ${npc.role} anda, ${npc.name} (Umur ${npc.age} tahun), telah menghembuskan nafas terakhir akibat ${cause}.${statusNote}${impactNote}`,
       choices: [
         {
           label: isMinor

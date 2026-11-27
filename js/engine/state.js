@@ -233,6 +233,10 @@ window.GameState = {
       seenEventIds: [],
       recentPopupIds: [],
       secrets: [],
+      threats: [],
+      bodyguard: null,
+      martialArtsLevel: 0,
+      ringCount: 0,
 
       journal: [
         {
@@ -290,6 +294,10 @@ window.GameState = {
   recordSecret(type, s = this.current) {
     if (!s || !type) return null;
     if (!Array.isArray(s.secrets)) s.secrets = [];
+    if (!Array.isArray(s.threats)) s.threats = [];
+    if (!('bodyguard' in s)) s.bodyguard = null;
+    if (typeof s.martialArtsLevel !== 'number') s.martialArtsLevel = 0;
+    if (typeof s.ringCount !== 'number' || Number.isNaN(s.ringCount)) s.ringCount = 0;
     if (s.secrets.some(x => x && x.type === type && x.yearCreated === s.year && !x.resolved && !x.exposed)) {
       return null;
     }
@@ -775,6 +783,13 @@ window.GameState = {
       seenEventIds: [],
       recentPopupIds: [],
       secrets: [],
+      threats: (Array.isArray(parent.threats) ? parent.threats : [])
+        .filter(t => t && !t.resolved && (t.complexity === 'high' || /anak|keluarga|warisan|serang|bunuh|sindiket/i.test(`${t.relationType || ''} ${t.motive || ''}`)))
+        .slice(0, 2)
+        .map(t => ({ ...JSON.parse(JSON.stringify(t)), isLegacyCase: true, optInStatus: 'pending' })),
+      bodyguard: null,
+      martialArtsLevel: 0,
+      ringCount: 0,
 
       journal: [
         {
