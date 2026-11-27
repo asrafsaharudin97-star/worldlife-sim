@@ -2191,6 +2191,7 @@ window.Modals = {
     } else if (activeSubTab === 'culture') {
       const adapt = GameState.getCurrentAdaptation();
       const parentCovers = s.age < 18 && GameState.hasLivingParent(s);
+      const cultureDone = Boolean(s.cultureVisitedThisYear);
       contentHtml += `
         <div class="info-banner culture-box">
           <strong>${Utils.renderFlagHtml(c.id, c.flag)} Kehidupan di ${s.city}, ${c.name}</strong><br/>
@@ -2198,16 +2199,19 @@ window.Modals = {
           ${s.countryId !== s.birthCountryId ? `<div style="margin-top:5px;">🌍 Penyesuaian Budaya: <strong>${adapt}%</strong> (Sertai budaya tempatan untuk layak memohon PR/Warganegara!)</div>` : ''}
         </div>
         <div class="action-list">
-          ${c.cultureActivities.map(act => `
-            <button class="action-item culture-act-btn" data-act-id="${act.id}" ${s.yearlyActions[act.id] ? 'disabled' : ''}>
+          ${c.cultureActivities.map(act => {
+            const done = cultureDone || Boolean(s.yearlyActions[act.id]);
+            return `
+            <button class="action-item culture-act-btn" data-act-id="${act.id}" ${done ? 'disabled' : ''}>
               <span class="ai-icon">${act.icon}</span>
               <span class="ai-content">
                 <span class="ai-title">${Utils.escapeHtml(act.title)}</span>
-                <span class="ai-desc">${Utils.escapeHtml(act.desc)}</span>
+                <span class="ai-desc">${done ? 'Selesai tahun ini' : Utils.escapeHtml(act.desc)}</span>
               </span>
-              <span class="ai-right cost">${parentCovers ? 'Mak Ayah Bayar' : Utils.formatMoney(act.cost, s.countryId)}</span>
+              <span class="ai-right cost">${done ? 'Selesai tahun ini' : (parentCovers ? 'Mak Ayah Bayar' : Utils.formatMoney(act.cost, s.countryId))}</span>
             </button>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       `;
 
@@ -2362,14 +2366,23 @@ window.Modals = {
 
       if (!isCitizen) {
         const nextStep = s.residencyStatus === 'PR' ? `Warganegara ${c.name}` : `Penduduk Tetap (PR)`;
+        const reqYears = s.residencyStatus === 'PR' ? 20 : 7;
         const reqText = s.residencyStatus === 'PR'
-          ? 'Memerlukan 5+ tahun menetap & 65%+ Penyesuaian Budaya'
-          : 'Memerlukan 2+ tahun menetap & 40%+ Penyesuaian Budaya';
+          ? `Memerlukan 20+ tahun menetap (${s.yearsInCurrentCountry}/20 thn) & 65%+ Penyesuaian Budaya`
+          : `Memerlukan 7+ tahun menetap (${s.yearsInCurrentCountry}/7 thn) & 40%+ Penyesuaian Budaya`;
+        const renewalInfo = (window.Sim && Sim.getImmigrationRenewalInfo) ? Sim.getImmigrationRenewalInfo(s) : { applies: false };
+        const renewalHtml = renewalInfo && renewalInfo.applies ? `
+          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #cbd5e1;font-size:11.5px;color:#334155;">
+            🔄 Pembaharuan ${Utils.escapeHtml(renewalInfo.label)}: <strong>setiap ${renewalInfo.intervalYears} tahun</strong> (auto-tolak)<br/>
+            ⏳ Pembaharuan Seterusnya: <strong>${renewalInfo.yearsUntilRenewal} tahun lagi</strong> (Umur ${renewalInfo.nextRenewalAge}) • Anggaran Yuran: <strong>${Utils.formatMoney(renewalInfo.feeLocal, s.countryId)}</strong>
+          </div>
+        ` : '';
         contentHtml += `
           <div class="info-banner culture-box">
             <strong>🌍 Penyesuaian Budaya di ${c.name}: ${adapt}%</strong><br/>
             Langkah Seterusnya: <strong>Mohon ${nextStep}</strong><br/>
             <small>${reqText}</small>
+            ${renewalHtml}
           </div>
           <button class="primary-btn" id="btn-upgrade-residency">🛂 Mohon ${nextStep}</button>
         `;

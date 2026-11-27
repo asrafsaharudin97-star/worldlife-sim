@@ -398,6 +398,16 @@ window.GameState = {
     if (typeof s.creditScore !== 'number' || Number.isNaN(s.creditScore)) s.creditScore = 620;
     if (!Array.isArray(s.loans)) s.loans = [];
     if (typeof s.loanBlacklisted !== 'boolean') s.loanBlacklisted = false;
+    if (typeof s.cultureVisitedThisYear !== 'boolean') s.cultureVisitedThisYear = false;
+    if (!s.homeCountry) s.homeCountry = s.birthCountryId || s.countryId || 'MY';
+    if (typeof s.prYearsSinceRenewal !== 'number' || Number.isNaN(s.prYearsSinceRenewal)) s.prYearsSinceRenewal = 0;
+    if (s.residencyStatus === 'PR') {
+      if (typeof s.prNextRenewalAge !== 'number' || Number.isNaN(s.prNextRenewalAge)) {
+        s.prNextRenewalAge = Number(s.age || 0) + Math.max(1, 3 - (s.prYearsSinceRenewal % 3));
+      }
+    } else if (!('prNextRenewalAge' in s)) {
+      s.prNextRenewalAge = null;
+    }
     if (!s.familyTrust || typeof s.familyTrust !== 'object') {
       s.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
     }

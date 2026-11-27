@@ -22,6 +22,7 @@ window.Sim = {
       )
     );
     s.yearlyActions = {};
+    s.cultureVisitedThisYear = false;
     s.jobAppsThisYear = 0;
     s.jobActionsUsedThisYear = [];
     s.stoleMoneyIdsThisYear = [];
@@ -881,17 +882,113 @@ window.Sim = {
       GameState.adjustAdaptation(gain);
       const adapt = GameState.getCurrentAdaptation();
 
-      if (s.residencyStatus.includes('Visa') && s.yearsInCurrentCountry === 2 && adapt >= 40) {
+      this._processImmigrationRenewal(s, c);
+
+      if (s.residencyStatus.includes('Visa') && s.yearsInCurrentCountry === 7 && adapt >= 40) {
         GameState.addJournalEntry(
-          `🛂 Kemas Kini Imigresen: Anda sudah 2 tahun menetap di ${c.name}! Buka Pasport & PR di tab Aktiviti untuk memohon Penduduk Tetap (PR).`,
+          `🛂 Kemas Kini Imigresen: Anda sudah 7 tahun menetap di ${c.name}! Buka Pasport & PR di tab Aktiviti untuk memohon Penduduk Tetap (PR).`,
           'migration'
         );
       }
-      if (s.residencyStatus === 'PR' && s.yearsInCurrentCountry === 5 && adapt >= 65 && !s.citizenships.includes(s.countryId)) {
+      if (s.residencyStatus === 'PR' && s.yearsInCurrentCountry === 20 && adapt >= 65 && !s.citizenships.includes(s.countryId)) {
         GameState.addJournalEntry(
-          `🛂 Layak Kewarganegaraan! Anda kini layak memohon taraf Warganegara ${c.name} di tab Pasport & PR!`,
+          `🛂 Layak Kewarganegaraan! Anda sudah 20 tahun menetap dan kini layak memohon taraf Warganegara ${c.name} di tab Pasport & PR!`,
           'migration'
         );
+      }
+    }
+  },
+
+  getImmigrationRenewalInfo(s = GameState.current) {
+    if (!s) return { applies: false };
+    const homeId = s.homeCountry || s.birthCountryId;
+    const isForeign = Boolean(s.countryId && homeId && s.countryId !== homeId);
+    const isCitizen = Array.isArray(s.citizenships) && s.citizenships.includes(s.countryId);
+    const inPrison = Boolean(s.prison && s.prison.inPrison);
+    if (!isForeign || isCitizen || inPrison) return { applies: false };
+
+    const status = s.residencyStatus || '';
+    if (status !== 'Work Visa' && status !== 'Investor Visa' && status !== 'PR') {
+      return { applies: false };
+    }
+
+    const c = Utils.getCountry(s.countryId);
+    const colScale = Math.max(0.6, Math.min(1.6, Number((c && c.costOfLiving) || 1.0)));
+    let baseUsd = 320;
+    let intervalYears = 1;
+    let label = 'Visa Pekerja';
+    if (status === 'Investor Visa') {
+      baseUsd = 450;
+      intervalYears = 1;
+      label = 'Visa Pelabur';
+    } else if (status === 'PR') {
+      baseUsd = 480; // ~1.5x yuran Visa Pekerja
+      intervalYears = 3;
+      label = 'Penduduk Tetap (PR)';
+    }
+
+    const feeLocal = Math.max(1, Math.round(Utils.usdToLocal(baseUsd * colScale, s.countryId)));
+    const nextRenewalAge = status === 'PR'
+      ? (typeof s.prNextRenewalAge === 'number' && Number.isFinite(s.prNextRenewalAge) ? s.prNextRenewalAge : Number(s.age || 0) + 3)
+      : Number(s.age || 0) + 1;
+    const yearsUntilRenewal = status === 'PR'
+      ? Math.max(1, nextRenewalAge - Number(s.age || 0))
+      : 1;
+
+    return {
+      applies: true,
+      type: status,
+      label,
+      intervalYears,
+      feeLocal,
+      nextRenewalAge,
+      yearsUntilRenewal
+    };
+  },
+
+  // Cangkuk (hook) bagi kes gagal bayar pembaharuan Visa/PR — sedia untuk diperluas pada langkah seterusnya
+  handleImmigrationRenewalDefault(state, type, fee) {
+    const c = Utils.getCountry(state.countryId);
+    const label = type === 'PR' ? 'Penduduk Tetap (PR)' : (type === 'Investor Visa' ? 'Visa Pelabur' : 'Visa Pekerja');
+    GameState.addJournalEntry(
+      `⚠️ Pembaharuan ${label} di ${c.name} tertunggak! Baki tunai tidak mencukupi untuk yuran ${Utils.formatMoney(fee, state.countryId)}.`,
+      'warning'
+    );
+    return { defaulted: true, type, fee };
+  },
+
+  _processImmigrationRenewal(s, c) {
+    const info = this.getImmigrationRenewalInfo(s);
+    if (!info || !info.applies) return;
+
+    if (info.type === 'Work Visa' || info.type === 'Investor Visa') {
+      if (s.money >= info.feeLocal) {
+        s.money -= info.feeLocal;
+        GameState.addJournalEntry(
+          `🛂 Pembaharuan tahunan ${info.label} di ${c.name} (${Utils.formatMoney(info.feeLocal, s.countryId)}) telah ditolak secara automatik.`,
+          'migration'
+        );
+      } else {
+        this.handleImmigrationRenewalDefault(s, info.type, info.feeLocal);
+      }
+      return;
+    }
+
+    if (info.type === 'PR') {
+      s.prYearsSinceRenewal = (s.prYearsSinceRenewal || 0) + 1;
+      const dueByAge = typeof s.prNextRenewalAge === 'number' && s.age >= s.prNextRenewalAge;
+      if (dueByAge || s.prYearsSinceRenewal >= 3) {
+        if (s.money >= info.feeLocal) {
+          s.money -= info.feeLocal;
+          s.prNextRenewalAge = s.age + 3;
+          s.prYearsSinceRenewal = 0;
+          GameState.addJournalEntry(
+            `🛂 Pembaharuan 3 tahunan Penduduk Tetap (PR) di ${c.name} (${Utils.formatMoney(info.feeLocal, s.countryId)}) telah ditolak secara automatik.`,
+            'migration'
+          );
+        } else {
+          this.handleImmigrationRenewalDefault(s, 'PR', info.feeLocal);
+        }
       }
     }
   },
@@ -2357,6 +2454,8 @@ window.Sim = {
     s.city = newCity;
     s.residencyStatus = statusLabel;
     s.yearsInCurrentCountry = 0;
+    s.prNextRenewalAge = null;
+    s.prYearsSinceRenewal = 0;
 
     // Kemas kini negara bagi pasangan (jika ikut bersama) & semua anak tanggungan (umur < 18 sentiasa ikut pemain!)
     const activeSpouseNow = this.getMarriedSpouse(s);
@@ -2473,16 +2572,18 @@ window.Sim = {
     }
 
     if (s.residencyStatus !== 'PR') {
-      if (s.yearsInCurrentCountry < 2 || adapt < 40) {
+      if (s.yearsInCurrentCountry < 7 || adapt < 40) {
         return {
           ok: false,
-          msg: `PR memerlukan sekurang-kurangnya 2 tahun di ${c.name} dan 40% Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
+          msg: `PR memerlukan sekurang-kurangnya 7 tahun di ${c.name} dan 40% Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
         };
       }
       const fee = Utils.usdToLocal(600, s.countryId);
       if (s.money < fee) return { ok: false, msg: `Yuran permohonan PR ialah ${Utils.formatMoney(fee, s.countryId)}.` };
       s.money -= fee;
       s.residencyStatus = 'PR';
+      s.prNextRenewalAge = s.age + 3;
+      s.prYearsSinceRenewal = 0;
       GameState.adjustAdaptation(12);
       GameState.adjustStats({ happiness: 14 });
       GameState.addJournalEntry(
@@ -2493,16 +2594,18 @@ window.Sim = {
       return { ok: true, msg: `Tahniah! Anda kini Penduduk Tetap (PR) ${c.name}!` };
     }
 
-    if (s.yearsInCurrentCountry < 5 || adapt < 65) {
+    if (s.yearsInCurrentCountry < 20 || adapt < 65) {
       return {
         ok: false,
-        msg: `Warganegara memerlukan 5+ tahun di ${c.name} & 65%+ Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
+        msg: `Warganegara memerlukan 20+ tahun di ${c.name} & 65%+ Penyesuaian Budaya (kini ${s.yearsInCurrentCountry} thn, ${adapt}%).`
       };
     }
     const fee = Utils.usdToLocal(900, s.countryId);
     if (s.money < fee) return { ok: false, msg: `Yuran kewarganegaraan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     s.money -= fee;
     s.residencyStatus = 'Citizen';
+    s.prNextRenewalAge = null;
+    s.prYearsSinceRenewal = 0;
     s.citizenships.push(s.countryId);
     s.culturalAdaptation[s.countryId] = Math.max(adapt, 92);
     s.passportStamps.push({
@@ -2766,11 +2869,14 @@ window.Sim = {
   doCultureActivity(act) {
     const s = GameState.current;
     const c = Utils.getCountry(s.countryId);
-    if (s.yearlyActions[act.id]) return { ok: false, msg: 'Anda sudah melakukan aktiviti ini tahun ini!' };
+    if (s.cultureVisitedThisYear || s.yearlyActions[act.id]) {
+      return { ok: false, msg: 'Anda sudah melakukan aktiviti penyesuaian budaya untuk tahun ini!' };
+    }
     const parentCovers = s.age < 18 && GameState.hasLivingParent(s);
     if (!parentCovers && s.money < act.cost) {
       return { ok: false, msg: `Baki tidak mencukupi — anda perlukan ${Utils.formatMoney(act.cost, s.countryId)}.` };
     }
+    s.cultureVisitedThisYear = true;
     s.yearlyActions[act.id] = true;
     if (!parentCovers) s.money -= act.cost;
     GameState.adjustStats(act.effects);
