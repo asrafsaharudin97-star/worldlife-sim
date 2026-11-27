@@ -930,13 +930,18 @@ window.Relationships = {
     const compat = this.computeCompatibility(s);
     const roleLabel = (targetGender === 'female' ? 'Teman Wanita' : 'Teman Lelaki');
 
+    const playerIsRoyal = Boolean(window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s));
+    const royalPrefix = targetGender === 'female' ? 'Puteri ' : 'Putera ';
+    const finalName = playerIsRoyal && !/^(Putera|Puteri)\s/i.test(name) ? (royalPrefix + name) : name;
+    const finalJob = playerIsRoyal ? (targetGender === 'female' ? 'Puteri Kerabat Diraja' : 'Putera Kerabat Diraja') : job;
     const partner = {
       id: 'rel_partner_' + Date.now(),
-      name,
+      name: finalName,
       role: roleLabel,
       category: 'partner',
       stage: 'dating',
-      origin: 'Sesi Date',
+      origin: playerIsRoyal ? 'Majlis Istana Diraja' : 'Sesi Date',
+      isRoyal: playerIsRoyal,
       gender: targetGender,
       age,
       countryId: s.countryId,
@@ -951,7 +956,7 @@ window.Relationships = {
       menopauseAge: targetGender === 'female' ? Utils.randInt(45, 52) : null,
       alive: true,
       isAlive: true,
-      job
+      job: finalJob
     };
 
     s.relationships.push(partner);
@@ -1091,6 +1096,9 @@ window.Relationships = {
 
     // --- Merisik & Bertunang ---
     if (action === 'engage') {
+      if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s) && !rel.isRoyal) {
+        return { ok: false, msg: 'Mengikut protokol istana, golongan diraja hanya dibenarkan berkahwin dengan kerabat diraja sahaja.' };
+      }
       if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
       if (rel.stage === 'engaged') return { ok: false, msg: 'Anda sudah bertunang!' };
       const cost = Utils.usdToLocal(350, s.countryId);
@@ -1208,6 +1216,9 @@ window.Relationships = {
 
     // --- Lamar & Majlis Perkahwinan ---
     if (action === 'propose') {
+      if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s) && !rel.isRoyal) {
+        return { ok: false, msg: 'Mengikut protokol istana, golongan diraja hanya dibenarkan berkahwin dengan kerabat diraja sahaja.' };
+      }
       if (s.prison && s.prison.inPrison) return { ok: false, msg: '⛓️ Tidak boleh melangsungkan perkahwinan semasa berada di dalam penjara.' };
       if (s.married) return { ok: false, msg: 'Anda sudah berkahwin!' };
 

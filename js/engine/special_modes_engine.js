@@ -48,13 +48,32 @@ window.SpecialModesEngine = {
     return (window.SpecialModesData && SpecialModesData.MODES[modeId]) || null;
   },
 
+  isPlayerRoyal(s) {
+    return Boolean(s && s.activeSpecialMode && s.activeSpecialMode.modeId === 'royalty');
+  },
+
+  canHoldMonarchThrone(s) {
+    if (!s) return false;
+    const birthCountry = s.birthCountryId || s.homeCountry || s.countryId;
+    return Boolean(birthCountry && s.countryId && birthCountry === s.countryId);
+  },
+
   getActiveInfo(s) {
     if (!s || !s.activeSpecialMode) return null;
     const def = this.getModeDef(s.activeSpecialMode.modeId);
     if (!def) return null;
     const am = s.activeSpecialMode;
-    const rank = def.ranks[am.rankIndex] || def.ranks[0];
-    return { def, state: am, rank };
+    let rank = def.ranks[am.rankIndex] || def.ranks[0];
+    let throneRestrictedNote = null;
+    if (def.id === 'royalty' && !this.canHoldMonarchThrone(s)) {
+      if (am.rankIndex >= 3) am.rankIndex = 2;
+      rank = def.ranks[am.rankIndex] || def.ranks[0];
+      if (am.rankIndex === 2) {
+        rank = { ...rank, title: s.gender === 'female' ? 'Puteri Raja' : 'Putera Raja' };
+      }
+      throneRestrictedNote = 'Terhad kepada gelaran Putera/Puteri Raja — takhta tertinggi hanya terbuka kepada kerabat yang lahir di negara ini.';
+    }
+    return { def, state: am, rank, throneRestrictedNote };
   },
 
   getActiveAnnualUsd(s) {
@@ -304,6 +323,15 @@ window.SpecialModesEngine = {
       ? Math.max(def.metric1.init, Math.min(100, Math.round((s.countriesVisited.length / 60) * 100)))
       : def.metric1.init;
 
+    if (modeId === 'royalty') {
+      if (s.honors && (s.honors.currentTitle || s.honors.currentRank)) {
+        s.honors.currentTitle = null;
+        s.honors.currentRank = 0;
+      }
+      if (!this.canHoldMonarchThrone(s) && startRank >= 3) {
+        startRank = 2;
+      }
+    }
     s.activeSpecialMode = {
       modeId,
       rankIndex: startRank,
