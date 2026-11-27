@@ -323,6 +323,7 @@ window.LegalInheritanceEngine = {
       return {
         categoryLabel: 'Negara Pulau Bebas Cukai',
         annualFeeRate: 0,
+        annualFeeCapUsd: 0,
         corporateTaxRate: 0,
         isTaxHaven: true
       };
@@ -338,6 +339,7 @@ window.LegalInheritanceEngine = {
       return {
         categoryLabel: 'Negara Maju',
         annualFeeRate: 0.015,
+        annualFeeCapUsd: 25000000,
         corporateTaxRate,
         isTaxHaven: false
       };
@@ -346,6 +348,7 @@ window.LegalInheritanceEngine = {
       return {
         categoryLabel: 'Negara Membangun',
         annualFeeRate: 0.005,
+        annualFeeCapUsd: 10000000,
         corporateTaxRate,
         isTaxHaven: false
       };
@@ -353,6 +356,7 @@ window.LegalInheritanceEngine = {
     return {
       categoryLabel: 'Negara Mundur',
       annualFeeRate: 0.001,
+      annualFeeCapUsd: 2000000,
       corporateTaxRate,
       isTaxHaven: false
     };
@@ -521,7 +525,12 @@ window.LegalInheritanceEngine = {
     const rates = this.getTrustCountryRates(c);
     if (!rates || rates.annualFeeRate <= 0) return 0;
     const trustWealth = this.getTrustNetWorth(s);
-    return Math.max(0, Math.round(trustWealth * rates.annualFeeRate));
+    const rawFee = Math.max(0, Math.round(trustWealth * rates.annualFeeRate));
+    if (rates.annualFeeCapUsd > 0) {
+      const capLocal = Utils.usdToLocal(rates.annualFeeCapUsd, s.countryId || 'MY');
+      return Math.min(rawFee, capLocal);
+    }
+    return rawFee;
   },
 
   FUND_MANAGER_CONTRACT_RATES: {
@@ -1115,6 +1124,7 @@ window.LegalInheritanceEngine = {
     const due = Math.max(0, Math.round(ft.unpaidFees || 0));
     if (!ft.active || due <= 0) {
       ft.unpaidFees = 0;
+      ft.unpaidStreakYears = 0;
       ft.lapsed = false;
       return { ok: false, msg: 'Yayasan tidak mempunyai tunggakan yuran.' };
     }
@@ -1182,7 +1192,7 @@ window.LegalInheritanceEngine = {
       founderName: ft.founderName || state.name || 'Pengasas',
       totalTrustValue,
       debtDue,
-      reason: 'Dibubarkan secara automatik — tunggakan yuran mencapai had maksimum $100M USD'
+      reason: 'Dibubarkan secara paksa — gagal melangsaikan tunggakan yuran melebihi tempoh 3 tahun'
     });
 
     let surplus = 0;
@@ -1223,6 +1233,7 @@ window.LegalInheritanceEngine = {
     ft.investments = [];
     ft.balance = 0;
     ft.unpaidFees = 0;
+    ft.unpaidStreakYears = 0;
     ft.active = false;
     ft.lapsed = false;
     ft.underAudit = false;
@@ -1394,15 +1405,74 @@ window.LegalInheritanceEngine = {
       }
     }
 
-    // Had maksimum tunggakan berasaskan USD: $100M USD
+    // Brek had hutang kumulatif: $100M USD (menghentikan pertambahan hutang tanpa bubar mengejut)
     const maxArrearsLocal = this.getTrustMaxArrearsLocal(s);
-    const unpaidUsd = (window.Utils && Utils.localToUsd)
-      ? Utils.localToUsd(ft.unpaidFees || 0, s.countryId)
-      : (ft.unpaidFees || 0);
-    if ((ft.unpaidFees || 0) > 0 && (unpaidUsd >= this.TRUST_MAX_ARREARS_USD || ft.unpaidFees >= maxArrearsLocal)) {
+    if ((ft.unpaidFees || 0) > maxArrearsLocal) {
       ft.unpaidFees = maxArrearsLocal;
-      this.forceDissolveTrustForDebt(s);
-      return null;
+    }
+
+    // Pencetus pembubaran paksa: tempoh bertenang 3 tahun berturut-turut (1 -> 2 -> 3 -> 4 Bubar)
+    if ((ft.unpaidFees || 0) > 0) {
+      ft.unpaidStreakYears = (ft.unpaidStreakYears || 0) + 1;
+      const fmtM = (v) => Utils.formatMoney(v, s.countryId);
+      const usdEq = (window.Utils && Utils.formatUsdEquivalent) ? Utils.formatUsdEquivalent(ft.unpaidFees, s.countryId) : null;
+      const debtStr = `${fmtM(ft.unpaidFees)}${usdEq ? ` (${usdEq})` : ''}`;
+
+      if (ft.unpaidStreakYears >= 4) {
+        const diss = this.forceDissolveTrustForDebt(s);
+        const summaryMsg = diss && diss.surplus > 0
+          ? `Semua aset Yayasan dicairkan untuk melangsaikan hutang ${fmtM(diss.debtDue)}, dan baki lebihan ${fmtM(diss.surplus)} dipulangkan ke akaun tunai peribadi anda.`
+          : `Semua aset Yayasan dicairkan dan baki kekurangan ${fmtM((diss && diss.shortfall) || 0)} direkodkan sebagai Hutang Generasi dalam menu Pinjaman & Hutang.`;
+        return {
+          id: 'trust_force_dissolve_' + s.year,
+          icon: '🚨',
+          title: 'Laporan Pembubaran Paksa Tabung Yayasan Keluarga',
+          text: `Tabung Yayasan Keluarga telah dibubarkan secara paksa selepas gagal melangsaikan tunggakan yuran melebihi tempoh bertenang 3 tahun berturut-turut. ${summaryMsg}`,
+          choices: [
+            { label: 'Tutup', action: () => 'Tabung Yayasan Keluarga telah dibubarkan secara paksa.' }
+          ]
+        };
+      }
+
+      const remYears = Math.max(1, 4 - ft.unpaidStreakYears);
+      const warnTitle = ft.unpaidStreakYears === 1
+        ? '⚠️ Amaran Awal: Tunggakan Yuran Yayasan'
+        : ft.unpaidStreakYears === 2
+          ? '🟠 Amaran Keras: Tunggakan Tahun Kedua'
+          : '🚨 NOTIS TERAKHIR: Pembubaran Paksa Yayasan';
+      const warnText = ft.unpaidStreakYears === 1
+        ? `Yuran tahunan Tabung Yayasan Keluarga anda tertunggak sebanyak ${debtStr}. Anda mempunyai baki ${remYears} tahun lagi sebelum pembubaran paksa dijalankan.`
+        : ft.unpaidStreakYears === 2
+          ? `Tunggakan yuran Yayasan (${debtStr}) kini memasuki tahun kedua! Sila langsaikan segera — baki ${remYears} tahun lagi sebelum pembubaran paksa.`
+          : `AMARAN TERAKHIR! Tunggakan yuran Yayasan (${debtStr}) memasuki tahun ketiga. Baki ${remYears} tahun lagi sebelum semua aset Yayasan dicairkan secara paksa!`;
+      return {
+        id: `trust_arrears_warn_${ft.unpaidStreakYears}_${s.year}`,
+        icon: ft.unpaidStreakYears === 3 ? '🚨' : '⚠️',
+        title: warnTitle,
+        text: warnText,
+        choices: [
+          {
+            label: `💳 Langsaikan Tunggakan (${fmtM(ft.unpaidFees)})`,
+            action: () => {
+              const r = this.payTrustUnpaidFees(s);
+              return r.msg;
+            }
+          },
+          {
+            label: '🏛️ Buka Tabung Yayasan',
+            action: () => {
+              setTimeout(() => { if (window.Modals && Modals.showWasiatModal) Modals.showWasiatModal(); }, 60);
+              return 'Membuka papan pemuka Tabung Yayasan Keluarga untuk pengurusan tunggakan.';
+            }
+          },
+          {
+            label: 'Tutup',
+            action: () => `Notis tunggakan yuran Yayasan (baki ${remYears} tahun lagi) direkodkan.`
+          }
+        ]
+      };
+    } else {
+      ft.unpaidStreakYears = 0;
     }
 
     // 3. Kontrak Pengurus Dana
