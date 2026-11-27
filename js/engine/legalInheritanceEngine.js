@@ -614,6 +614,9 @@ window.LegalInheritanceEngine = {
     });
   },
 
+  MAX_FUND_MANAGER_YEARS: 10,
+  MAX_TRUST_COLLECTIBLES: 20,
+
   hireFundManager(s, tier, selectedYears = 1) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
@@ -622,6 +625,14 @@ window.LegalInheritanceEngine = {
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
 
     const yrs = [1, 2, 3, 5].includes(Number(selectedYears)) ? Number(selectedYears) : 1;
+    const curMgr = s.familyTrust.fundManager;
+    const currentYears = (curMgr && Number(curMgr.yearsLeft)) || 0;
+    if (currentYears >= this.MAX_FUND_MANAGER_YEARS) {
+      return { ok: false, msg: 'Tempoh kontrak maksimum (10 tahun) telah dicapai.' };
+    }
+    if (currentYears + yrs > this.MAX_FUND_MANAGER_YEARS) {
+      return { ok: false, msg: `Melebihi had maksimum 10 tahun (baki kontrak semasa: ${currentYears} tahun).` };
+    }
     const offer = this.getFundManagerOffers(s, yrs).find(o => o.tier === tier);
     if (!offer) return { ok: false, msg: 'Pilihan pengurus dana tidak sah.' };
 
@@ -638,11 +649,11 @@ window.LegalInheritanceEngine = {
       profesional: ['Dato\' Farid', 'Puan Marisa', 'Encik Kenneth Tan', 'Puan Syafiqah'],
       elit: ['Tan Sri Dr. Iskandar', 'Puan Sri Evelyn Wong', 'Dato\' Seri Azlan', 'Dr. Marcus Vance']
     };
-    const mgrName = Utils.pick(names[tier] || names.junior);
+    const mgrName = (curMgr && curMgr.tier === tier && curMgr.name) ? curMgr.name : Utils.pick(names[tier] || names.junior);
     s.familyTrust.fundManager = {
       tier,
       name: mgrName,
-      yearsLeft: yrs
+      yearsLeft: currentYears + yrs
     };
     GameState.addJournalEntry(
       `👔 Anda melantik ${mgrName} (${offer.title}) sebagai Pengurus Dana Yayasan Keluarga untuk kontrak ${yrs} tahun (${Utils.formatMoney(offer.cost, s.countryId)}).`,
@@ -667,6 +678,12 @@ window.LegalInheritanceEngine = {
     const idx = s.assets[listKey].findIndex(x => x && x.uid === uid);
     if (idx === -1) return { ok: false, msg: 'Aset tidak ditemui.' };
 
+    if (assetType === 'collectible') {
+      const trustColCount = (s.familyTrust.assets || []).filter(x => x && x.trustAssetType === 'collectible').length;
+      if (trustColCount >= this.MAX_TRUST_COLLECTIBLES) {
+        return { ok: false, msg: `Peti besi pusaka Yayasan penuh (${trustColCount}/${this.MAX_TRUST_COLLECTIBLES}). Lelong item lama dahulu.` };
+      }
+    }
     const targetAsset = s.assets[listKey][idx];
     let proxyRes = null;
     if (this.isTrustOffshore(s)) {
@@ -706,6 +723,12 @@ window.LegalInheritanceEngine = {
     if (idx === -1) return { ok: false, msg: 'Aset yayasan tidak ditemui.' };
 
     const targetAsset = s.familyTrust.assets[idx];
+    if (targetAsset && targetAsset.trustAssetType === 'collectible') {
+      const persColCount = ((s.assets && s.assets.collectibles) || []).length;
+      if (persColCount >= 10) {
+        return { ok: false, msg: `Peti besi koleksi peribadi penuh (${persColCount}/10). Jual atau lelong item lama dahulu.` };
+      }
+    }
     let proxyRes = null;
     if (this.isTrustOffshore(s)) {
       proxyRes = this._chargeOffshoreAssetProxy(s, 'out', targetAsset.value || 0, proxyChannel);

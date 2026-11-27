@@ -277,6 +277,41 @@ window.EduCareerEngine = {
     return Math.max(0, Math.round(baseAnnual * factor * qualityMult));
   },
 
+  EMPLOYER_TYPES: [
+    { type: 'Syarikat Pemula', salMult: 0.96, stressDelta: 3 },
+    { type: 'Syarikat MNC', salMult: 1.14, stressDelta: 5 },
+    { type: 'Firma Butik', salMult: 1.05, stressDelta: 2 },
+    { type: 'Konglomerat Tempatan', salMult: 1.10, stressDelta: 4 },
+    { type: 'Agensi Awam', salMult: 0.94, stressDelta: -2 }
+  ],
+
+  getCertBenefitSummary(cert) {
+    if (!cert) return 'Meningkatkan daya saing gaji dan peluang kenaikan pangkat dalam bidang berkaitan.';
+    const g = String(cert.group || cert.field || '').toLowerCase();
+    if (/(teknik|it|komputer|kejuruteraan|vokasional|tvet|kulinari|mekanik|keselamatan)/.test(g)) {
+      return 'Membuka laluan kerjaya teknikal & meningkatkan daya saing gaji dalam bidang berkaitan.';
+    }
+    if (/(kewangan|akaun|pelaburan|ekonomi)/.test(g)) {
+      return 'Meningkatkan daya saing gaji korporat serta ketahanan strategi portfolio pelaburan.';
+    }
+    if (/(perniagaan|pengurusan|pemasaran|usahawan)/.test(g)) {
+      return 'Membantu kecekapan pengurusan perniagaan sendiri serta peluang kenaikan pangkat.';
+    }
+    return 'Mengukuhkan profil profesional untuk temuduga, gaji permulaan, dan kenaikan pangkat.';
+  },
+
+  getCertSalaryMultiplier(s, fieldId) {
+    if (!s || !s.education || !Array.isArray(s.education.certificates) || s.education.certificates.length === 0) return 1.0;
+    const certs = s.education.certificates;
+    const relevant = fieldId && window.EducationData && Array.isArray(EducationData.CERTIFICATES)
+      ? certs.some(cid => {
+          const cObj = EducationData.CERTIFICATES.find(x => x.id === cid);
+          return cObj && (cObj.field === fieldId || cObj.field === 'general');
+        })
+      : false;
+    return relevant ? 1.12 : 1.05;
+  },
+
   canUseFamilyFunding(s) {
     const hasParent = s.relationships && s.relationships.some(r => ['Ibu', 'Ayah', 'Mother', 'Father'].includes(r.role) && r.alive);
     const highRep = window.Dynasty && Dynasty.getData().familyReputation >= 65;
@@ -297,9 +332,26 @@ window.EduCareerEngine = {
       }
     }
     if (ed.activeStudy) return { ok: false, reason: 'Anda sedang mengikuti pengajian aktif sekarang.' };
+    if (typeof s.hasTakenFoundation !== 'boolean') {
+      s.hasTakenFoundation = Boolean(ed.completedDegrees && ed.completedDegrees.some(d => d.level === 'foundation'));
+    }
+    const hasSPM = Boolean(ed.hasHighSchool || ed.hasDegree || EducationData.hasMinLevel(ed.educationLevel, 'high_school'));
+    if (hasSPM && !ed.hasHighSchool) ed.hasHighSchool = true;
+    const higherLevels = ['foundation', 'diploma', 'bachelor', 'master', 'phd'];
+    if (higherLevels.includes(level) && !hasSPM) {
+      return { ok: false, reason: 'Memerlukan kelayakan SPM terlebih dahulu.' };
+    }
+    if (level === 'foundation') {
+      if (s.age < 18 || s.age > 21) {
+        return { ok: false, reason: 'Hanya terbuka untuk umur 18–21 tahun sahaja.' };
+      }
+      if (s.hasTakenFoundation) {
+        return { ok: false, reason: 'Program Matriks/Asasi hanya boleh diambil sekali seumur hidup.' };
+      }
+    }
     if (s.age < prog.minAge) return { ok: false, reason: `Umur minimum ialah ${prog.minAge} tahun.` };
     if (prog.exactLevelOnly && ed.educationLevel !== prog.exactLevelOnly) {
-      return { ok: false, reason: 'Anda sudah memiliki kelayakan sekolah menengah atau lebih tinggi.' };
+      return { ok: false, reason: 'Anda sudah memiliki kelayakan SPM atau lebih tinggi.' };
     }
     if (!EducationData.hasMinLevel(ed.educationLevel, prog.reqLevel)) {
       let reason = 'Kelayakan minimum tidak dipenuhi.';
@@ -345,16 +397,22 @@ window.EduCareerEngine = {
 
     // Semak pilihan pembiayaan yuran
     let fundingLabel = 'Bayar Tunai';
+    let effectiveAnnualTuition = annualTuition;
     if (funding === 'scholarship') {
-      const reqSmarts = Math.max(55, (prog.minSmarts || 40) + 18);
-      const chance = s.stats.smarts >= reqSmarts ? 0.72 : (s.stats.smarts >= reqSmarts - 10 ? 0.35 : 0.08);
-      if (!Utils.chance(chance)) {
+      effectiveAnnualTuition = 0;
+      fundingLabel = 'Biasiswa Penuh (100%)';
+    } else if (funding === 'scholarship_partial') {
+      effectiveAnnualTuition = Math.round(annualTuition * 0.5);
+      if (effectiveAnnualTuition > 0 && s.money < effectiveAnnualTuition) {
         return {
           ok: false,
-          msg: `Permohonan biasiswa ditolak (Kepintaran anda ${s.stats.smarts}%, disyorkan ${reqSmarts}%+). Cuba Pinjaman Pendidikan atau Bayar Tunai!`
+          msg: `Baki tidak mencukupi untuk yuran Biasiswa Separa (${Utils.formatMoney(effectiveAnnualTuition, s.countryId)}).`
         };
       }
-      fundingLabel = 'Biasiswa Penuh';
+      fundingLabel = 'Biasiswa Separa (Diskaun 50%)';
+    } else if (funding === 'scholarship_partial_loan') {
+      effectiveAnnualTuition = Math.round(annualTuition * 0.5);
+      fundingLabel = 'Biasiswa Separa (50%) + Pinjaman';
     } else if (funding === 'family') {
       if (!this.canUseFamilyFunding(s)) {
         return { ok: false, msg: 'Tajaan keluarga tidak tersedia (perlukan ibu/bapa masih hidup atau Reputasi Keluarga tinggi).' };
@@ -385,6 +443,7 @@ window.EduCareerEngine = {
     }
 
     const baseGpa = Number(Math.max(3.0, Math.min(3.4, 3.0 + ((s.stats.smarts || 60) / 100) * 0.4)).toFixed(2));
+    if (level === 'foundation') s.hasTakenFoundation = true;
     s.education.activeStudy = {
       level,
       field: fieldId,

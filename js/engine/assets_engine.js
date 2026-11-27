@@ -203,6 +203,14 @@ window.AssetsEngine = {
     });
 
     // 3) Harga Semasa 15 Instrumen Pelaburan (ikut Trend Pasaran!)
+    const allSectors = ['Teknologi', 'Tenaga', 'Kesihatan', 'Kewangan', 'Hartanah', 'Pengguna'];
+    const pickedSectors = shuffle(allSectors).slice(0, 2);
+    m.sectorSentiments = pickedSectors.map((sec, idx) => ({
+      sector: sec,
+      mood: idx === 0 ? 'Rancak' : 'Perlahan',
+      delta: idx === 0 ? 0.05 : -0.04
+    }));
+    const hasFinCert = Boolean(s.education && Array.isArray(s.education.certificates) && s.education.certificates.some(cid => /cfa|cpa|fin|akaun|kewangan|pelaburan|bisnes/i.test(String(cid))));
     AssetsData.INVESTMENTS.forEach(inst => {
       const prev = m.invPrices[inst.id];
       const basePrice = this._scaleUsdToLocal(inst.baseUnitUsd, s.countryId, false);
@@ -232,26 +240,31 @@ window.AssetsEngine = {
         if (Utils.chance(0.10)) pct = -0.82;
         else if (Utils.chance(0.08)) pct = 1.45;
       }
-      const nextPrice = Math.max(Math.round(basePrice * 0.12), Math.round(prev.price * (1 + pct)));
+      const certEdge = hasFinCert ? 0.015 : 0;
+      const nextPrice = Math.max(Math.round(basePrice * 0.12), Math.round(prev.price * (1 + pct + certEdge)));
       m.invPrices[inst.id] = { price: nextPrice, changePct: Number((pct * 100).toFixed(1)) };
     });
 
-    // 4) Barang Mewah & Koleksi (5–6 pilihan + 20% peluang Lelongan Misteri!)
-    const normalCols = shuffle(AssetsData.COLLECTIBLES.filter(c => !c.isMystery)).slice(0, 5);
-    const mysteryTpl = AssetsData.COLLECTIBLES.find(c => c.isMystery);
-    const colList = [...normalCols];
-    if (mysteryTpl && Utils.chance(0.20)) colList.unshift(mysteryTpl);
+    // 4) Pasaran Lelongan Pusaka & Koleksi Tahunan Terhad (1–3 item unik setahun; tidak ditambah semasa refresh)
+    if (!opts.isRefresh) {
+      const ownedSet = this._getOwnedCollectibleKeys(s);
+      const availCols = shuffle(AssetsData.COLLECTIBLES.filter(c => !c.isMystery && !ownedSet.has(c.id) && !ownedSet.has(c.name)));
+      const pickCount = Utils.randInt(1, 3);
+      const colList = availCols.slice(0, pickCount);
+      const mysteryTpl = AssetsData.COLLECTIBLES.find(c => c.isMystery);
+      if (mysteryTpl && colList.length < 3 && Utils.chance(0.18)) colList.unshift(mysteryTpl);
 
-    m.collectibles = colList.map((tpl, i) => ({
-      lid: `cl_${s.year}_${i}_${tpl.id}`,
-      tplId: tpl.id,
-      name: tpl.name,
-      icon: tpl.icon,
-      price: Math.round(this._scaleUsdToLocal(tpl.baseUsd, s.countryId, false) * (0.9 + Math.random() * 0.22)),
-      appRate: tpl.appRate,
-      prestige: tpl.prestige,
-      isMystery: Boolean(tpl.isMystery)
-    }));
+      m.collectibles = colList.map((tpl, i) => ({
+        lid: `cl_${s.year}_${i}_${tpl.id}`,
+        tplId: tpl.id,
+        name: tpl.name,
+        icon: tpl.icon,
+        price: Math.round(this._scaleUsdToLocal(tpl.baseUsd, s.countryId, false) * (0.9 + Math.random() * 0.22)),
+        appRate: tpl.appRate,
+        prestige: tpl.prestige,
+        isMystery: Boolean(tpl.isMystery)
+      }));
+    }
   },
 
   refreshMarket() {
@@ -1145,12 +1158,37 @@ window.AssetsEngine = {
   // --------------------------------------------------------------------------
   // 5. KOLEKSI, LELONGAN MISTERI & PUSAKA KELUARGA (HEIRLOOMS)
   // --------------------------------------------------------------------------
+  MAX_PERSONAL_COLLECTIBLES: 10,
+
+  _getOwnedCollectibleKeys(s) {
+    const set = new Set();
+    if (!s) return set;
+    const add = (x) => {
+      if (!x) return;
+      if (x.tplId) set.add(x.tplId);
+      if (x.id) set.add(x.id);
+      if (x.name) set.add(x.name);
+    };
+    ((s.assets && s.assets.collectibles) || []).forEach(add);
+    ((s.familyTrust && s.familyTrust.assets) || []).filter(x => x && x.trustAssetType === 'collectible').forEach(add);
+    return set;
+  },
+
   buyCollectible(listingId) {
     const s = GameState.current;
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia ketika di penjara.' };
+    if ((s.assets.collectibles || []).length >= this.MAX_PERSONAL_COLLECTIBLES) {
+      return { ok: false, msg: `Peti besi koleksi peribadi penuh (${s.assets.collectibles.length}/${this.MAX_PERSONAL_COLLECTIBLES}). Jual atau lelong item lama dahulu.` };
+    }
     const item = s.assetMarket.collectibles.find(x => x.lid === listingId);
     if (!item) return { ok: false, msg: 'Item koleksi tidak ditemui.' };
+    if (!item.isMystery) {
+      const owned = this._getOwnedCollectibleKeys(s);
+      if (owned.has(item.tplId) || owned.has(item.name)) {
+        return { ok: false, msg: 'Anda sudah memiliki jenis koleksi ini (had 1 unit bagi setiap jenis).' };
+      }
+    }
     if (s.money < item.price) return { ok: false, msg: `Perlukan ${Utils.formatMoney(item.price, s.countryId)}.` };
 
     s.money -= item.price;

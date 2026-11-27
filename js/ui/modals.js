@@ -2125,23 +2125,33 @@ window.Modals = {
                 ? `👔 Aktif: <strong>${Utils.escapeHtml(ft.fundManager.name)}</strong> (${mgrTierLabels[ft.fundManager.tier] || ft.fundManager.tier}) • <strong>Baki Kontrak: ${ft.fundManager.yearsLeft} tahun</strong>`
                 : '⚠️ <strong>Tiada Pengurus Dana Aktif!</strong> Yayasan tanpa pengurus berisiko tinggi menghadapi pecah amanah dan pemantauan kerajaan.'}
             </div>
-            <div class="tab-pills" style="margin-bottom:8px;">
-              ${[[1, '3%'], [2, '5.5%'], [3, '8%'], [5, '12%']].map(([y, pct]) => `
-                <button type="button" class="tab-pill btn-trust-mgr-years ${selectedMgrYears === y ? 'active' : ''}" data-years="${y}">${y} Tahun (${pct})</button>
-              `).join('')}
-            </div>
-            <div class="action-list" style="margin-bottom:10px;">
-              ${mgrOffers.map(m => `
-                <button type="button" class="action-item btn-hire-trust-mgr" data-tier="${m.tier}" data-years="${m.years}">
-                  <span class="ai-icon">${m.icon}</span>
-                  <span class="ai-content">
-                    <span class="ai-title">${Utils.escapeHtml(m.title)} (${m.years} Thn • ${m.rateLabel || ''})</span>
-                    <span class="ai-desc">${Utils.escapeHtml(m.desc)}</span>
-                  </span>
-                  <span class="ai-right cost">${fmt(m.cost)}</span>
-                </button>
-              `).join('')}
-            </div>
+            ${(() => {
+              const curMgrYrs = (ft.fundManager && Number(ft.fundManager.yearsLeft)) || 0;
+              const maxMgrYrs = (LegalInheritanceEngine && LegalInheritanceEngine.MAX_FUND_MANAGER_YEARS) || 10;
+              const atMax = curMgrYrs >= maxMgrYrs;
+              const overCap = curMgrYrs + selectedMgrYears > maxMgrYrs;
+              return `
+                <div class="tab-pills" style="margin-bottom:8px;">
+                  ${[[1, '3%'], [2, '5.5%'], [3, '8%'], [5, '12%']].map(([y, pct]) => {
+                    const dis = curMgrYrs + y > maxMgrYrs;
+                    return `<button type="button" class="tab-pill btn-trust-mgr-years ${selectedMgrYears === y ? 'active' : ''}" data-years="${y}" ${dis ? 'disabled' : ''}>${y} Tahun (${pct})</button>`;
+                  }).join('')}
+                </div>
+                ${atMax ? `<div style="font-size:11.5px;color:#64748b;margin-bottom:8px;">Tempoh kontrak maksimum (10 tahun) telah dicapai.</div>` : ''}
+                <div class="action-list" style="margin-bottom:10px;">
+                  ${mgrOffers.map(m => `
+                    <button type="button" class="action-item btn-hire-trust-mgr" data-tier="${m.tier}" data-years="${m.years}" ${(atMax || overCap) ? 'disabled' : ''}>
+                      <span class="ai-icon">${m.icon}</span>
+                      <span class="ai-content">
+                        <span class="ai-title">${Utils.escapeHtml(m.title)} (${m.years} Thn • ${m.rateLabel || ''})</span>
+                        <span class="ai-desc">${overCap ? 'Melebihi had maks 10 thn' : Utils.escapeHtml(m.desc)}</span>
+                      </span>
+                      <span class="ai-right cost">${fmt(m.cost)}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              `;
+            })()}
 
             ${trustAssets.length > 0 ? `
               <div class="section-heading" style="margin-top:6px;">🏛️ Aset Dalam Yayasan (${trustAssets.length})</div>

@@ -567,7 +567,7 @@ window.CareerModals = {
         <label class="edu-lbl">3. Kaedah Pembiayaan Yuran:</label>
         <div class="tab-pills">
           <button type="button" class="tab-pill edu-fund-btn ${selFund === 'cash' ? 'active' : ''}" data-efund="cash">💵 Bayar Tunai</button>
-          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'scholarship' ? 'active' : ''}" data-efund="scholarship">🏆 Mohon Biasiswa</button>
+          <button type="button" class="tab-pill edu-fund-btn ${selFund === 'scholarship' && !s.scholarshipIvUsedThisYear ? 'active' : ''}" data-efund="scholarship" ${s.scholarshipIvUsedThisYear ? 'disabled' : ''}>${s.scholarshipIvUsedThisYear ? '🔒 Sudah jalani IV tahun ini' : '🏆 Mohon Biasiswa (IV)'}</button>
           <button type="button" class="tab-pill edu-fund-btn ${selFund === 'loan' ? 'active' : ''}" data-efund="loan">🏦 Pinjaman Pendidikan</button>
           <button type="button" class="tab-pill edu-fund-btn ${selFund === 'family' ? 'active' : ''}" data-efund="family" ${!famOk ? 'disabled' : ''}>👨‍👩‍👧 Tajaan Keluarga</button>
         </div>
@@ -577,7 +577,11 @@ window.CareerModals = {
       <div class="action-list">
     `;
 
+    const curRank = (EducationData.LEVEL_INFO && EducationData.LEVEL_INFO[ed.educationLevel]) ? EducationData.LEVEL_INFO[ed.educationLevel].rank : 0;
     EducationData.PROGRAMS.forEach(prog => {
+      const pInfo = EducationData.LEVEL_INFO && EducationData.LEVEL_INFO[prog.id];
+      const pRank = pInfo ? pInfo.rank : 0;
+      if (curRank >= 4 && pRank > 0 && pRank < 4) return; // Sembunyikan tahap rendah bagi pemegang Ijazah/Sarjana/PhD
       const elig = EduCareerEngine.checkProgramEligibility(s, prog.id, prog.needsField ? selField : null);
       const yrs = EduCareerEngine.getProgramDuration(s, prog.id, prog.needsField ? selField : null, selMode);
       const tuition = EduCareerEngine.getTuitionAnnual(s, prog.id, prog.needsField ? selField : null);
@@ -956,9 +960,18 @@ window.CareerModals = {
         btn.addEventListener('click', () => {
           const level = btn.dataset.level;
           const prog = EducationData.PROGRAMS.find(p => p.id === level);
+          const fieldId = prog && prog.needsField ? this._selectedField : null;
+          if (this._selectedFunding === 'scholarship') {
+            if (s.scholarshipIvUsedThisYear) {
+              App.toast('Anda sudah menjalani temuduga biasiswa tahun ini.', 'error');
+              return;
+            }
+            this.showScholarshipIvModal({ level, fieldId, mode: this._selectedMode });
+            return;
+          }
           const res = EduCareerEngine.enrollProgram({
             level,
-            fieldId: prog && prog.needsField ? this._selectedField : null,
+            fieldId,
             mode: this._selectedMode,
             funding: this._selectedFunding
           });
@@ -1112,5 +1125,190 @@ window.CareerModals = {
         if (typeof onDone === 'function') onDone();
       });
     });
+  }
+,
+  async showScholarshipIvModal({ level, fieldId, mode }) {
+    const s = GameState.current;
+    if (!s) return;
+    const prog = EducationData.PROGRAMS.find(p => p.id === level);
+    const fieldObj = fieldId ? EducationData.getField(fieldId) : null;
+    const courseName = fieldObj ? fieldObj.name : (prog ? prog.title : 'Pengajian Am');
+    const levelLabel = prog ? prog.title : level;
+    const c = Utils.getCountry(s.countryId);
+
+    Modals.open({
+      icon: '🎓',
+      title: 'Temuduga Biasiswa (IV)',
+      subtitle: `${courseName} (${levelLabel})`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="text-align:center;padding:18px 12px;font-size:13px;line-height:1.6;">
+          ⏳ <strong>Panel penemuduga sedang menyediakan soalan untuk bidang ${Utils.escapeHtml(courseName)} (${Utils.escapeHtml(levelLabel)})...</strong>
+        </div>
+      `,
+      footerHtml: ''
+    });
+
+    const ivRes = (window.AINarrator && AINarrator.fetchScholarshipIvQuestions)
+      ? await AINarrator.fetchScholarshipIvQuestions({
+          course: courseName,
+          level: levelLabel,
+          country: c ? c.name : s.countryId,
+          age: s.age
+        })
+      : { questions: [], source: 'fallback' };
+
+    const questions = ivRes.questions || [];
+    if (questions.length < 3) {
+      App.toast('Gagal memulakan sesi temuduga biasiswa.', 'error');
+      this.showHub('education');
+      return;
+    }
+
+    // Tandakan sudah jalani IV tahun ini sebaik soalan pertama dipaparkan (elak menipu ulang)
+    s.scholarshipIvUsedThisYear = true;
+    GameState.save();
+
+    let qIdx = 0;
+    let score = 0;
+    const letters = ['A', 'B', 'C', 'D'];
+
+    const renderQuestion = () => {
+      const q = questions[qIdx];
+      Modals.open({
+        icon: '🎓',
+        title: `Temuduga Biasiswa — Soalan ${qIdx + 1}/3`,
+        subtitle: `${courseName} • ${levelLabel}`,
+        bodyHtml: `
+          <div style="margin-bottom:8px;">
+            <span class="cat-badge synergy">📚 ${Utils.escapeHtml(courseName)}</span>
+            <span class="cat-badge">${Utils.escapeHtml(levelLabel)}</span>
+          </div>
+          <div class="info-banner highlight" style="font-size:13px;line-height:1.55;margin-bottom:10px;">
+            <strong>${Utils.escapeHtml(q.soalan)}</strong>
+          </div>
+          <div id="iv-options-wrap" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;">
+            ${q.pilihan.map((opt, idx) => `
+              <button type="button" class="btn-sm secondary iv-opt-btn" data-idx="${idx}" style="text-align:left;padding:9px 11px;line-height:1.4;white-space:normal;">
+                <strong>${letters[idx]}.</strong> ${Utils.escapeHtml(opt)}
+              </button>
+            `).join('')}
+          </div>
+          <div id="iv-explain-box" style="display:none;font-size:12px;line-height:1.5;padding:8px 10px;border-radius:8px;margin-bottom:10px;"></div>
+          <button type="button" class="primary-btn" id="btn-iv-next" style="width:100%;display:none;">
+            ${qIdx < 2 ? 'Soalan Seterusnya →' : 'Lihat Keputusan Temuduga →'}
+          </button>
+        `,
+        footerHtml: ''
+      });
+
+      let answered = false;
+      document.querySelectorAll('.iv-opt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (answered) return;
+          answered = true;
+          const picked = Number(btn.dataset.idx);
+          const isCorrect = picked === q.jawapanBetul;
+          if (isCorrect) score++;
+
+          document.querySelectorAll('.iv-opt-btn').forEach(b => {
+            b.disabled = true;
+            const i = Number(b.dataset.idx);
+            if (i === q.jawapanBetul) {
+              b.style.background = '#dcfce7';
+              b.style.borderColor = '#16a34a';
+              b.style.color = '#166534';
+            } else if (i === picked && !isCorrect) {
+              b.style.background = '#fee2e2';
+              b.style.borderColor = '#dc2626';
+              b.style.color = '#991b1b';
+            }
+          });
+
+          const expBox = document.getElementById('iv-explain-box');
+          if (expBox) {
+            expBox.style.display = 'block';
+            expBox.style.background = isCorrect ? '#f0fdf4' : '#fef2f2';
+            expBox.style.border = `1px solid ${isCorrect ? '#86efac' : '#fca5a5'}`;
+            expBox.style.color = isCorrect ? '#166534' : '#991b1b';
+            expBox.innerHTML = `<strong>${isCorrect ? '✅ Tepat!' : '❌ Kurang Tepat.'}</strong> ${Utils.escapeHtml(q.penjelasan)}`;
+          }
+          const nextBtn = document.getElementById('btn-iv-next');
+          if (nextBtn) nextBtn.style.display = 'block';
+        });
+      });
+
+      const nextBtn = document.getElementById('btn-iv-next');
+      if (nextBtn) nextBtn.addEventListener('click', () => {
+        if (qIdx < 2) {
+          qIdx++;
+          renderQuestion();
+        } else {
+          renderResult();
+        }
+      });
+    };
+
+    const renderResult = () => {
+      const fullTuition = EduCareerEngine.getTuitionAnnual(s, level, fieldId);
+      const halfTuition = Math.round(fullTuition * 0.5);
+      const fmt = (v) => Utils.formatMoney(v, s.countryId);
+
+      let statusTitle = 'Permohonan Biasiswa Ditolak';
+      let statusBanner = 'background:#fef2f2;border-color:#fca5a5;color:#991b1b;';
+      let statusDesc = 'Prestasi temuduga belum mencapai tahap kelayakan biasiswa. Anda masih boleh mendaftar melalui pembiayaan sendiri atau cuba semula tahun hadapan.';
+      let actionsHtml = '';
+
+      if (score === 3) {
+        statusTitle = '🏆 Lulus Cemerlang — Biasiswa Penuh (Yuran Percuma 100%)';
+        statusBanner = 'background:#f0fdf4;border-color:#86efac;color:#166534;';
+        statusDesc = `Tahniah! Anda menjawab 3/3 soalan dengan tepat. Panel penemuduga menganugerahkan Biasiswa Penuh (kos yuran ${fmt(0)}).`;
+        actionsHtml = `<button type="button" class="primary-btn" id="btn-iv-enroll-full" style="width:100%;margin-bottom:8px;">✅ Daftar Dengan Biasiswa Penuh</button>`;
+        GameState.addJournalEntry(`🎓 Lulus Temuduga Biasiswa (${courseName} — 3/3): Dianugerahkan Biasiswa Penuh (100% percuma)!`, 'milestone');
+      } else if (score === 2) {
+        statusTitle = '🥈 Lulus — Biasiswa Separa (Diskaun 50% Yuran)';
+        statusBanner = 'background:#fffbeb;border-color:#fde68a;color:#92400e;';
+        statusDesc = `Anda menjawab 2/3 soalan dengan tepat dan layak menerima Biasiswa Separa dengan potongan 50% yuran (${fmt(halfTuition)}/thn berbanding ${fmt(fullTuition)}/thn).`;
+        const canCash = (s.money || 0) >= halfTuition;
+        actionsHtml = `
+          <button type="button" class="primary-btn" id="btn-iv-enroll-partial" style="width:100%;margin-bottom:6px;" ${!canCash ? 'disabled' : ''}>✅ Daftar Dengan Biasiswa Separa (${fmt(halfTuition)}/thn)</button>
+          ${!canCash ? `<button type="button" class="btn-sm secondary" id="btn-iv-enroll-partial-loan" style="width:100%;margin-bottom:8px;">🏦 Daftar Biasiswa Separa + Pinjaman Pendidikan (${fmt(halfTuition)}/thn)</button>` : ''}
+        `;
+        GameState.addJournalEntry(`🎓 Lulus Temuduga Biasiswa (${courseName} — 2/3): Dianugerahkan Biasiswa Separa (Diskaun 50% Yuran).`, 'culture');
+      } else {
+        GameState.addJournalEntry(`📝 Temuduga Biasiswa (${courseName} — ${score}/3): Permohonan biasiswa ditolak oleh panel penemuduga.`, 'warning');
+      }
+      GameState.save();
+
+      Modals.open({
+        icon: score >= 2 ? '🏆' : '📋',
+        title: `Keputusan Temuduga Biasiswa (${score}/3)`,
+        subtitle: `${courseName} • ${levelLabel}`,
+        bodyHtml: `
+          <div class="info-banner" style="${statusBanner}font-size:12.5px;line-height:1.58;margin-bottom:12px;">
+            <strong>${statusTitle}</strong><br/>${statusDesc}
+          </div>
+          ${actionsHtml}
+        `,
+        footerHtml: `<button type="button" class="btn-sm secondary" id="btn-iv-back-edu">← Kembali ke Pendidikan</button>`
+      });
+
+      const doEnroll = (fundType) => {
+        const res = EduCareerEngine.enrollProgram({ level, fieldId, mode, funding: fundType });
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showHub('education');
+      };
+
+      const btnFull = document.getElementById('btn-iv-enroll-full');
+      if (btnFull) btnFull.addEventListener('click', () => doEnroll('scholarship'));
+      const btnPart = document.getElementById('btn-iv-enroll-partial');
+      if (btnPart) btnPart.addEventListener('click', () => doEnroll('scholarship_partial'));
+      const btnPartLoan = document.getElementById('btn-iv-enroll-partial-loan');
+      if (btnPartLoan) btnPartLoan.addEventListener('click', () => doEnroll('scholarship_partial_loan'));
+      const btnBack = document.getElementById('btn-iv-back-edu');
+      if (btnBack) btnBack.addEventListener('click', () => this.showHub('education'));
+    };
+
+    renderQuestion();
   }
 };

@@ -23,6 +23,7 @@ window.Sim = {
     );
     s.yearlyActions = {};
     s.cultureVisitedThisYear = false;
+    s.scholarshipIvUsedThisYear = false;
     s._pendingImmigrationEnforcement = null;
     if (s.countryBans && typeof s.countryBans === 'object') {
       const curGen = Number(s.generation || 1);

@@ -317,4 +317,78 @@ window.AINarrator = {
       return null;
     }
   }
+,
+  SCHOLARSHIP_FALLBACK_BANK: {
+    stem: [
+      { soalan: 'Dalam kaedah saintifik, apakah tujuan utama kumpulan kawalan (control group) dalam sesuatu eksperimen?', pilihan: ['Mempercepatkan keputusan makmal', 'Menjadi penanda aras perbandingan bagi mengasingkan kesan pemboleh ubah', 'Menggantikan keperluan hipotesis', 'Mengurangkan bilangan sampel kajian'], jawapanBetul: 1, penjelasan: 'Kumpulan kawalan membolehkan penyelidik memastikan perubahan hasil benar-benar berpunca daripada pemboleh ubah yang diuji.' },
+      { soalan: 'Apakah kelebihan utama algoritma yang mempunyai kerumitan masa O(log n) berbanding O(n²)?', pilihan: ['Ia sentiasa menggunakan memori sifar', 'Masa pemprosesannya berkembang jauh lebih perlahan apabila saiz data meningkat', 'Ia hanya berfungsi untuk data teks sahaja', 'Ia tidak memerlukan struktur data tersusun'], jawapanBetul: 1, penjelasan: 'Kerumitan logaritma kekal pantas walaupun set data membesar ke jutaan rekod.' },
+      { soalan: 'Mengapakah faktor keselamatan (factor of safety) diterapkan dalam reka bentuk kejuruteraan struktur?', pilihan: ['Untuk menaikkan kos bahan binaan', 'Untuk menampung beban luar jangka dan ketidakpastian bahan', 'Untuk memendekkan jangka hayat struktur', 'Untuk mengelakkan pemeriksaan berkala'], jawapanBetul: 1, penjelasan: 'Faktor keselamatan melindungi struktur daripada kegagalan apabila menghadapi beban atau keadaan ekstrem.' }
+    ],
+    business: [
+      { soalan: 'Apakah maksud prinsip kepelbagaian (diversification) dalam pengurusan portfolio pelaburan?', pilihan: ['Melabur semua modal dalam satu saham berisiko tinggi', 'Mengagihkan pelaburan merentas pelbagai aset bagi mengurangkan risiko keseluruhan', 'Menyimpan keseluruhan dana dalam bentuk tunai sahaja', 'Meminjam modal maksimum untuk setiap transaksi'], jawapanBetul: 1, penjelasan: 'Kepelbagaian mengurangkan kesan kejatuhan satu aset terhadap keseluruhan portfolio.' },
+      { soalan: 'Dalam perakaunan, apakah yang digambarkan oleh penyata aliran tunai (cash flow statement)?', pilihan: ['Nilai pasaran jenama syarikat', 'Pergerakan masuk dan keluar wang tunai dalam tempoh tertentu', 'Bilangan pekerja tetap organisasi', 'Kadar cukai pendapatan peribadi pengarah'], jawapanBetul: 1, penjelasan: 'Penyata aliran tunai mengukur kecairan sebenar operasi, pelaburan, dan pembiayaan.' },
+      { soalan: 'Apakah tujuan utama kontrak bertulis yang jelas dalam urus niaga komersial?', pilihan: ['Mengelakkan pembayaran cukai jualan', 'Menetapkan hak, tanggungjawab, dan penyelesaian pertikaian secara sah', 'Menghapuskan keperluan invois rasmi', 'Memastikan harga tidak berubah selama 50 tahun'], jawapanBetul: 1, penjelasan: 'Kontrak bertulis melindungi kedua-dua pihak dengan terma yang boleh dikuatkuasakan.' }
+    ],
+    medical: [
+      { soalan: 'Mengapakah rawatan antibiotik perlu dihabiskan mengikut tempoh preskripsi walaupun gejala sudah reda?', pilihan: ['Untuk menjimatkan kos farmasi', 'Untuk mencegah bakteria yang masih berbaki daripada membentuk kerintangan antibiotik', 'Untuk meningkatkan tekanan darah pesakit', 'Untuk menggantikan keperluan vaksinasi'], jawapanBetul: 1, penjelasan: 'Menghentikan antibiotik terlalu awal boleh meninggalkan bakteria tahan ubat yang lebih sukar dirawat.' },
+      { soalan: 'Apakah peranan utama kajian klinikal rawak terkawal (RCT) dalam perubatan berasaskan bukti?', pilihan: ['Mengukur keberkesanan dan keselamatan rawatan dengan meminimumkan bias', 'Mempercepatkan pemasaran ubat tanpa ujian', 'Menggantikan diagnosis fizikal doktor', 'Menghapuskan keperluan rekod pesakit'], jawapanBetul: 0, penjelasan: 'RCT ialah piawaian emas bagi menilai keberkesanan intervensi perubatan secara objektif.' },
+      { soalan: 'Apakah fungsi utama sistem imun adaptif dalam tubuh manusia?', pilihan: ['Mengawal kadar pernafasan ketika tidur', 'Mengenali dan mengingati patogen spesifik untuk tindak balas lebih pantas', 'Menghasilkan tenaga daripada cahaya matahari', 'Menggantikan fungsi buah pinggang'], jawapanBetul: 1, penjelasan: 'Imuniti adaptif membina memori imunologi bagi melindungi tubuh daripada jangkitan berulang.' }
+    ],
+    general: [
+      { soalan: 'Apakah ciri utama hujah akademik yang kukuh dalam penulisan ilmiah?', pilihan: ['Bergantung sepenuhnya pada pendapat peribadi tanpa rujukan', 'Disokong oleh bukti empirikal, logik konsisten, dan sumber berwibawa', 'Menggunakan ayat yang terlalu panjang tanpa struktur', 'Mengabaikan sebarang pandangan balas'], jawapanBetul: 1, penjelasan: 'Penulisan ilmiah menuntut bukti sahih, penaakulan jelas, dan rujukan yang boleh disemak.' },
+      { soalan: 'Dalam pengurusan projek, mengapakah penetapan garis masa dan pencapaian (milestones) amat penting?', pilihan: ['Untuk menambah kerja kertas pasukan', 'Untuk memantau kemajuan dan mengesan kelewatan lebih awal', 'Untuk mengelakkan perbincangan antara ahli pasukan', 'Untuk menghapuskan keperluan bajet projek'], jawapanBetul: 1, penjelasan: 'Pencapaian berkala membantu pasukan mengenal pasti risiko kelewatan sebelum menjejaskan tarikh akhir.' },
+      { soalan: 'Apakah langkah paling berkesan apabila berdepan maklumat bercanggah semasa menjalankan penyelidikan?', pilihan: ['Memilih maklumat pertama yang ditemui sahaja', 'Menyemak silang sumber primer dan menilai metodologi setiap kajian', 'Memadam semua data yang tidak menyokong jangkaan awal', 'Meneka kesimpulan tanpa analisis lanjut'], jawapanBetul: 1, penjelasan: 'Semakan silang sumber primer dan metodologi memastikan kesimpulan kajian kekal objektif.' }
+    ]
+  },
+
+  _pickFallbackScholarshipQuestions(course = '') {
+    const c = String(course || '').toLowerCase();
+    let key = 'general';
+    if (/(kejuruteraan|sains|komputer|it|teknologi|data|fizik|kimia|matematik)/.test(c)) key = 'stem';
+    else if (/(perniagaan|kewangan|ekonomi|akaun|undang|pengurusan|pemasaran)/.test(c)) key = 'business';
+    else if (/(perubatan|kesihatan|farmasi|kejururawatan|pergigian|biologi)/.test(c)) key = 'medical';
+    return this.SCHOLARSHIP_FALLBACK_BANK[key].map(q => ({ ...q, pilihan: [...q.pilihan] }));
+  },
+
+  async fetchScholarshipIvQuestions({ course, level, country, age }) {
+    const fallback = this._pickFallbackScholarshipQuestions(course);
+    try {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+      try {
+        const resp = await fetch(this.ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'scholarship_iv',
+            course: String(course || 'Pengajian Am').slice(0, 80),
+            level: String(level || 'Ijazah').slice(0, 60),
+            country: String(country || 'Malaysia').slice(0, 50),
+            age: Number(age) || 18
+          }),
+          signal: controller ? controller.signal : undefined
+        });
+        if (timer) clearTimeout(timer);
+        if (!resp || !resp.ok) return { questions: fallback, source: 'fallback' };
+        const data = await resp.json();
+        const list = Array.isArray(data && data.questions) ? data.questions : (Array.isArray(data && data.soalan) ? data.soalan : null);
+        if (!list || list.length < 3) return { questions: fallback, source: 'fallback' };
+        const valid = list.slice(0, 3).map(q => {
+          const text = this._stripHtml(q.soalan || q.question || '');
+          const opts = Array.isArray(q.pilihan || q.options) ? (q.pilihan || q.options).map(o => this._stripHtml(o)) : [];
+          const ans = Number(q.jawapanBetul ?? q.correctIndex ?? q.answer);
+          const exp = this._stripHtml(q.penjelasan || q.explanation || 'Jawapan berdasarkan prinsip teras bidang ini.');
+          if (!text || opts.length !== 4 || Number.isNaN(ans) || ans < 0 || ans > 3) return null;
+          return { soalan: text, pilihan: opts, jawapanBetul: ans, penjelasan: exp };
+        }).filter(Boolean);
+        if (valid.length === 3) return { questions: valid, source: 'ai' };
+        return { questions: fallback, source: 'fallback' };
+      } catch (e) {
+        if (timer) clearTimeout(timer);
+        return { questions: fallback, source: 'fallback' };
+      }
+    } catch (e) {
+      return { questions: fallback, source: 'fallback' };
+    }
+  }
 };
