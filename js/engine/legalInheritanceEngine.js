@@ -233,6 +233,12 @@ window.LegalInheritanceEngine = {
     if (typeof ft.baselineValue !== 'number' || Number.isNaN(ft.baselineValue)) ft.baselineValue = 0;
     if (typeof ft.unpaidFees !== 'number' || Number.isNaN(ft.unpaidFees) || ft.unpaidFees < 0) ft.unpaidFees = 0;
     ft.unpaidFees = Math.round(ft.unpaidFees);
+    // Selaraskan status Tergantung secara eksklusif dengan unpaidFees > 0 & bersihkan flag lama
+    ft.lapsed = ft.unpaidFees > 0;
+    if ('suspended' in ft) ft.suspended = false;
+    if ('isSuspended' in ft) ft.isSuspended = false;
+    if ('feeOverdue' in ft) ft.feeOverdue = false;
+    if (!Array.isArray(s.trustHistory)) s.trustHistory = [];
 
     // Migrasi selamat untuk simpanan lama yang pernah memilih pewaris tunggal 100%
     if (s.legal && s.legal.wasiat && (s.legal.wasiat.mode === 'sole_heir' || s.legal.wasiat.mode === 'single_child' || s.legal.wasiat.willType === 'sole_heir' || s.legal.wasiat.willType === 'single_child')) {
@@ -242,6 +248,13 @@ window.LegalInheritanceEngine = {
       s.legal.wasiat.soleBeneficiaryId = null;
     }
     return ft;
+  },
+
+  TRUST_MAX_ARREARS_USD: 100000000, // Had maksimum tunggakan: $100M USD
+
+  getTrustMaxArrearsLocal(s) {
+    const cid = (s && s.countryId) || 'MY';
+    return Math.max(1, Math.round(Utils.usdToLocal(this.TRUST_MAX_ARREARS_USD, cid)));
   },
 
   TAX_HAVEN_ISLAND_IDS: [
@@ -800,15 +813,80 @@ window.LegalInheritanceEngine = {
     return this.payTrustUnpaidFees(s, amount);
   },
 
-  // Cangkuk (hook) pembubaran paksa akibat tunggakan mencapai 100% nilai Yayasan — dilengkapkan pada Prompt 2
   forceDissolveTrustForDebt(state) {
     if (!state || !state.familyTrust) return { triggered: false };
+    this.ensureFamilyTrust(state);
     const ft = state.familyTrust;
-    GameState.addJournalEntry(
-      `🚨🏛️ AMARAN KRITIKAL YAYASAN: Tunggakan yuran (${Utils.formatMoney(ft.unpaidFees || 0, state.countryId)}) telah mencapai siling 100% nilai bersih Tabung Yayasan Keluarga! Yayasan kini berada di ambang pembubaran paksa.`,
-      'warning'
-    );
-    return { triggered: true, unpaidFees: ft.unpaidFees || 0 };
+    if (!ft.active) return { triggered: false };
+
+    const totalTrustValue = this.getTrustNetWorth(state);
+    const debtDue = Math.max(0, Math.round(ft.unpaidFees || 0));
+    const countryId = state.countryId || 'MY';
+
+    if (!Array.isArray(state.trustHistory)) state.trustHistory = [];
+    state.trustHistory.push({
+      year: state.year || 2026,
+      age: state.age || 0,
+      generation: state.generation || 1,
+      founderName: ft.founderName || state.name || 'Pengasas',
+      totalTrustValue,
+      debtDue,
+      reason: 'Dibubarkan secara automatik — tunggakan yuran mencapai had maksimum $100M USD'
+    });
+
+    let surplus = 0;
+    let shortfall = 0;
+    if (totalTrustValue >= debtDue) {
+      // KES A: Nilai Yayasan mencukupi — langsaikan hutang dan pulangkan baki lebihan ke tunai peribadi
+      surplus = Math.max(0, totalTrustValue - debtDue);
+      state.money = Math.round((state.money || 0) + surplus);
+      GameState.addJournalEntry(
+        `🚨🏛️ PEMBUBARAN PAKSA YAYASAN: Tunggakan yuran mencapai had maksimum $100M USD! Semua aset Yayasan dicairkan untuk melangsaikan hutang ${Utils.formatMoney(debtDue, countryId)}, dan baki lebihan ${Utils.formatMoney(surplus, countryId)} telah dipulangkan ke akaun tunai peribadi anda.`,
+        'warning'
+      );
+    } else {
+      // KES B: Nilai Yayasan tidak mencukupi — sita semua aset Yayasan dan jadikan baki kekurangan sebagai Hutang Generasi
+      shortfall = Math.max(1, debtDue - totalTrustValue);
+      if (!Array.isArray(state.loans)) state.loans = [];
+      state.loans.push({
+        id: 'gendebt_' + Date.now() + '_' + Utils.randInt(10, 99),
+        lenderType: 'bank',
+        isGenerational: true,
+        lenderName: 'Hutang Generasi (Tunggakan Yayasan)',
+        principal: shortfall,
+        balance: shortfall,
+        interestRate: 0.04,
+        yearlyDue: Math.max(1, Math.round(shortfall / 5)),
+        yearsElapsed: 0,
+        missedPayments: 0,
+        paidThisYear: false
+      });
+      GameState.addJournalEntry(
+        `🚨🏛️ PEMBUBARAN PAKSA YAYASAN: Tunggakan yuran mencapai had maksimum $100M USD! Kesemua aset Yayasan (${Utils.formatMoney(totalTrustValue, countryId)}) telah disita dan baki kekurangan ${Utils.formatMoney(shortfall, countryId)} direkodkan sebagai Hutang Generasi yang akan diwarisi merentas generasi sehingga dilangsaikan.`,
+        'warning'
+      );
+    }
+
+    // Tutup dan reset familyTrust kepada tidak aktif
+    ft.assets = [];
+    ft.investments = [];
+    ft.balance = 0;
+    ft.unpaidFees = 0;
+    ft.active = false;
+    ft.lapsed = false;
+    ft.underAudit = false;
+    ft.fundManager = null;
+    ft.lastPaidAge = null;
+    ft.founderName = null;
+    ft.founderGen = null;
+    ft.foundedYear = null;
+    ft.yearsActive = 0;
+    ft.feeRate = 1.5;
+    ft.prevTotalValue = 0;
+    ft.baselineValue = 0;
+
+    GameState.save();
+    return { triggered: true, totalTrustValue, debtDue, surplus, shortfall };
   },
 
   dissolveFamilyTrust(s) {
@@ -954,10 +1032,13 @@ window.LegalInheritanceEngine = {
       }
     }
 
-    // Had siling kumulatif tunggakan: berhenti apabila unpaidFees >= getTrustNetWorth(s)
-    const trustNetAfterFee = this.getTrustNetWorth(s);
-    if ((ft.unpaidFees || 0) > 0 && (ft.unpaidFees >= trustNetAfterFee || trustNetAfterFee <= 0)) {
-      ft.unpaidFees = Math.max(0, trustNetAfterFee);
+    // Had maksimum tunggakan berasaskan USD: $100M USD
+    const maxArrearsLocal = this.getTrustMaxArrearsLocal(s);
+    const unpaidUsd = (window.Utils && Utils.localToUsd)
+      ? Utils.localToUsd(ft.unpaidFees || 0, s.countryId)
+      : (ft.unpaidFees || 0);
+    if ((ft.unpaidFees || 0) > 0 && (unpaidUsd >= this.TRUST_MAX_ARREARS_USD || ft.unpaidFees >= maxArrearsLocal)) {
+      ft.unpaidFees = maxArrearsLocal;
       this.forceDissolveTrustForDebt(s);
       return null;
     }

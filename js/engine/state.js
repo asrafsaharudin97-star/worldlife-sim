@@ -355,6 +355,21 @@ window.GameState = {
     return out;
   },
 
+  _inheritGenerationalDebts(parent, targetCountryId) {
+    const src = (parent && Array.isArray(parent.loans)) ? parent.loans : [];
+    const fromId = (parent && parent.countryId) || targetCountryId || 'MY';
+    const toId = targetCountryId || fromId;
+    return src
+      .filter(l => l && l.isGenerational && (l.balance || 0) > 0)
+      .map(l => ({
+        ...l,
+        principal: fromId !== toId ? Utils.convertMoney(l.principal || 0, fromId, toId) : Math.round(l.principal || 0),
+        balance: fromId !== toId ? Utils.convertMoney(l.balance || 0, fromId, toId) : Math.round(l.balance || 0),
+        yearlyDue: Math.max(1, fromId !== toId ? Utils.convertMoney(l.yearlyDue || 0, fromId, toId) : Math.round(l.yearlyDue || 0)),
+        paidThisYear: false
+      }));
+  },
+
   ensureUpgradedState() {
     const s = this.current;
     if (!s) return;
@@ -700,6 +715,7 @@ window.GameState = {
       licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
       countryBans: this._inheritCountryBans(parent, (parent.generation || 1) + 1),
+      loans: this._inheritGenerationalDebts(parent, cId),
       pendingDeportation: null,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
@@ -1073,6 +1089,7 @@ window.GameState = {
       licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
       countryBans: this._inheritCountryBans(parent, (parent.generation || 1) + 1),
+      loans: this._inheritGenerationalDebts(parent, cId),
       pendingDeportation: null,
 
       alignment: {
@@ -1232,6 +1249,7 @@ window.GameState = {
       licenses: { moto: false, car: false },
       generation: newGen,
       countryBans: this._inheritCountryBans(parent, newGen),
+      loans: this._inheritGenerationalDebts(parent, parent.countryId),
       pendingDeportation: null,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 

@@ -1591,11 +1591,12 @@ window.Modals = {
     const trustInvs = Array.isArray(ft.investments) ? ft.investments.filter(h => h && h.units > 0) : [];
     const trustStatusLabel = !ft.active
       ? 'Tidak Aktif'
-      : hasArrears || ft.lapsed
+      : hasArrears
         ? '⚠️ Tergantung (Tunggakan Yuran)'
         : 'Aktif (Bebas Cukai Pusaka)';
-    const trustStatusBg = !ft.active ? '#f1f5f9' : (hasArrears || ft.lapsed) ? '#fef3c7' : '#dcfce7';
-    const trustStatusColor = !ft.active ? '#475569' : (hasArrears || ft.lapsed) ? '#92400e' : '#166534';
+    const trustStatusBg = !ft.active ? '#f1f5f9' : hasArrears ? '#fef3c7' : '#dcfce7';
+    const trustStatusColor = !ft.active ? '#475569' : hasArrears ? '#92400e' : '#166534';
+    const unpaidUsdEq = hasArrears && Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(unpaidFees, s.countryId) : null;
     const mgrTierLabels = { junior: 'Pengurus Dana Junior', profesional: 'Pengurus Korporat Profesional', elit: 'Pengurus Dana Elit (Padu)' };
     const perfBadge = perf.hasBaseline
       ? `<span class="cat-badge" style="background:${perf.pct >= 0 ? '#dcfce7' : '#fee2e2'};color:${perf.pct >= 0 ? '#166534' : '#991b1b'};">${perf.pct >= 0 ? '📈 +' : '📉 '}${perf.pct}%</span>`
@@ -1619,7 +1620,7 @@ window.Modals = {
         ` : ''}
 
         <div class="section-heading">🏛️ Tabung Yayasan Keluarga (Eksklusif Pewaris Pemain)</div>
-        <div class="migration-card" style="border-color:${ft.active && !hasArrears && !ft.lapsed ? '#22c55e' : (hasArrears || ft.lapsed) ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
+        <div class="migration-card" style="border-color:${ft.active && !hasArrears ? '#22c55e' : hasArrears ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">
           <div class="mig-head">
             <div class="mig-title">🏛️ Tabung Yayasan Keluarga</div>
             <span class="cat-badge" style="background:${trustStatusBg};color:${trustStatusColor};">${trustStatusLabel}</span>
@@ -1675,8 +1676,9 @@ window.Modals = {
           ` : `
             ${hasArrears ? `
               <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;font-size:12px;line-height:1.5;margin-bottom:8px;">
-                <strong>⚠️ Tunggakan Yuran Yayasan: ${fmt(unpaidFees)} (${arrearsRatioPct}% daripada Nilai Bersih Yayasan)</strong><br/>
-                Kemasukan/pengeluaran dana, pemindahan aset, dan pembubaran sukarela dikunci sehingga semua tunggakan dilangsaikan. Masukkan jumlah di bawah untuk bayaran separa atau kosongkan untuk bayar penuh.
+                <strong>⚠️ Tunggakan Yuran: ${fmt(unpaidFees)}${unpaidUsdEq ? ` (${unpaidUsdEq})` : ''}</strong><br/>
+                Had Maksimum Tunggakan: <strong>$100M USD</strong> (pembubaran automatik jika dicapai).<br/>
+                Kemasukan/pengeluaran dana, pemindahan aset, dan pembubaran sukarela dikunci sehingga semua tunggakan dilangsaikan.
               </div>
               <button type="button" class="primary-btn" id="btn-trust-reactivate" style="width:100%;margin-bottom:8px;background:#d97706;">
                 💳 Langsaikan Tunggakan Yuran (${fmt(unpaidFees)})
