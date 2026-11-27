@@ -1609,7 +1609,8 @@ window.Modals = {
         <div class="info-banner highlight">
           <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
           <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
-          Harta Peribadi Boleh Agih: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
+          Harta Peribadi Boleh Agih: <strong>${fmt(Math.max(0, report.distributable || 0))}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
+          ${ft.active ? `<div style="font-size:11.5px;color:#475569;margin-top:4px;">ℹ️ Aset Tabung Yayasan Keluarga diurus secara berasingan dan bebas Cukai Pusaka.</div>` : ''}
         </div>
         ${(window.GameState && GameState.getEligibleHeirs && GameState.getEligibleHeirs(s).length === 0) ? `
           <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-top:8px;">

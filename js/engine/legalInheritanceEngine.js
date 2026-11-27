@@ -1141,18 +1141,21 @@ window.LegalInheritanceEngine = {
     this.ensureFamilyTrust(s);
     const countryId = s.countryId || 'MY';
     const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(countryId) : { name: countryId };
-    const cash = Math.max(0, Math.round(s.money || 0));
     const trustBalance = Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
-    const trustAssetsVal = this.getTrustAssetsValue(s);
-    const trustNetWorth = trustBalance + trustAssetsVal;
-    const trustProtected = Boolean(s.familyTrust && s.familyTrust.active && !s.familyTrust.lapsed);
+    const trustNetWorth = this.getTrustNetWorth(s);
+    const trustActive = Boolean(s.familyTrust && s.familyTrust.active);
+    const trustProtected = Boolean(trustActive && !s.familyTrust.lapsed && (s.familyTrust.unpaidFees || 0) <= 0);
+
+    // PRINSIP WAJIB: Harta Peribadi dan Tabung Yayasan Keluarga ialah DUA ENTITI BERBEZA.
+    // Cukai Pusaka & Wasiat HANYA dikenakan ke atas Harta Peribadi (getPersonalNetWorth) — TIDAK PERNAH termasuk familyTrust.
+    const personalNet = (window.GameState && GameState.getPersonalNetWorth)
+      ? GameState.getPersonalNetWorth(s)
+      : Math.round(s.money || 0);
     const assetSum = window.AssetsEngine ? AssetsEngine.getAssetCashflowSummary(s) : { totalAssetValue: 0, totalDebt: 0 };
-    const personalGross = cash + Math.round(assetSum.totalAssetValue || 0);
-    // Harta dalam Tabung Yayasan Keluarga (aktif & tiada tunggakan) dikecualikan sepenuhnya daripada pembahagian NPC & cukai pusaka
-    const grossEstate = trustProtected ? personalGross : (personalGross + trustNetWorth);
     const personalLoans = (window.LoansEngine && LoansEngine.getTotalDebt) ? LoansEngine.getTotalDebt(s) : 0;
     const totalDebt = Math.round(assetSum.totalDebt || 0) + personalLoans + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0);
-    const netBeforeTax = Math.max(0, grossEstate - totalDebt);
+    const grossEstate = Math.max(0, personalNet + totalDebt);
+    const netBeforeTax = Math.max(0, personalNet);
 
     const netUsd = Utils.localToUsd ? Utils.localToUsd(netBeforeTax, countryId) : netBeforeTax;
     const taxRate = this.getCountryEstateTaxRate(countryId, netUsd);
@@ -1169,9 +1172,9 @@ window.LegalInheritanceEngine = {
     const shares = [];
 
     if (distributable > 0) {
-      if (mode === 'charity' && !trustProtected) {
+      if (mode === 'charity') {
         shares.push({ id: 'charity', isEntity: true, name: 'Yayasan Kebajikan Awam', role: 'Derma Wasiat', fractionLabel: 'Wasiat Kebajikan', pct: 100, amount: distributable });
-      } else if (mode === 'spouse_all' && spouse && !trustProtected) {
+      } else if (mode === 'spouse_all' && spouse) {
         shares.push({ id: spouse.id, isEntity: false, name: spouse.name, role: spouse.role || 'Pasangan', fractionLabel: 'Wasiat Penuh Pasangan', pct: 100, amount: distributable });
       }
 
@@ -1228,15 +1231,18 @@ window.LegalInheritanceEngine = {
 
     const heirlooms = ((s.assets && s.assets.collectibles) || []).filter(col => col && col.isHeirloom);
     const taxRatePct = Math.round(taxRate * 100);
-    const systemName = trustProtected ? 'Tabung Yayasan Keluarga (Bebas Cukai Pusaka)' : 'Undang-Undang Sivil & Wasiat';
+    const systemName = 'Undang-Undang Sivil & Wasiat';
 
     return {
       countryId,
       countryName: c.name || countryId,
       systemName,
       systemLabel: systemName,
+      trustActive,
       trustProtected,
       trustBalance,
+      trustNetWorth,
+      personalNetWorth: personalNet,
       grossEstate,
       totalDebt,
       totalDebts: totalDebt,
@@ -1253,7 +1259,6 @@ window.LegalInheritanceEngine = {
       heirlooms,
       shares,
       getHeirAmount(heirId) {
-        if (trustProtected) return distributable;
         const found = shares.find(sh => sh.id === heirId);
         return found ? found.amount : 0;
       }
