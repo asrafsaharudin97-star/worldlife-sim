@@ -24,3 +24,15 @@ When your character **migrates to another country**, the simulation dynamically 
 - **Full Crime, Court Trial, Prison & Fugitive System:** Interactive courtroom trials & lawyers, playable prison escape & riot mini-games, underground illegal emigration, plastic surgery, and fake identities.
 - **Multi-Generational Dynasty & Safe Save Performance:** Heir continuation, Family Reputation, Prime Achievements, centralized HUD/Biodata/Income sync (`CharacterStatus`), `SafeStorage` quota protection, and `.json` save export/import.
 
+## Negara Pulau Bebas Cukai (Tabung Yayasan Keluarga — 0% Yuran & 0% Cukai Korporat)
+Pemain yang menetap di mana-mana **21 Negara Pulau Bebas Cukai** di bawah menikmati **0% Yuran Tahunan Yayasan** dan **0% Cukai Korporat Yayasan** (berbanding kadar biasa bagi Negara Maju, Membangun, dan Mundur):
+
+| Kod | Negara | Kod | Negara | Kod | Negara |
+| :---: | :--- | :---: | :--- | :---: | :--- |
+| `BS` | 🇧🇸 Bahamas | `KN` | 🇰🇳 Saint Kitts & Nevis | `WS` | 🇼🇸 Samoa |
+| `BB` | 🇧🇧 Barbados | `LC` | 🇱🇨 Saint Lucia | `TO` | 🇹🇴 Tonga |
+| `SC` | 🇸🇨 Seychelles | `GD` | 🇬🇩 Grenada | `TV` | 🇹🇻 Tuvalu |
+| `MV` | 🇲🇻 Maldives | `DM` | 🇩🇲 Dominica | `KI` | 🇰🇮 Kiribati |
+| `MU` | 🇲🇺 Mauritius | `PW` | 🇵🇼 Palau | `FJ` | 🇫🇯 Fiji |
+| `VU` | 🇻🇺 Vanuatu | `MH` | 🇲🇭 Kepulauan Marshall | `MT` | 🇲🇹 Malta |
+| `AG` | 🇦🇬 Antigua & Barbuda | `NR` | 🇳🇷 Nauru | `CY` | 🇨🇾 Cyprus |
