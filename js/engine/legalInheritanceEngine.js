@@ -622,7 +622,7 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `${mgrName} (${offer.title}) dilantik untuk kontrak ${yrs} tahun!` };
   },
 
-  transferAssetToTrust(s, assetType, uid) {
+  transferAssetToTrust(s, assetType, uid, proxyChannel = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
@@ -637,26 +637,50 @@ window.LegalInheritanceEngine = {
     const idx = s.assets[listKey].findIndex(x => x && x.uid === uid);
     if (idx === -1) return { ok: false, msg: 'Aset tidak ditemui.' };
 
+    const targetAsset = s.assets[listKey][idx];
+    let proxyRes = null;
+    if (this.isTrustOffshore(s)) {
+      proxyRes = this._chargeOffshoreAssetProxy(s, 'in', targetAsset.value || 0, proxyChannel);
+      if (!proxyRes.ok) return proxyRes;
+    }
+
     const [asset] = s.assets[listKey].splice(idx, 1);
     s.familyTrust.assets.push({
       ...asset,
       trustAssetType: assetType
     });
     this._adjustTrustBasis(s, Math.max(0, Math.round(asset.value || 0)));
+    if (proxyRes) {
+      const domC = this.getTrustDomicileCountry(s);
+      const domName = domC ? domC.name : (s.familyTrust.domicileCountry || 'luar negara');
+      GameState.addJournalEntry(`🌐 Anda memindahkan aset ${asset.name} (${Utils.formatMoney(asset.value || 0, s.countryId)}) ke Yayasan di ${domName} melalui ${proxyRes.channelLabel} (Yuran proksi: -${Utils.formatMoney(proxyRes.proxyFee, s.countryId)}).`);
+      GameState.save();
+      return { ok: true, msg: `${asset.name} dipindahkan ke Yayasan di ${domName} melalui ${proxyRes.channelLabel}!` };
+    }
     GameState.addJournalEntry(`🏛️ Aset ${asset.name} (${Utils.formatMoney(asset.value || 0, s.countryId)}) dipindahkan ke dalam Tabung Yayasan Keluarga.`);
     GameState.save();
     return { ok: true, msg: `${asset.name} berjaya dipindahkan ke Yayasan Keluarga!` };
   },
 
-  withdrawAssetFromTrust(s, uid) {
+  withdrawAssetFromTrust(s, uid, proxyChannel = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pengeluaran aset disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pengeluaran aset dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
 
     const idx = s.familyTrust.assets.findIndex(x => x && x.uid === uid);
     if (idx === -1) return { ok: false, msg: 'Aset yayasan tidak ditemui.' };
+
+    const targetAsset = s.familyTrust.assets[idx];
+    let proxyRes = null;
+    if (this.isTrustOffshore(s)) {
+      proxyRes = this._chargeOffshoreAssetProxy(s, 'out', targetAsset.value || 0, proxyChannel);
+      if (!proxyRes.ok) return proxyRes;
+    }
 
     const [asset] = s.familyTrust.assets.splice(idx, 1);
     const listKey = asset.trustAssetType === 'property' ? 'properties' : asset.trustAssetType === 'collectible' ? 'collectibles' : 'vehicles';
@@ -688,12 +712,15 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: col.isDisplayed ? `${col.name} (Yayasan) kini dipamerkan!` : `${col.name} ditarik balik daripada pameran.` };
   },
 
-  transferInvestmentToTrust(s, instId) {
+  transferInvestmentToTrust(s, instId, proxyChannel = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan pelaburan disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pemindahan pelaburan dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
 
     const portfolio = s.assets && s.assets.portfolio;
     if (!portfolio || !portfolio[instId] || portfolio[instId].units <= 0) {
@@ -703,6 +730,10 @@ window.LegalInheritanceEngine = {
     const existing = s.familyTrust.investments.find(x => x && x.instId === instId);
     const unitPrice = this.getTrustInvestmentUnitPrice(s, { instId, units: pos.units, totalCost: pos.totalCost });
     const moveVal = Math.round(pos.units * unitPrice);
+    if (this.isTrustOffshore(s)) {
+      const proxyRes = this._chargeOffshoreAssetProxy(s, 'in', moveVal, proxyChannel);
+      if (!proxyRes.ok) return proxyRes;
+    }
 
     if (existing) {
       existing.units += pos.units;
@@ -722,18 +753,26 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `${inst ? inst.name : instId} dipindahkan ke Yayasan Keluarga!` };
   },
 
-  withdrawInvestmentFromTrust(s, instId) {
+  withdrawInvestmentFromTrust(s, instId, proxyChannel = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pengeluaran pelaburan disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pengeluaran pelaburan dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
 
     const idx = s.familyTrust.investments.findIndex(x => x && x.instId === instId);
     if (idx === -1) return { ok: false, msg: 'Pelaburan yayasan tidak ditemui.' };
+    const previewHolding = s.familyTrust.investments[idx];
+    const unitPrice = this.getTrustInvestmentUnitPrice(s, previewHolding);
+    const moveVal = Math.round(previewHolding.units * unitPrice);
+    if (this.isTrustOffshore(s)) {
+      const proxyRes = this._chargeOffshoreAssetProxy(s, 'out', moveVal, proxyChannel);
+      if (!proxyRes.ok) return proxyRes;
+    }
     const [holding] = s.familyTrust.investments.splice(idx, 1);
-    const unitPrice = this.getTrustInvestmentUnitPrice(s, holding);
-    const moveVal = Math.round(holding.units * unitPrice);
 
     if (!s.assets) s.assets = { properties: [], vehicles: [], portfolio: {} };
     if (!s.assets.portfolio) s.assets.portfolio = {};
@@ -928,6 +967,32 @@ window.LegalInheritanceEngine = {
       s && s.familyTrust && s.familyTrust.active &&
       s.familyTrust.domicileCountry && s.familyTrust.domicileCountry !== s.countryId
     );
+  },
+
+  _chargeOffshoreAssetProxy(s, direction, assetValue, proxyChannel) {
+    const val = Math.max(0, Math.round(Number(assetValue) || 0));
+    const check = this.validateOffshoreProxyTransfer(s, val, proxyChannel);
+    if (!check.ok) return check;
+    const { channel, cfg, amountUsd } = check;
+    const proxyFee = Math.max(1, Math.round(val * cfg.feeRate));
+    if (direction === 'in') {
+      if ((s.money || 0) < proxyFee) {
+        return { ok: false, msg: `Tunai peribadi tidak cukup untuk yuran proksi (${Utils.formatMoney(proxyFee, s.countryId)}).` };
+      }
+      s.money -= proxyFee;
+    } else {
+      if ((s.familyTrust.balance || 0) >= proxyFee) {
+        s.familyTrust.balance -= proxyFee;
+      } else if ((s.money || 0) >= proxyFee) {
+        s.money -= proxyFee;
+      } else {
+        return { ok: false, msg: `Baki tunai Yayasan dan tunai peribadi tidak mencukupi untuk yuran proksi (${Utils.formatMoney(proxyFee, s.countryId)}).` };
+      }
+    }
+    s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
+    if (channel === 'shadow') this._applyShadowProxyRisk(s, val);
+    const channelLabel = channel === 'shadow' ? 'Ejen Proksi Bayangan' : 'Firma Guaman Rasmi';
+    return { ok: true, channel, proxyFee, channelLabel };
   },
 
   _applyShadowProxyRisk(s, amt) {

@@ -966,6 +966,13 @@ window.AssetModals = {
       }));
       document.querySelectorAll('.col-trust-btn').forEach(b => b.addEventListener('click', () => {
         if (!window.LegalInheritanceEngine) return;
+        if (LegalInheritanceEngine.isTrustOffshore && LegalInheritanceEngine.isTrustOffshore(s) && ((s.familyTrust && s.familyTrust.unpaidFees) || 0) <= 0) {
+          const item = ((s.assets && s.assets.collectibles) || []).find(x => x && x.uid === b.dataset.uid);
+          if (item && window.Modals && Modals.showOffshoreProxyModal) {
+            Modals.showOffshoreProxyModal('deposit', Math.max(0, Math.round(item.value || 0)), null, { kind: 'asset', direction: 'in', assetType: 'collectible', uid: b.dataset.uid, name: item.name, onDone: () => this.showAssets('collectibles') });
+            return;
+          }
+        }
         const r = LegalInheritanceEngine.transferAssetToTrust(s, 'collectible', b.dataset.uid);
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
