@@ -30,7 +30,7 @@ window.AssetModals = {
         </div>
         <div class="summary-stat" id="btn-passive-breakdown" role="button" tabindex="0" style="cursor:pointer;border:1px solid #cbd5e1;" title="Klik untuk lihat pecahan pendapatan pasif">
           <span class="lbl">Pendapatan Pasif/Thn <span style="font-size:10px;opacity:0.75;">ℹ️</span></span>
-          <span class="val" style="color:${sum.rentalGross + sum.dividendGross > 0 ? '#16a34a' : '#334155'};">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross, s.countryId, true)}</span>
+          <span class="val" style="color:${(sum.rentalGross + sum.dividendGross + (sum.displayRoyaltyGross || 0)) > 0 ? '#16a34a' : '#334155'};">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross + (sum.displayRoyaltyGross || 0), s.countryId, true)}</span>
         </div>
         <div class="summary-stat">
           <span class="lbl">Baki Pinjaman</span>
@@ -46,9 +46,9 @@ window.AssetModals = {
         <strong>📊 Pecahan Pendapatan Pasif Tahunan</strong><br/>
         🏠 Sewaan Hartanah: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.rentalGross, s.countryId)}</strong><br/>
         📈 Dividen &amp; Faedah Pelaburan: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.dividendGross, s.countryId)}</strong><br/>
-        💼 Keuntungan Perniagaan / Aset Lain: <strong>+${Utils.formatMoney(0, s.countryId)}</strong><br/>
+        🏛️ Royalti Pameran Galeri: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.displayRoyaltyGross || 0, s.countryId)}</strong><br/>
         <hr style="border:none;border-top:1px solid #e2e8f0;margin:4px 0;" />
-        Jumlah Pendapatan Pasif/Thn: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross, s.countryId)}</strong>
+        Jumlah Pendapatan Pasif/Thn: <strong style="color:#16a34a;">+${Utils.formatMoney(sum.rentalGross + sum.dividendGross + (sum.displayRoyaltyGross || 0), s.countryId)}</strong>
       </div>
 
       <div class="info-banner" style="border-left:4px solid ${trend.color};padding:8px 10px;margin-bottom:0;">
@@ -249,19 +249,27 @@ window.AssetModals = {
 
     // 4) Koleksi & Pusaka Keluarga
     if (s.assets.collectibles.length > 0) {
+      const hasTrustActive = Boolean(s.familyTrust && s.familyTrust.active && s.age >= 18 && !(s.prison && s.prison.inPrison));
       html += `<div class="assets-portfolio-section">`;
       html += `<div class="section-heading">💎 Koleksi &amp; Pusaka Keluarga (${s.assets.collectibles.length})</div>`;
       s.assets.collectibles.forEach(col => {
+        const fin = AssetsEngine.getCollectibleDisplayFinances(s, col);
         html += `
           <div class="migration-card ${col.isHeirloom ? 'rare-activity' : ''}">
             <div class="mig-head">
-              <div class="mig-title">${col.icon} ${Utils.escapeHtml(col.name)} ${col.isHeirloom ? `<span class="rare-gold-tag">👑 PUSAKA GEN ${col.ageInGenerations || 1}</span>` : ''}</div>
+              <div class="mig-title">
+                ${col.icon} ${Utils.escapeHtml(col.name)}
+                ${col.isHeirloom ? `<span class="rare-gold-tag">👑 PUSAKA GEN ${col.ageInGenerations || 1}</span>` : ''}
+                ${col.isDisplayed ? `<span class="cat-badge synergy">🏛️ Dipamerkan</span>` : ''}
+              </div>
               <strong style="color:#16a34a;">${Utils.formatMoney(col.value, s.countryId, true)}</strong>
             </div>
-            <div class="mig-actions" style="grid-template-columns:repeat(3,1fr);">
+            ${col.isDisplayed ? `<div style="font-size:11px;color:#475569;margin-bottom:6px;">🏛️ Royalti: <strong style="color:#16a34a;">+${Utils.formatMoney(fin.annualRoyalty, s.countryId, true)}/thn</strong> • Insurans: <strong>-${Utils.formatMoney(fin.annualInsurance, s.countryId, true)}/thn</strong></div>` : ''}
+            <div class="mig-actions" style="grid-template-columns:repeat(2,1fr);gap:6px;">
               <button type="button" class="btn-sm primary col-heir-btn" data-uid="${col.uid}">${col.isHeirloom ? '✓ Pusaka' : '👑 Jadikan Pusaka'}</button>
-              <button type="button" class="btn-sm secondary col-disp-btn" data-uid="${col.uid}" ${s.yearlyActions.displayArt ? 'disabled' : ''}>🏛️ Pamerkan</button>
-              <button type="button" class="btn-sm secondary col-sell-btn" data-uid="${col.uid}" style="color:#dc2626;">🔨 Lelong</button>
+              <button type="button" class="btn-sm secondary col-disp-btn" data-uid="${col.uid}">${col.isDisplayed ? '📦 Henti Pamer' : '🏛️ Pamerkan'}</button>
+              ${hasTrustActive ? `<button type="button" class="btn-sm secondary col-trust-btn" data-uid="${col.uid}">🏛️ Pindah ke Yayasan</button>` : ''}
+              <button type="button" class="btn-sm secondary col-sell-btn" data-uid="${col.uid}" style="color:#dc2626;${hasTrustActive ? '' : 'grid-column:span 2;'}">🔨 Lelong</button>
             </div>
           </div>
         `;
@@ -925,7 +933,38 @@ window.AssetModals = {
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
       document.querySelectorAll('.col-disp-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.displayCollectible(b.dataset.uid);
+        const col = (s.assets.collectibles || []).find(x => x && x.uid === b.dataset.uid);
+        if (!col) return;
+        if (col.isDisplayed) {
+          const r = AssetsEngine.displayCollectible(b.dataset.uid);
+          App.toast(r.msg, r.ok ? 'culture' : 'error'); App.renderAll(); this.showHub('portfolio');
+          return;
+        }
+        const fin = AssetsEngine.getCollectibleDisplayFinances(s, col);
+        Modals.open({
+          icon: '🏛️',
+          title: 'Pengesahan Pameran Galeri',
+          subtitle: `${col.icon} ${col.name}`,
+          bodyHtml: `
+            <div class="info-banner highlight" style="line-height:1.65;">
+              <strong>🏛️ Butiran Pameran Tahunan</strong><br/>
+              Kadar Royalti Pameran: <strong style="color:#16a34a;">${fin.royaltyRatePct}% setahun</strong> (~+${Utils.formatMoney(fin.annualRoyalty, s.countryId)}/thn)<br/>
+              Anggaran Kos Penjagaan &amp; Insurans: <strong style="color:#dc2626;">${fin.insuranceRatePct}% setahun</strong> (-${Utils.formatMoney(fin.annualInsurance, s.countryId)}/thn)<br/>
+              <small>Jika baki tunai tidak mencukupi pada +Umur untuk menampung insurans, barang akan ditarik balik dari galeri secara automatik.</small>
+            </div>
+            <button type="button" class="primary-btn" id="btn-confirm-display-col" style="width:100%;">🏛️ Sahkan &amp; Pamerkan</button>
+            <button type="button" class="ghost-btn" id="btn-cancel-display-col" style="width:100%;margin-top:8px;">← Batal</button>
+          `
+        });
+        document.getElementById('btn-confirm-display-col').addEventListener('click', () => {
+          const r = AssetsEngine.displayCollectible(b.dataset.uid);
+          App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
+        });
+        document.getElementById('btn-cancel-display-col').addEventListener('click', () => this.showHub('portfolio'));
+      }));
+      document.querySelectorAll('.col-trust-btn').forEach(b => b.addEventListener('click', () => {
+        if (!window.LegalInheritanceEngine) return;
+        const r = LegalInheritanceEngine.transferAssetToTrust(s, 'collectible', b.dataset.uid);
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('portfolio');
       }));
       document.querySelectorAll('.col-sell-btn').forEach(b => b.addEventListener('click', () => {

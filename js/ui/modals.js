@@ -1704,21 +1704,23 @@ window.Modals = {
               <div class="section-heading" style="margin-top:6px;">🏛️ Aset Dalam Yayasan (${trustAssets.length})</div>
               ${trustAssets.map(a => {
                 const isProp = a.trustAssetType === 'property';
+                const isCol = a.trustAssetType === 'collectible';
                 const cond = Utils.clamp(typeof a.condition === 'number' ? a.condition : 80, 0, 100);
                 const repairCost = isProp && window.AssetsEngine ? AssetsEngine.getPropertyRepairCost(s, a) : 0;
                 return `
                   <div class="migration-card" style="padding:8px 10px;margin-bottom:8px;">
                     <div class="mig-head">
-                      <div class="mig-title">${a.icon || '🏛️'} ${Utils.escapeHtml(a.name)} ${isProp && a.rented ? '<span class="cat-badge synergy">Disewakan</span>' : ''}</div>
+                      <div class="mig-title">${a.icon || '🏛️'} ${Utils.escapeHtml(a.name)} ${isProp && a.rented ? '<span class="cat-badge synergy">Disewakan</span>' : ''}${isCol && a.isDisplayed ? '<span class="cat-badge synergy">🏛️ Dipamerkan</span>' : ''}</div>
                       <strong>${fmt(a.value || 0)}</strong>
                     </div>
                     <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-                      ${isProp ? `Hartanah Yayasan • Kondisi: <strong>${cond}%</strong>${cond <= 50 ? ' (Perlu baik pulih >50%)' : ''}` : 'Kenderaan Yayasan'}
+                      ${isProp ? `Hartanah Yayasan • Kondisi: <strong>${cond}%</strong>${cond <= 50 ? ' (Perlu baik pulih >50%)' : ''}` : isCol ? 'Koleksi / Pusaka Yayasan' : 'Kenderaan Yayasan'}
                     </div>
                     <div style="display:flex;gap:5px;flex-wrap:wrap;">
                       ${isProp ? `<button type="button" class="btn-sm primary btn-trust-rent-prop" data-uid="${a.uid}" style="flex:1;">${a.rented ? 'Henti Sewa' : '🔑 Sewakan'}</button>` : ''}
                       ${isProp ? `<button type="button" class="btn-sm secondary btn-trust-repair-prop" data-uid="${a.uid}" style="flex:1;" ${cond >= 100 ? 'disabled' : ''}>🔧 Baik Pulih${cond < 100 ? ` (${fmt(repairCost)})` : ''}</button>` : ''}
-                      <button type="button" class="btn-sm secondary btn-trust-sell-asset" data-uid="${a.uid}" style="flex:1;color:#dc2626;">💵 Jual (Cukai ${corpTaxPct}%)</button>
+                      ${isCol ? `<button type="button" class="btn-sm primary btn-trust-disp-col" data-uid="${a.uid}" style="flex:1;">${a.isDisplayed ? '📦 Henti Pamer' : '🏛️ Pamerkan'}</button>` : ''}
+                      <button type="button" class="btn-sm secondary btn-trust-sell-asset" data-uid="${a.uid}" style="flex:1;color:#dc2626;">${isCol ? '🔨 Lelong' : '💵 Jual'} (Cukai ${corpTaxPct}%)</button>
                       <button type="button" class="btn-sm secondary btn-trust-out-asset" data-uid="${a.uid}" style="flex:1;">📤 Keluarkan</button>
                     </div>
                   </div>
@@ -1935,6 +1937,15 @@ window.Modals = {
     document.querySelectorAll('.btn-trust-repair-prop').forEach(btn => {
       btn.addEventListener('click', () => {
         const res = LegalInheritanceEngine.repairTrustProperty(s, btn.dataset.uid);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        App.renderAll();
+        this.showWasiatModal(onBack);
+      });
+    });
+
+    document.querySelectorAll('.btn-trust-disp-col').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const res = LegalInheritanceEngine.toggleDisplayTrustCollectible(s, btn.dataset.uid);
         App.toast(res.msg, res.ok ? 'success' : 'error');
         App.renderAll();
         this.showWasiatModal(onBack);

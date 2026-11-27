@@ -1210,20 +1210,45 @@ window.AssetsEngine = {
     return { ok: true, msg: c.isHeirloom ? 'Ditandakan sebagai Pusaka Keluarga!' : 'Status Pusaka dikeluarkan.' };
   },
 
+  getCollectibleDisplayFinances(s, col) {
+    if (!s || !col) return { royaltyRatePct: 2.5, insuranceRatePct: 0.75, annualRoyalty: 0, annualInsurance: 0 };
+    const val = Math.max(0, Math.round(col.value || 0));
+    const royaltyRate = col.isHeirloom ? 0.035 : 0.025;
+    const insuranceRate = 0.0075;
+    const capRoyalty = Utils.usdToLocal(250000, s.countryId || 'MY');
+    const annualRoyalty = Math.min(capRoyalty, Math.max(1, Math.round(val * royaltyRate)));
+    const annualInsurance = Math.max(1, Math.round(val * insuranceRate));
+    return {
+      royaltyRatePct: +(royaltyRate * 100).toFixed(1),
+      insuranceRatePct: +(insuranceRate * 100).toFixed(2),
+      annualRoyalty,
+      annualInsurance
+    };
+  },
+
   displayCollectible(uid) {
     const s = GameState.current;
     this.ensureFields(s);
-    if (s.yearlyActions.displayArt) return { ok: false, msg: 'Anda sudah mempamerkan koleksi tahun ini.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menguruskan pameran galeri semasa dalam tahanan.' };
     const c = s.assets.collectibles.find(x => x.uid === uid);
     if (!c) return { ok: false, msg: 'Koleksi tidak ditemui.' };
-    s.yearlyActions.displayArt = true;
-    const repGain = Math.min(8, Math.max(2, Math.round((c.prestige || 4) / 2) + (c.ageInGenerations || 1)));
-    if (window.Dynasty) Dynasty.adjustReputation(repGain);
-    if (window.KarmaEndings) KarmaEndings.adjustAlignment({ fame: 5 });
-    GameState.adjustStats({ happiness: 8 });
-    GameState.addJournalEntry(`🏛️ Anda mempamerkan ${c.icon} ${c.name} di galeri awam — Reputasi Keluarga +${repGain}%!`, 'milestone');
+    c.isDisplayed = !c.isDisplayed;
+    const fin = this.getCollectibleDisplayFinances(s, c);
+    if (c.isDisplayed) {
+      GameState.addJournalEntry(
+        `🏛️ Anda mempamerkan ${c.icon} ${c.name} di galeri awam (Royalti ~${Utils.formatMoney(fin.annualRoyalty, s.countryId)}/thn, Insurans ${Utils.formatMoney(fin.annualInsurance, s.countryId)}/thn).`,
+        'milestone'
+      );
+    } else {
+      GameState.addJournalEntry(`📦 Anda menarik balik ${c.icon} ${c.name} daripada pameran galeri.`);
+    }
     GameState.save();
-    return { ok: true, msg: `Pameran berjaya! Reputasi Keluarga +${repGain}%!` };
+    return {
+      ok: true,
+      msg: c.isDisplayed
+        ? `${c.name} kini dipamerkan di galeri!`
+        : `${c.name} ditarik balik daripada pameran.`
+    };
   },
 
   sellCollectible(uid) {
@@ -1284,19 +1309,25 @@ window.AssetsEngine = {
       }
     }
 
+    let displayRoyaltyGross = 0, displayInsuranceCost = 0;
     for (const c of s.assets.collectibles) {
       colVal += (c.value || 0);
+      if (c.isDisplayed) {
+        const fin = this.getCollectibleDisplayFinances(s, c);
+        displayRoyaltyGross += fin.annualRoyalty;
+        displayInsuranceCost += fin.annualInsurance;
+      }
     }
 
     const totalPropertyTaxAnnual = cukaiPintuAnnual + cukaiTanahAnnual;
     const totalAssetValue = propVal + vehVal + invVal + colVal + (s.investments || 0);
     const totalDebt = totalMortgage + ((s.education && s.education.educationLoan) || 0) + (s.assets.unpaidTaxDebt || 0);
-    const netPassiveAnnual = rentalGross + dividendGross - maintenanceCost - mortgagePayment - totalPropertyTaxAnnual;
+    const netPassiveAnnual = rentalGross + dividendGross + displayRoyaltyGross - maintenanceCost - displayInsuranceCost - mortgagePayment - totalPropertyTaxAnnual;
 
     return {
       propVal, vehVal, invVal, colVal,
       totalAssetValue, totalMortgage, totalDebt,
-      rentalGross, dividendGross, maintenanceCost, mortgagePayment,
+      rentalGross, dividendGross, displayRoyaltyGross, displayInsuranceCost, maintenanceCost, mortgagePayment,
       cukaiPintuAnnual, cukaiTanahAnnual, totalPropertyTaxAnnual,
       netPassiveAnnual
     };
@@ -1464,10 +1495,26 @@ window.AssetsEngine = {
       }
     }
 
-    // 4) Kemas kini Koleksi & Pusaka Keluarga (naik nilai setiap tahun!)
+    // 4) Kemas kini Koleksi & Pusaka Keluarga (naik nilai setiap tahun + royalti/insurans pameran!)
     for (const col of s.assets.collectibles) {
       const heirBonus = col.isHeirloom ? 0.03 : 0;
       col.value = Math.round(col.value * (1 + (col.appRate || 0.06) + heirBonus));
+      if (col.isDisplayed) {
+        const fin = this.getCollectibleDisplayFinances(s, col);
+        if (s.money < fin.annualInsurance) {
+          col.isDisplayed = false;
+          GameState.addJournalEntry(
+            `🏛️⚠️ Pameran ${col.name} di galeri dibatalkan secara automatik kerana baki tidak mencukupi untuk kos penjagaan & insurans (${Utils.formatMoney(fin.annualInsurance, s.countryId)}). Barang telah ditarik balik.`,
+            'warning'
+          );
+        } else {
+          s.money -= fin.annualInsurance;
+          s.money += fin.annualRoyalty;
+          GameState.addJournalEntry(
+            `🏛️ Royalti Pameran Galeri (${col.name}): +${Utils.formatMoney(fin.annualRoyalty, s.countryId)} (Insurans & Penjagaan: -${Utils.formatMoney(fin.annualInsurance, s.countryId)}).`
+          );
+        }
+      }
     }
   },
 

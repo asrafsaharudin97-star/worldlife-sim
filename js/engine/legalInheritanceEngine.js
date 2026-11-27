@@ -399,7 +399,7 @@ window.LegalInheritanceEngine = {
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan aset disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
 
-    const listKey = assetType === 'property' ? 'properties' : 'vehicles';
+    const listKey = assetType === 'property' ? 'properties' : assetType === 'collectible' ? 'collectibles' : 'vehicles';
     if (!s.assets || !Array.isArray(s.assets[listKey])) return { ok: false, msg: 'Aset tidak ditemui.' };
     const idx = s.assets[listKey].findIndex(x => x && x.uid === uid);
     if (idx === -1) return { ok: false, msg: 'Aset tidak ditemui.' };
@@ -426,9 +426,9 @@ window.LegalInheritanceEngine = {
     if (idx === -1) return { ok: false, msg: 'Aset yayasan tidak ditemui.' };
 
     const [asset] = s.familyTrust.assets.splice(idx, 1);
-    const listKey = asset.trustAssetType === 'property' ? 'properties' : 'vehicles';
+    const listKey = asset.trustAssetType === 'property' ? 'properties' : asset.trustAssetType === 'collectible' ? 'collectibles' : 'vehicles';
     delete asset.trustAssetType;
-    if (!s.assets) s.assets = { properties: [], vehicles: [] };
+    if (!s.assets) s.assets = { properties: [], vehicles: [], collectibles: [] };
     if (!Array.isArray(s.assets[listKey])) s.assets[listKey] = [];
     s.assets[listKey].push(asset);
     this._adjustTrustBasis(s, -Math.max(0, Math.round(asset.value || 0)));
@@ -436,6 +436,22 @@ window.LegalInheritanceEngine = {
     GameState.addJournalEntry(`📤 Aset ${asset.name} dikeluarkan daripada Tabung Yayasan Keluarga ke pemilikan peribadi.`);
     GameState.save();
     return { ok: true, msg: `${asset.name} dikeluarkan ke aset peribadi.` };
+  },
+
+  toggleDisplayTrustCollectible(s, uid) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menguruskan pameran semasa dalam tahanan.' };
+    const col = (s.familyTrust.assets || []).find(x => x && x.uid === uid && x.trustAssetType === 'collectible');
+    if (!col) return { ok: false, msg: 'Koleksi yayasan tidak ditemui.' };
+    col.isDisplayed = !col.isDisplayed;
+    GameState.addJournalEntry(
+      col.isDisplayed
+        ? `🏛️ Koleksi Yayasan (${col.name}) kini dipamerkan di galeri — royalti bersih akan dikreditkan terus ke Tabung Yayasan Keluarga.`
+        : `📦 Koleksi Yayasan (${col.name}) ditarik balik daripada pameran galeri.`
+    );
+    GameState.save();
+    return { ok: true, msg: col.isDisplayed ? `${col.name} (Yayasan) kini dipamerkan!` : `${col.name} ditarik balik daripada pameran.` };
   },
 
   transferInvestmentToTrust(s, instId) {
@@ -689,12 +705,13 @@ window.LegalInheritanceEngine = {
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
     const returned = Math.max(0, Math.round(s.familyTrust.balance || 0));
     s.money += returned;
-    if (!s.assets) s.assets = { properties: [], vehicles: [], portfolio: {} };
+    if (!s.assets) s.assets = { properties: [], vehicles: [], collectibles: [], portfolio: {} };
     if (!Array.isArray(s.assets.properties)) s.assets.properties = [];
     if (!Array.isArray(s.assets.vehicles)) s.assets.vehicles = [];
+    if (!Array.isArray(s.assets.collectibles)) s.assets.collectibles = [];
     if (!s.assets.portfolio) s.assets.portfolio = {};
     (s.familyTrust.assets || []).forEach(a => {
-      const listKey = a.trustAssetType === 'property' ? 'properties' : 'vehicles';
+      const listKey = a.trustAssetType === 'property' ? 'properties' : a.trustAssetType === 'collectible' ? 'collectibles' : 'vehicles';
       const copy = { ...a };
       delete copy.trustAssetType;
       s.assets[listKey].push(copy);
@@ -741,8 +758,27 @@ window.LegalInheritanceEngine = {
     // 1. Pengasingan Aliran Tunai Ketat: semua sewa hartanah yayasan & dividen/faedah pelaburan masuk ke ft.balance
     let trustRentNet = 0;
     let trustDivIncome = 0;
+    let trustDisplayNet = 0;
     for (const a of ft.assets) {
-      if (!a || a.trustAssetType !== 'property') continue;
+      if (!a) continue;
+      if (a.trustAssetType === 'collectible') {
+        const heirBonus = a.isHeirloom ? 0.03 : 0;
+        a.value = Math.round((a.value || 0) * (1 + (a.appRate || 0.06) + heirBonus));
+        if (a.isDisplayed && window.AssetsEngine && AssetsEngine.getCollectibleDisplayFinances) {
+          const fin = AssetsEngine.getCollectibleDisplayFinances(s, a);
+          if (ft.balance < fin.annualInsurance) {
+            a.isDisplayed = false;
+            GameState.addJournalEntry(
+              `🏛️⚠️ Pameran koleksi Yayasan (${a.name}) dibatalkan secara automatik kerana baki Yayasan tidak mencukupi untuk insurans (${Utils.formatMoney(fin.annualInsurance, s.countryId)}).`,
+              'warning'
+            );
+          } else {
+            trustDisplayNet += (fin.annualRoyalty - fin.annualInsurance);
+          }
+        }
+        continue;
+      }
+      if (a.trustAssetType !== 'property') continue;
       const wear = a.rented ? Utils.randInt(6, 12) : Utils.randInt(4, 9);
       a.condition = Utils.clamp((typeof a.condition === 'number' ? a.condition : 80) - wear, 0, 100);
       if (a.rented && a.condition <= 50) {
@@ -764,7 +800,7 @@ window.LegalInheritanceEngine = {
       }
     }
 
-    const totalTrustYield = trustRentNet + trustDivIncome;
+    const totalTrustYield = trustRentNet + trustDivIncome + trustDisplayNet;
     if (totalTrustYield !== 0) {
       ft.balance = Math.max(0, Math.round(ft.balance + totalTrustYield));
       if (totalTrustYield > 0) {
