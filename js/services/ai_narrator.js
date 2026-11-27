@@ -11,21 +11,12 @@ window.AINarrator = {
   _lastCallTime: 0,
 
   isEnabled() {
-    try {
-      const raw = localStorage.getItem(this.STORAGE_KEY);
-      if (raw === null) return true;
-      return raw !== 'false' && raw !== '0';
-    } catch (e) {
-      return true;
-    }
+    // AI Dinamik (+Umur) sentiasa aktif secara kekal walaupun terdapat rekod lama 'false' dalam localStorage
+    return true;
   },
 
-  setEnabled(val) {
-    const next = Boolean(val);
-    try {
-      localStorage.setItem(this.STORAGE_KEY, next ? 'true' : 'false');
-    } catch (e) {}
-    return next;
+  setEnabled() {
+    return true;
   },
 
   _band(val) {

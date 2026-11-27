@@ -326,7 +326,7 @@ window.App = {
           this.toast(res.msg, res.ok ? 'success' : 'error');
           this.renderStartAuthBar();
           if (res.ok && !res.redirecting && window.Modals && Modals.showSaveSlotsModal) {
-            Modals.showSaveSlotsModal();
+            Modals.showSaveSlotsModal(null, null, 'main');
           }
         });
       }
@@ -510,7 +510,7 @@ window.App = {
 
     document.getElementById('btn-continue-life').addEventListener('click', () => {
       if (window.Modals && Modals.showSaveSlotsModal) {
-        Modals.showSaveSlotsModal();
+        Modals.showSaveSlotsModal(null, null, 'main');
       }
     });
 

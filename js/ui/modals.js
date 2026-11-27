@@ -2888,9 +2888,15 @@ window.Modals = {
     }
   },
 
-  async showSaveSlotsModal(confirmDeleteSlotId = null, lastOpError = null) {
+  async showSaveSlotsModal(confirmDeleteSlotId = null, lastOpError = null, openedFrom = null) {
     const fb = window.FirebaseService;
     const reqId = ++this._slotModalReqId;
+    if (openedFrom !== null && openedFrom !== undefined) {
+      this._slotModalOpenedFrom = openedFrom;
+    } else if (!this._slotModalOpenedFrom) {
+      this._slotModalOpenedFrom = 'main';
+    }
+    const backSource = this._slotModalOpenedFrom;
 
     this.open({
       icon: '☁️',
@@ -2951,6 +2957,15 @@ window.Modals = {
       }
     }
 
+    const backBarHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <button type="button" id="slots-btn-back" class="secondary-btn" style="padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;">
+          ← Kembali${backSource === 'menu' ? ' ke Menu' : ''}
+        </button>
+        ${isCloud ? `<button type="button" id="slots-btn-force-sync" class="btn-sm primary" style="padding:6px 10px;font-size:11.5px;">🔄 Segerak Cloud Sekarang</button>` : ''}
+      </div>
+    `;
+
     let authBarHtml = '';
     if (isCloud) {
       const u = fb.user;
@@ -2967,17 +2982,11 @@ window.Modals = {
         : `<span style="width:34px;height:34px;border-radius:999px;background:#e0e7ff;display:grid;place-items:center;font-size:16px;flex-shrink:0;">👤</span>`;
       authBarHtml = `
         <div class="info-banner" style="background:#f8fafc;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-              ${avatar}
-              <div style="min-width:0;">
-                <div style="font-weight:700;font-size:13px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
-                <div style="font-size:11.5px;font-weight:600;color:${syncBadgeColor};">${syncBadgeText}</div>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button type="button" id="slots-btn-force-sync" class="btn-sm primary" style="padding:6px 10px;font-size:11.5px;">🔄 Segerak Cloud Sekarang</button>
-              <button type="button" id="slots-btn-logout" class="secondary-btn" style="padding:6px 11px;font-size:12px;">Log Keluar</button>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            ${avatar}
+            <div style="min-width:0;flex:1;">
+              <div style="font-weight:700;font-size:13px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
+              <div style="font-size:11.5px;font-weight:600;color:${syncBadgeColor};">${syncBadgeText}</div>
             </div>
           </div>
           <div style="margin-top:8px;padding-top:7px;border-top:1px dashed #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:#64748b;font-weight:600;">
@@ -3118,6 +3127,7 @@ window.Modals = {
       title: 'Slot Simpanan & Cloud Save',
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
       bodyHtml: `
+        ${backBarHtml}
         ${authBarHtml}
         ${opErrorBanner}
         ${cloudErrorBanner}
@@ -3125,6 +3135,17 @@ window.Modals = {
         ${slotsHtml}
       `
     });
+
+    const backBtn = document.getElementById('slots-btn-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        if (backSource === 'menu') {
+          this.showMenu();
+        } else {
+          this.close(true);
+        }
+      });
+    }
 
     const retryCloudBtn = document.getElementById('slots-btn-retry-cloud');
     if (retryCloudBtn) {
@@ -3162,21 +3183,6 @@ window.Modals = {
         }
         const res = await FirebaseService.signInWithGoogle();
         App.toast(res.msg, res.ok ? 'success' : 'error');
-        if (App.renderStartAuthBar) App.renderStartAuthBar();
-        this.showSaveSlotsModal();
-      });
-    }
-
-    const logoutBtn = document.getElementById('slots-btn-logout');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', async () => {
-        const uidBefore = (window.FirebaseService && FirebaseService.user && FirebaseService.user.uid) || null;
-        const res = await FirebaseService.signOutUser();
-        if (res && res.ok) {
-          if (uidBefore) GameState.clearAccountLocalCache(uidBefore);
-          GameState.resetSessionState({ clearCurrent: true });
-        }
-        App.toast(res.msg, res.ok ? 'culture' : 'error');
         if (App.renderStartAuthBar) App.renderStartAuthBar();
         this.showSaveSlotsModal();
       });
@@ -3398,18 +3404,6 @@ window.Modals = {
             </span>
             <span class="ai-right">${isMuted ? 'Hidupkan' : 'Senyapkan'}</span>
           </button>
-          ${window.AINarrator ? (() => {
-            const aiOn = AINarrator.isEnabled();
-            return `
-          <button class="action-item" id="menu-toggle-ai">
-            <span class="ai-icon">🤖</span>
-            <span class="ai-content">
-              <span class="ai-title">Dialog AI Dinamik (+Umur): ${aiOn ? 'Aktif' : 'Dimatikan'}</span>
-              <span class="ai-desc">Jana dialog ringkas NPC secara automatik setiap kali umur meningkat</span>
-            </span>
-            <span class="ai-right">${aiOn ? 'Aktif' : 'Dimatikan'}</span>
-          </button>`;
-          })() : ''}
           <button class="action-item" id="menu-export-save">
             <span class="ai-icon">💾</span>
             <span class="ai-content">
@@ -3427,6 +3421,15 @@ window.Modals = {
             <span class="ai-right">Pilih Fail</span>
           </button>
           <input type="file" id="menu-import-file-input" accept=".json,application/json" class="hidden" />
+          ${isCloudLoggedIn ? `
+          <button class="action-item" id="menu-logout" style="border-color:#fecaca;background:#fef2f2;">
+            <span class="ai-icon">🚪</span>
+            <span class="ai-content">
+              <span class="ai-title" style="color:#b91c1c;">Log Keluar Akaun Google</span>
+              <span class="ai-desc" style="color:#991b1b;">Tutup sesi Cloud Save dan kembali ke skrin log masuk</span>
+            </span>
+            <span class="ai-right" style="color:#dc2626;font-weight:700;">Log Keluar</span>
+          </button>` : ''}
         </div>
 
         ${endingsHtml}
@@ -3436,11 +3439,11 @@ window.Modals = {
     });
 
     document.getElementById('menu-open-slots').addEventListener('click', () => {
-      this.showSaveSlotsModal();
+      this.showSaveSlotsModal(null, null, 'menu');
     });
     document.getElementById('menu-cloud-sync').addEventListener('click', async () => {
       if (!window.FirebaseService || !FirebaseService.isLoggedIn()) {
-        this.showSaveSlotsModal();
+        this.showSaveSlotsModal(null, null, 'menu');
         return;
       }
       const res = await App.runWithCloudProgress('save', () => GameState.syncActiveSlotToCloud('manual'));
@@ -3476,12 +3479,23 @@ window.Modals = {
       this.showMenu();
     });
 
-    const toggleAiBtn = document.getElementById('menu-toggle-ai');
-    if (toggleAiBtn && window.AINarrator) {
-      toggleAiBtn.addEventListener('click', () => {
-        const next = AINarrator.setEnabled(!AINarrator.isEnabled());
-        App.toast(next ? '🤖 Dialog AI Dinamik diaktifkan!' : '🤖 Dialog AI Dinamik dimatikan.', 'culture');
-        this.showMenu();
+    const menuLogoutBtn = document.getElementById('menu-logout');
+    if (menuLogoutBtn) {
+      menuLogoutBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm('Pasti mahu log keluar daripada akaun ini? Pastikan kemajuan terkini sudah disimpan.');
+        if (!confirmed) return;
+        const uidBefore = (window.FirebaseService && FirebaseService.user && FirebaseService.user.uid) || null;
+        const res = await FirebaseService.signOutUser();
+        if (res && res.ok) {
+          if (uidBefore && GameState.clearAccountLocalCache) GameState.clearAccountLocalCache(uidBefore);
+          GameState.resetSessionState({ clearCurrent: true });
+          this.close(true);
+          if (window.App) {
+            if (App.renderStartAuthBar) App.renderStartAuthBar();
+            if (App.showEntryGate) App.showEntryGate();
+          }
+        }
+        App.toast((res && res.msg) || 'Anda telah log keluar.', res && res.ok ? 'culture' : 'error');
       });
     }
 
