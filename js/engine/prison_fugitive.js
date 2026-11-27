@@ -1241,6 +1241,9 @@ window.PrisonFugitive = {
     s.money = Utils.convertMoney(s.money, fromC.id, toC.id);
     s.investments = Utils.convertMoney(s.investments || 0, fromC.id, toC.id);
     s.retirementFund = Utils.convertMoney(s.retirementFund || 0, fromC.id, toC.id);
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.convertTrustCurrency) {
+      LegalInheritanceEngine.convertTrustCurrency(s, fromC.id, toC.id);
+    }
     s.countryId = toC.id;
     s.city = Utils.pick(toC.cities);
     s.residencyStatus = 'Work Visa';

@@ -1045,6 +1045,9 @@ window.Sim = {
       s.money = Utils.convertMoney(s.money || 0, fromId, toId);
       s.investments = Utils.convertMoney(s.investments || 0, fromId, toId);
       s.retirementFund = Utils.convertMoney(s.retirementFund || 0, fromId, toId);
+      if (window.LegalInheritanceEngine && LegalInheritanceEngine.convertTrustCurrency) {
+        LegalInheritanceEngine.convertTrustCurrency(s, fromId, toId);
+      }
       if (Array.isArray(s.loans)) {
         s.loans.forEach(l => {
           if (!l) return;
@@ -2697,6 +2700,9 @@ window.Sim = {
     s.money = Utils.convertMoney(s.money, fromC.id, toC.id);
     s.investments = Utils.convertMoney(s.investments || 0, fromC.id, toC.id);
     s.retirementFund = Utils.convertMoney(s.retirementFund, fromC.id, toC.id);
+    if (window.LegalInheritanceEngine && LegalInheritanceEngine.convertTrustCurrency) {
+      LegalInheritanceEngine.convertTrustCurrency(s, fromC.id, toC.id);
+    }
     const newMoneyFormatted = Utils.formatMoney(s.money, toC.id);
 
     const newCity = Utils.pick(toC.cities);

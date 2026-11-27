@@ -1558,6 +1558,80 @@ window.Modals = {
     });
   },
 
+  showOffshoreProxyModal(mode, amt, onBack = null) {
+    const s = GameState.current;
+    if (!s || !window.LegalInheritanceEngine) return;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const domC = LegalInheritanceEngine.getTrustDomicileCountry(s);
+    const curC = Utils.getCountry(s.countryId);
+    const domLabel = domC ? `${domC.flag || ''} ${domC.name}` : (s.familyTrust.domicileCountry || 'Luar Negara');
+    const curLabel = curC ? `${curC.flag || ''} ${curC.name}` : s.countryId;
+    const isDeposit = mode === 'deposit';
+    const usdEq = Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(amt, s.countryId) : null;
+
+    const legalFee = Math.max(1, Math.round(amt * LegalInheritanceEngine.OFFSHORE_PROXY_RATES.legal));
+    const legalNet = Math.max(0, amt - legalFee);
+    const shadowFee = Math.max(1, Math.round(amt * LegalInheritanceEngine.OFFSHORE_PROXY_RATES.shadow));
+    const shadowNet = Math.max(0, amt - shadowFee);
+
+    this.open({
+      icon: '🌐',
+      title: 'Saluran Proksi Luar Pesisir',
+      subtitle: isDeposit ? `Pemindahan dari ${curLabel} ke Yayasan di ${domLabel}` : `Pengeluaran daripada Yayasan di ${domLabel} ke ${curLabel}`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="margin-bottom:10px;font-size:12px;">
+          <strong>${isDeposit ? '📥 Masukkan Dana ke Yayasan Luar Pesisir' : '📤 Keluarkan Dana daripada Yayasan Luar Pesisir'}</strong><br/>
+          Jumlah Dipindahkan: <strong>${fmt(amt)}</strong>${usdEq ? ` <span style="color:#64748b;">(${usdEq})</span>` : ''}
+        </div>
+
+        <div class="migration-card" style="border-color:#22c55e;margin-bottom:10px;">
+          <div class="mig-head">
+            <div class="mig-title">⚖️ Firma Guaman &amp; Pemegang Amanah Rasmi</div>
+            <span class="cat-badge" style="background:#dcfce7;color:#166534;">Yuran 3.5%</span>
+          </div>
+          <p style="font-size:12px;color:#475569;margin:6px 0 8px;">Pemindahan rentas sempadan secara rasmi melalui pemegang amanah berlesen. Selamat daripada siasatan pihak berkuasa.</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:11.5px;margin-bottom:8px;line-height:1.55;">
+            Jumlah Dipindahkan: <strong>${fmt(amt)}</strong><br/>
+            Yuran Proksi (3.5%): <strong style="color:#dc2626;">-${fmt(legalFee)}</strong><br/>
+            Jumlah Bersih Diterima: <strong style="color:#059669;">${fmt(legalNet)}</strong>
+          </div>
+          <button class="btn-sm primary" id="btn-proxy-confirm-legal" style="width:100%;">✅ Sahkan Melalui Firma Guaman Rasmi</button>
+        </div>
+
+        <div class="migration-card" style="border-color:#f59e0b;margin-bottom:10px;">
+          <div class="mig-head">
+            <div class="mig-title">🕶️ Ejen Proksi Bayangan (Kurier Luar Pesisir)</div>
+            <span class="cat-badge" style="background:#fef3c7;color:#92400e;">Yuran 1.5%</span>
+          </div>
+          <p style="font-size:12px;color:#475569;margin:6px 0 8px;">Yuran lebih rendah melalui rangkaian proksi peribadi, namun berisiko menarik perhatian pihak berkuasa cukai.</p>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 9px;font-size:11.5px;margin-bottom:8px;line-height:1.55;">
+            Jumlah Dipindahkan: <strong>${fmt(amt)}</strong><br/>
+            Yuran Proksi (1.5%): <strong style="color:#b45309;">-${fmt(shadowFee)}</strong><br/>
+            Jumlah Bersih Diterima: <strong style="color:#059669;">${fmt(shadowNet)}</strong>
+          </div>
+          <button class="btn-sm warning" id="btn-proxy-confirm-shadow" style="width:100%;">🕶️ Sahkan Melalui Ejen Proksi Bayangan</button>
+        </div>
+      `,
+      footerHtml: `<button class="btn-sm secondary" id="btn-proxy-back">← Kembali ke Yayasan</button>`
+    });
+
+    const exec = (channel) => {
+      const res = isDeposit
+        ? LegalInheritanceEngine.depositFamilyTrust(s, amt, channel)
+        : LegalInheritanceEngine.withdrawFamilyTrust(s, amt, channel);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    };
+
+    const btnLegal = document.getElementById('btn-proxy-confirm-legal');
+    if (btnLegal) btnLegal.addEventListener('click', () => exec('legal'));
+    const btnShadow = document.getElementById('btn-proxy-confirm-shadow');
+    if (btnShadow) btnShadow.addEventListener('click', () => exec('shadow'));
+    const btnBack = document.getElementById('btn-proxy-back');
+    if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
+  },
+
   showWasiatModal(onBack = null) {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
@@ -1575,7 +1649,10 @@ window.Modals = {
     const trustInvsVal = LegalInheritanceEngine.getTrustInvestmentsValue(s);
     const trustNetWorth = LegalInheritanceEngine.getTrustNetWorth(s);
     const perf = LegalInheritanceEngine.getTrustPerformancePct(s);
-    const trustRates = LegalInheritanceEngine.getTrustCountryRates(Utils.getCountry(s.countryId));
+    const domC = LegalInheritanceEngine.getTrustDomicileCountry(s) || Utils.getCountry(s.countryId);
+    const trustRates = LegalInheritanceEngine.getTrustCountryRates(domC);
+    const isOffshore = Boolean(domC && domC.id && domC.id !== s.countryId);
+    const relocateFee = LegalInheritanceEngine.getTrustRelocateFee ? LegalInheritanceEngine.getTrustRelocateFee(s) : 0;
     const annualFeePctStr = trustRates.annualFeeRate === 0 ? '0%' : `${Number((trustRates.annualFeeRate * 100).toFixed(2))}%`;
     const corpTaxPct = Math.round(trustRates.corporateTaxRate * 100);
     const unpaidFees = Math.max(0, Math.round(ft.unpaidFees || 0));
@@ -1656,11 +1733,19 @@ window.Modals = {
             return `
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.58;">
               <div>👑 <strong>Pengasas:</strong> ${Utils.escapeHtml(ft.founderName || s.name)} (Gen ${ft.founderGen || s.generation || 1}) • <strong>Aktif: ${ft.yearsActive || 0} tahun</strong></div>
+              <div style="font-size:11.5px;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span>🏛️ Domisil Yayasan: <strong>${domC ? `${domC.flag || ''} ${Utils.escapeHtml(domC.name)}` : Utils.escapeHtml(ft.domicileCountry || s.countryId)}</strong></span>
+                <span class="cat-badge" style="background:${isOffshore ? '#e0f2fe' : '#f1f5f9'};color:${isOffshore ? '#0369a1' : '#475569'};">${isOffshore ? '🌐 Luar Pesisir (Offshore)' : '📍 Domestik'}</span>
+              </div>
               <div style="font-size:11px;color:#64748b;margin-top:2px;">💱 ${rateLabel}</div>
               <div style="font-size:11.5px;margin-top:3px;color:${trustRates.isTaxHaven ? '#15803d' : '#334155'};">
-                🏝️ Kategori Negara: <strong>${Utils.escapeHtml(trustRates.categoryLabel)}</strong>${trustRates.isTaxHaven ? ' <span class="cat-badge synergy">Bebas Cukai</span>' : ''}
+                🏝️ Kategori Domisil: <strong>${Utils.escapeHtml(trustRates.categoryLabel)}</strong>${trustRates.isTaxHaven ? ' <span class="cat-badge synergy">Bebas Cukai</span>' : ''}
               </div>
-              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:5px;">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                <button class="btn-sm secondary" id="btn-toggle-trust-domicile-lock" style="font-size:11px;padding:4px 8px;">${ft.isDomicileLocked !== false ? '🔒 Domisil Dikunci (Kekal Semasa Hijrah)' : '🔓 Domisil Tidak Dikunci (Ikut Hijrah)'}</button>
+                ${(isOffshore && !hasArrears) ? `<button class="btn-sm primary" id="btn-relocate-trust-domicile" style="font-size:11px;padding:4px 8px;">🏛️ Pindah Pendaftaran ke ${Utils.escapeHtml(curC ? curC.name : s.countryId)} (${fmt(relocateFee)})</button>` : ''}
+              </div>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:6px;">
                 <div>
                   <span>💰 <strong>Jumlah Nilai Bersih Yayasan:</strong> <strong style="color:#059669;">${fmt(trustNetWorth)}</strong></span>
                   ${netUsdEq ? `<div style="font-size:11px;color:#64748b;line-height:1.3;">${netUsdEq}</div>` : ''}
@@ -1878,6 +1963,22 @@ window.Modals = {
       this.showWasiatModal(onBack);
     });
 
+    const lockDomBtn = document.getElementById('btn-toggle-trust-domicile-lock');
+    if (lockDomBtn) lockDomBtn.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.toggleTrustDomicileLock(s);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+
+    const relocDomBtn = document.getElementById('btn-relocate-trust-domicile');
+    if (relocDomBtn) relocDomBtn.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.relocateTrustDomicile(s);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+
     const reactBtn = document.getElementById('btn-trust-reactivate');
     if (reactBtn) reactBtn.addEventListener('click', () => {
       const inp = document.getElementById('input-trust-amount');
@@ -1891,7 +1992,11 @@ window.Modals = {
     const depBtn = document.getElementById('btn-trust-deposit');
     if (depBtn) depBtn.addEventListener('click', () => {
       const inp = document.getElementById('input-trust-amount');
-      const amt = inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(s.money * 0.25));
+      const amt = Math.round(inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(s.money * 0.25)));
+      if (LegalInheritanceEngine.isTrustOffshore(s) && (ft.unpaidFees || 0) <= 0 && amt > 0 && s.money >= amt && s.age >= 18 && !(s.prison && s.prison.inPrison)) {
+        this.showOffshoreProxyModal('deposit', amt, onBack);
+        return;
+      }
       const res = LegalInheritanceEngine.depositFamilyTrust(s, amt);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
@@ -1901,7 +2006,11 @@ window.Modals = {
     const wdrBtn = document.getElementById('btn-trust-withdraw');
     if (wdrBtn) wdrBtn.addEventListener('click', () => {
       const inp = document.getElementById('input-trust-amount');
-      const amt = inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(ft.balance * 0.25));
+      const amt = Math.round(inp && inp.value ? Number(inp.value) : Math.max(0, Math.round(ft.balance * 0.25)));
+      if (LegalInheritanceEngine.isTrustOffshore(s) && (ft.unpaidFees || 0) <= 0 && amt > 0 && ft.balance >= amt && s.age >= 18 && !(s.prison && s.prison.inPrison)) {
+        this.showOffshoreProxyModal('withdraw', amt, onBack);
+        return;
+      }
       const res = LegalInheritanceEngine.withdrawFamilyTrust(s, amt);
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
