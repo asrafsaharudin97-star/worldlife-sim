@@ -1606,6 +1606,11 @@ window.Modals = {
           <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
           Harta Peribadi Boleh Agih: <strong>${fmt(report.distributable)}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
         </div>
+        ${(window.GameState && GameState.getEligibleHeirs && GameState.getEligibleHeirs(s).length === 0) ? `
+          <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-top:8px;">
+            ⚠️ <strong>Tiada Pewaris Aktif:</strong> Anda belum mempunyai anak kandung atau anak angkat yang masih hidup. Jika anda meninggal dunia sekarang, legasi &amp; yayasan akan tamat dan anda perlu memulakan watak baharu.
+          </div>
+        ` : ''}
 
         <div class="section-heading">🏛️ Tabung Yayasan Keluarga (Eksklusif Pewaris Pemain)</div>
         <div class="migration-card" style="border-color:${ft.active && !ft.lapsed ? '#22c55e' : ft.lapsed ? '#f59e0b' : '#cbd5e1'};margin-bottom:12px;">

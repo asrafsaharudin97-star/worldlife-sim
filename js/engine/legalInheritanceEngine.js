@@ -959,7 +959,7 @@ window.LegalInheritanceEngine = {
   },
 
   _isChildRel(r) {
-    return Boolean(r && (r.type === 'child' || ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'].includes(r.role)));
+    return Boolean(r && (r.type === 'child' || r.isAdopted === true || ['Anak', 'Anak Lelaki', 'Anak Perempuan', 'Anak Angkat', 'Son', 'Daughter', 'Adopted Son', 'Adopted Daughter'].includes(r.role)));
   },
 
   _isParentRel(r) {

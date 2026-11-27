@@ -285,24 +285,31 @@ window.ModeModals = {
          </div>`
       : '';
 
-    const kidsHtml = livingKids.length > 0 ? `
-      <div class="section-heading">👑 Sambung Legasi Sebagai Anak (Gen ${(s.generation || 1) + 1})</div>
+    const eligibleHeirs = (window.GameState && GameState.getEligibleHeirs) ? GameState.getEligibleHeirs(s) : livingKids;
+    const hasTrust = Boolean(s.familyTrust && s.familyTrust.active);
+    const kidsHtml = eligibleHeirs.length > 0 ? `
+      <div class="section-heading">👑 Sambung Legasi Sebagai Pewaris (Gen ${(s.generation || 1) + 1})</div>
       <div class="action-list">
-        ${livingKids.map(k => {
-          const kc = Utils.getCountry(k.countryId);
+        ${eligibleHeirs.map(k => {
+          const kc = Utils.getCountry(k.countryId || s.countryId);
           return `
             <button class="action-item continue-kid-btn" data-kid-id="${k.id}">
               <span class="ai-icon">${k.gender === 'female' ? '👧' : '👦'}</span>
               <span class="ai-content">
-                <span class="ai-title">Main sebagai ${Utils.escapeHtml(k.name)} (Umur ${k.age})</span>
-                <span class="ai-desc">Lahir di ${kc.flag} ${kc.name} • Mewarisi bahagian harta anda</span>
+                <span class="ai-title">Main sebagai ${Utils.escapeHtml(k.name)} (Umur ${k.age})${k.isAdopted ? ' <span class="cat-badge">Anak Angkat</span>' : ''}</span>
+                <span class="ai-desc">Lahir di ${kc.flag} ${kc.name} • Mewarisi harta${hasTrust && !s.familyTrust.lapsed ? ' &amp; Tabung Yayasan Keluarga (0% cukai)' : ' pusaka anda'}</span>
               </span>
               <span class="ai-right">Sambung →</span>
             </button>
           `;
         }).join('')}
       </div>
-    ` : '';
+    ` : `
+      <div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#7f1d1d;margin-top:10px;line-height:1.55;">
+        <strong>🕊️ Tamat Legasi (Tiada Pewaris)</strong><br/>
+        ${Utils.escapeHtml(s.name)} meninggal dunia tanpa meninggalkan sebarang anak kandung atau anak angkat yang masih hidup. Salasilah generasi ini telah berakhir.${hasTrust ? ' Tabung Yayasan Keluarga turut dibubarkan dan ditutup bersama berakhirnya keturunan ini.' : ''}
+      </div>
+    `;
 
     const endingsGrid = KarmaEndings.ENDINGS_CATALOG.map(e => {
       const has = unlocked.endings.includes(e.id);
@@ -382,31 +389,9 @@ window.ModeModals = {
         <div class="endings-grid">${endingsGrid}</div>
 
         ${kidsHtml}
-        <button class="primary-btn" id="btn-continue-legacy-heir" style="margin-top:10px;background:linear-gradient(135deg,#6d28d9,#4f46e5);">
-          📜 Lihat Penyata Harta Pusaka &amp; Sambung Legasi (Gen ${(s.generation || 1) + 1})
-        </button>
-        <button class="ghost-btn" id="btn-death-new-life" style="margin-top:8px;">✨ Mula Dinasti &amp; Kehidupan Baru (Gen 1)</button>
+        <button class="${eligibleHeirs.length === 0 ? 'primary-btn' : 'ghost-btn'}" id="btn-death-new-life" style="margin-top:10px;width:100%;">🌱 Mulakan Watak Baharu (Gen 1)</button>
       `
     });
-
-    const heirBtn = document.getElementById('btn-continue-legacy-heir');
-    if (heirBtn) {
-      heirBtn.addEventListener('click', () => {
-        if (window.LegalInheritanceEngine && Modals.showEstateStatementModal) {
-          Modals.showEstateStatementModal(null);
-          return;
-        }
-        const next = GameState.continueFamilyLegacy();
-        if (next) {
-          Modals.close(true);
-          App.renderAll();
-          App.toast(`👑 Menyambung Dinasti Generasi ${next.generation} sebagai ${next.name}!`, 'culture');
-          if (window.LegacyModals && LegacyModals.checkAndToastPendingPrime) {
-            setTimeout(() => LegacyModals.checkAndToastPendingPrime(), 350);
-          }
-        }
-      });
-    }
 
     document.querySelectorAll('.continue-kid-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -428,8 +413,9 @@ window.ModeModals = {
 
     document.getElementById('btn-death-new-life').addEventListener('click', () => {
       GameState.clearSave();
+      if (GameState.resetSessionState) GameState.resetSessionState({ clearCurrent: true });
       Modals.close(true);
-      App.showStartScreen();
+      App.showStartScreen({ skipSave: true });
     });
   }
 };

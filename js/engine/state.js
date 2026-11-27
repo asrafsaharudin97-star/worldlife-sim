@@ -509,6 +509,12 @@ window.GameState = {
     return s.relationships.some(r => r && r.alive !== false && parentRoles.includes(r.role));
   },
 
+  getEligibleHeirs(s = this.current) {
+    if (!s || !Array.isArray(s.relationships)) return [];
+    const childRoles = ['Anak', 'Anak Lelaki', 'Anak Perempuan', 'Anak Angkat', 'Son', 'Daughter', 'Adopted Son', 'Adopted Daughter'];
+    return s.relationships.filter(r => r && r.alive !== false && (r.type === 'child' || r.isAdopted === true || childRoles.includes(r.role)));
+  },
+
   purgeExPartners(s = this.current) {
     if (!s || !Array.isArray(s.relationships)) return;
     s.relationships = s.relationships.filter(r => {
