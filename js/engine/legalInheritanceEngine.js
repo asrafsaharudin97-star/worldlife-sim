@@ -1150,6 +1150,7 @@ window.LegalInheritanceEngine = {
       propCount,
       vehCount,
       colCount,
+      hasNonCash: (invCount + propCount + vehCount + colCount) > 0,
       hasAny: cash > 0 || (invCount + propCount + vehCount + colCount) > 0
     };
   },
@@ -1163,17 +1164,20 @@ window.LegalInheritanceEngine = {
     if ((s.familyTrust.unpaidFees || 0) > 0) {
       return { ok: false, msg: `Pemindahan pukal dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
     }
-    if (this.isTrustOffshore(s)) {
-      return { ok: false, msg: 'Pemindahan pukal semua harta hanya dibenarkan di negara domisil Yayasan. Untuk pemindahan tunai dari luar negara, gunakan saluran Proksi di atas.' };
-    }
+    const isOffshore = this.isTrustOffshore(s);
     const preview = this.getBulkTransferPreview(s);
-    if (!preview.hasAny) {
+    if (isOffshore) {
+      if (!preview.hasNonCash) {
+        return { ok: false, msg: 'Tiada aset atau pusaka peribadi yang layak untuk dipindahkan.' };
+      }
+    } else if (!preview.hasAny) {
       return { ok: false, msg: 'Tiada harta peribadi yang layak untuk dipindahkan.' };
     }
 
     let totalBasisDelta = 0;
-    const keepPct = opts && opts.keepEmergency10 ? 0.10 : 0;
-    if (preview.cash > 0) {
+    // Dalam mod Luar Pesisir (Offshore), baki tunai peribadi, baki tunai Yayasan & kuota Proksi TIDAK disentuh
+    if (!isOffshore && preview.cash > 0) {
+      const keepPct = opts && opts.keepEmergency10 ? 0.10 : 0;
       const moveCash = keepPct > 0 ? Math.floor(preview.cash * (1 - keepPct)) : preview.cash;
       if (moveCash > 0) {
         s.money = Math.max(0, Math.round((s.money || 0) - moveCash));
@@ -1213,9 +1217,12 @@ window.LegalInheritanceEngine = {
 
     this.deduplicateTrustAssets(s);
     if (totalBasisDelta > 0) this._adjustTrustBasis(s, totalBasisDelta);
-    GameState.addJournalEntry('📦 Semua harta peribadi layak telah dipindahkan serentak ke dalam Tabung Yayasan Keluarga.', 'milestone');
+    const logText = isOffshore
+      ? '📦 Semua aset pelaburan, hartanah, kenderaan, dan pusaka peribadi telah dipindahkan ke dalam Tabung Yayasan Keluarga.'
+      : '📦 Semua harta peribadi layak telah dipindahkan serentak ke dalam Tabung Yayasan Keluarga.';
+    GameState.addJournalEntry(logText, 'milestone');
     GameState.save();
-    return { ok: true, msg: 'Semua harta peribadi layak berjaya dipindahkan ke Tabung Yayasan Keluarga!' };
+    return { ok: true, msg: isOffshore ? 'Semua aset & pusaka peribadi berjaya dipindahkan ke Yayasan!' : 'Semua harta peribadi layak berjaya dipindahkan ke Tabung Yayasan Keluarga!' };
   },
 
   payTrustUnpaidFees(s, amount = null) {

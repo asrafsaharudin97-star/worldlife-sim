@@ -1727,29 +1727,34 @@ window.Modals = {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const isOffshore = LegalInheritanceEngine.isTrustOffshore(s);
     const bp = LegalInheritanceEngine.getBulkTransferPreview(s);
     const propVehCount = bp.propCount + bp.vehCount;
 
     this.open({
       icon: '📦',
-      title: 'Sahkan Pindah Semua Harta ke Yayasan',
-      subtitle: 'Pemindahan pukal semua harta peribadi layak',
+      title: isOffshore ? 'Sahkan Pindah Semua Aset & Pusaka ke Yayasan' : 'Sahkan Pindah Semua Harta ke Yayasan',
+      subtitle: isOffshore ? 'Pemindahan pukal aset bukan tunai (Mod Luar Pesisir)' : 'Pemindahan pukal semua harta peribadi layak',
       bodyHtml: `
         <div class="info-banner highlight" style="margin-bottom:10px;font-size:12px;line-height:1.6;">
-          <strong>Senarai Harta Peribadi Yang Akan Dipindahkan:</strong><br/>
-          • Baki Tunai Peribadi: <strong>${fmt(bp.cash)}</strong><br/>
+          <strong>${isOffshore ? 'Senarai Aset &amp; Pusaka Yang Akan Dipindahkan:' : 'Senarai Harta Peribadi Yang Akan Dipindahkan:'}</strong><br/>
+          ${isOffshore ? '' : `• Baki Tunai Peribadi: <strong>${fmt(bp.cash)}</strong><br/>`}
           • Pelaburan (Saham, Bon &amp; FD): <strong>${bp.invCount} item</strong><br/>
           • Hartanah &amp; Kenderaan: <strong>${propVehCount} item</strong><br/>
           • Koleksi &amp; Pusaka Peribadi: <strong>${bp.colCount} item</strong>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;margin-bottom:10px;cursor:pointer;">
-          <input type="checkbox" id="chk-bulk-keep-10" />
-          <span>Kekalkan sedikit tunai kecemasan di poket (10%)</span>
-        </label>
+        ${isOffshore ? '' : `
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;margin-bottom:10px;cursor:pointer;">
+            <input type="checkbox" id="chk-bulk-keep-10" />
+            <span>Kekalkan sedikit tunai kecemasan di poket (10%)</span>
+          </label>
+        `}
         <div style="font-size:11.5px;color:#64748b;line-height:1.5;margin-bottom:12px;">
-          Aset yang dipindahkan menjadi milik Tabung Yayasan Keluarga sepenuhnya. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.
+          ${isOffshore
+            ? 'Baki tunai peribadi tidak disentuh dalam mod Luar Pesisir. Untuk memindahkan tunai, gunakan saluran Proksi di atas. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.'
+            : 'Aset yang dipindahkan menjadi milik Tabung Yayasan Keluarga sepenuhnya. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.'}
         </div>
-        <button type="button" class="btn-sm primary" id="btn-bulk-confirm-go" style="width:100%;">✅ Sahkan Pindah Semua ke Yayasan</button>
+        <button type="button" class="btn-sm primary" id="btn-bulk-confirm-go" style="width:100%;">✅ ${isOffshore ? 'Sahkan Pindah Semua Aset &amp; Pusaka' : 'Sahkan Pindah Semua ke Yayasan'}</button>
       `,
       footerHtml: `<button type="button" class="btn-sm secondary" id="btn-bulk-back">← Kembali ke Yayasan</button>`
     });
@@ -2104,13 +2109,13 @@ window.Modals = {
               <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Keluarkan Dana' : '💵 Keluarkan Dana Yayasan'}</button>
             </div>
             ${(() => {
-              const bp = LegalInheritanceEngine.getBulkTransferPreview ? LegalInheritanceEngine.getBulkTransferPreview(s) : { hasAny: false };
-              const bulkDisabled = hasArrears || !bp.hasAny || isOffshore;
+              const bp = LegalInheritanceEngine.getBulkTransferPreview ? LegalInheritanceEngine.getBulkTransferPreview(s) : { hasAny: false, hasNonCash: false };
+              const bulkDisabled = hasArrears || (isOffshore ? !bp.hasNonCash : !bp.hasAny);
+              const bulkLabel = isOffshore ? '📦 Pindah Semua Aset & Pusaka ke Yayasan' : '📦 Pindah Semua Harta Peribadi ke Yayasan';
               return `
-                <button type="button" class="btn-sm secondary" id="btn-trust-bulk-all" style="width:100%;margin-bottom:${isOffshore ? '4px' : '10px'};border:1px dashed #94a3b8;" ${bulkDisabled ? 'disabled' : ''}>
-                  📦 Pindah Semua Harta Peribadi ke Yayasan
+                <button type="button" class="btn-sm secondary" id="btn-trust-bulk-all" style="width:100%;margin-bottom:10px;border:1px dashed #94a3b8;" ${bulkDisabled ? 'disabled' : ''}>
+                  ${bulkLabel}
                 </button>
-                ${isOffshore ? `<div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.4;">Pemindahan pukal semua harta hanya dibenarkan di negara domisil Yayasan. Untuk pemindahan tunai dari luar negara, gunakan saluran Proksi di atas.</div>` : ''}
               `;
             })()}
 
