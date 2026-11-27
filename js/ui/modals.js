@@ -1958,8 +1958,8 @@ window.Modals = {
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
     const a = s.alignment || {};
     const stats = s.stats || {};
-    const netWorth = (window.GameState && GameState.getNetWorth) ? GameState.getNetWorth() : (s.money || 0);
-    const wealth = Math.max(s.money || 0, netWorth || 0);
+    const netWorth = (window.GameState && GameState.getPersonalNetWorth) ? GameState.getPersonalNetWorth(s) : (s.money || 0);
+    const wealth = Math.max(0, netWorth || 0);
 
     this.open({
       icon: offer.icon || '🏅',
@@ -1977,7 +1977,7 @@ window.Modals = {
           ✨ Penampilan: <strong>${stats.looks || 0}%</strong> (&gt; 50%) ✓<br/>
           🚔 Haba Polis: <strong>${a.notoriety || 0}%</strong> (= 0%) ✓<br/>
           ⚖️ Karma: <strong>${(a.karma || 0) >= 0 ? '+' : ''}${a.karma || 0}</strong> (Baik) ✓<br/>
-          💰 Harta Semasa: <strong>${fmt(wealth)}</strong> (${Utils.escapeHtml(offer.wealthLabel)}) ✓
+          💰 Harta Peribadi Semasa: <strong>${fmt(wealth)}</strong> (${Utils.escapeHtml(offer.wealthLabel)}) ✓
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">

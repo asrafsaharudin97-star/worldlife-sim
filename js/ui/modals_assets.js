@@ -18,7 +18,7 @@ window.AssetModals = {
     const tab = this._activeTab;
     const c = Utils.getCountry(s.countryId);
     const sum = AssetsEngine.getAssetCashflowSummary(s);
-    const netWorth = GameState.getNetWorth();
+    const netWorth = GameState.getPersonalNetWorth ? GameState.getPersonalNetWorth(s) : GameState.getNetWorth();
     const trend = AssetsEngine.getTrendObj(s);
     const rLeft = s.assetMarket.refreshesLeft ?? 2;
 

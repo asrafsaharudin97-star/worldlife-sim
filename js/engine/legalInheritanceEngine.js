@@ -983,7 +983,8 @@ window.LegalInheritanceEngine = {
     const personalGross = cash + Math.round(assetSum.totalAssetValue || 0);
     // Harta dalam Tabung Yayasan Keluarga (aktif & tiada tunggakan) dikecualikan sepenuhnya daripada pembahagian NPC & cukai pusaka
     const grossEstate = trustProtected ? personalGross : (personalGross + trustNetWorth);
-    const totalDebt = Math.round(assetSum.totalDebt || 0) + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0);
+    const personalLoans = (window.LoansEngine && LoansEngine.getTotalDebt) ? LoansEngine.getTotalDebt(s) : 0;
+    const totalDebt = Math.round(assetSum.totalDebt || 0) + personalLoans + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0);
     const netBeforeTax = Math.max(0, grossEstate - totalDebt);
 
     const netUsd = Utils.localToUsd ? Utils.localToUsd(netBeforeTax, countryId) : netBeforeTax;

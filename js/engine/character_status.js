@@ -321,7 +321,7 @@ window.CharacterStatus = {
     // Syarat sama untuk setiap pangkat: Populariti > 70%, Penampilan > 50%, Haba Polis = 0%, Karma >= 0
     if (fame <= 70 || looks <= 50 || heat !== 0 || karma < 0) return null;
 
-    const netWorth = (window.GameState && GameState.getNetWorth) ? GameState.getNetWorth() : (s.money || 0);
+    const netWorth = (window.GameState && GameState.getPersonalNetWorth) ? GameState.getPersonalNetWorth(s) : (s.money || 0);
     const wealth = Math.max(s.money || 0, netWorth || 0);
     const honors = s.honors || { currentRank: 0, declinedTitles: [] };
     const currentRank = honors.currentRank || 0;

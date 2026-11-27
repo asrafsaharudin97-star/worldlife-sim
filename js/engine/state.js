@@ -523,23 +523,34 @@ window.GameState = {
     }
   },
 
-  getNetWorth() {
-    const s = this.current;
+  getPersonalNetWorth(s = this.current) {
+    if (!s) return 0;
+    const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
+      ? SpecialModesEngine.getCeoEquityLocal(s)
+      : 0;
+    const personalLoans = (window.LoansEngine && LoansEngine.getTotalDebt)
+      ? LoansEngine.getTotalDebt(s)
+      : 0;
+    if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
+      const aSum = AssetsEngine.getAssetCashflowSummary(s);
+      return Math.round((s.money || 0) + (aSum.totalAssetValue || 0) + ceoEquity - (aSum.totalDebt || 0) - personalLoans);
+    }
+    let total = (s.money || 0) + (s.investments || 0) + ceoEquity - personalLoans;
+    if (s.assets && Array.isArray(s.assets.vehicles)) {
+      for (const v of s.assets.vehicles) total += (v.value || 0);
+    }
+    if (s.assets && Array.isArray(s.assets.properties)) {
+      for (const p of s.assets.properties) total += (p.value || 0);
+    }
+    return Math.round(total);
+  },
+
+  getNetWorth(s = this.current) {
     if (!s) return 0;
     const trustBal = (window.LegalInheritanceEngine && LegalInheritanceEngine.getTrustNetWorth)
       ? LegalInheritanceEngine.getTrustNetWorth(s)
       : Math.max(0, Math.round((s.familyTrust && s.familyTrust.balance) || 0));
-    const ceoEquity = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal)
-      ? SpecialModesEngine.getCeoEquityLocal(s)
-      : 0;
-    if (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) {
-      const aSum = AssetsEngine.getAssetCashflowSummary(s);
-      return Math.round((s.money || 0) + trustBal + (s.retirementFund || 0) + aSum.totalAssetValue + ceoEquity - aSum.totalDebt);
-    }
-    let total = s.money + trustBal + (s.investments || 0) + s.retirementFund + ceoEquity;
-    for (const v of s.assets.vehicles) total += v.value;
-    for (const p of s.assets.properties) total += p.value;
-    return Math.round(total);
+    return Math.round(this.getPersonalNetWorth(s) + trustBal);
   },
 
   continueAsChild(childId, estateReport = null) {
