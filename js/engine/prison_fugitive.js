@@ -834,6 +834,9 @@ window.PrisonFugitive = {
       ? '🔓🌅 HARI PEMBEBASAN: Anda melangkah keluar dari Sekolah Juvana menghirup udara bebas — rekod juvana anda dirahsiakan untuk peluang kedua.'
       : '🔓🌅 HARI PEMBEBASAN: Pintu besi penjara akhirnya terbuka! Anda kembali ke dunia luar, namun stigma rekod jenayah dewasa menanti.';
     GameState.addJournalEntry(journalMsg || defaultMsg, 'milestone');
+    if (s.pendingDeportation && window.Sim && Sim.deportToHomeCountry) {
+      Sim.deportToHomeCountry(s, s.pendingDeportation.fromCountry, 'Sebaik dibebaskan dari tahanan, pihak imigresen melaksanakan pengusiran automatik ke negara asal anda.');
+    }
     GameState.save();
   },
 

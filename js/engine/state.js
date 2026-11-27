@@ -339,6 +339,22 @@ window.GameState = {
     s.culturalAdaptation[s.countryId] = Utils.clamp(cur + delta, 0, 100);
   },
 
+  _inheritCountryBans(parent, nextGen) {
+    const out = {};
+    const src = (parent && parent.countryBans && typeof parent.countryBans === 'object') ? parent.countryBans : {};
+    const gen = Number(nextGen || 1);
+    Object.keys(src).forEach(cid => {
+      const ban = src[cid];
+      if (!ban || typeof ban !== 'object') return;
+      if (ban.type === 'generations' && Number(ban.bannedUntilGen || 0) >= gen) {
+        out[cid] = { ...ban };
+      } else if (ban.type === 'years' && Number(ban.yearsLeft || 0) > 0) {
+        out[cid] = { ...ban };
+      }
+    });
+    return out;
+  },
+
   ensureUpgradedState() {
     const s = this.current;
     if (!s) return;
@@ -408,6 +424,8 @@ window.GameState = {
     } else if (!('prNextRenewalAge' in s)) {
       s.prNextRenewalAge = null;
     }
+    if (!s.countryBans || typeof s.countryBans !== 'object') s.countryBans = {};
+    if (!('pendingDeportation' in s)) s.pendingDeportation = null;
     if (!s.familyTrust || typeof s.familyTrust !== 'object') {
       s.familyTrust = { active: false, balance: 0, lapsed: false, lastPaidAge: null };
     }
@@ -681,6 +699,8 @@ window.GameState = {
       hasDriverLicense: false,
       licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
+      countryBans: this._inheritCountryBans(parent, (parent.generation || 1) + 1),
+      pendingDeportation: null,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
       alignment: {
@@ -1052,6 +1072,8 @@ window.GameState = {
       hasDriverLicense: false,
       licenses: { moto: false, car: false },
       generation: (parent.generation || 1) + 1,
+      countryBans: this._inheritCountryBans(parent, (parent.generation || 1) + 1),
+      pendingDeportation: null,
 
       alignment: {
         karma: child.isDelinquent ? -30 : ((typeof child.morals === 'number' && child.morals >= 75) ? 20 : 0),
@@ -1209,6 +1231,8 @@ window.GameState = {
       hasDriverLicense: false,
       licenses: { moto: false, car: false },
       generation: newGen,
+      countryBans: this._inheritCountryBans(parent, newGen),
+      pendingDeportation: null,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 
       education: {

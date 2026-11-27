@@ -817,7 +817,7 @@ window.App = {
     if (!GameState.current || !GameState.current.alive) return;
     Utils.playTone('age');
     this._feedLimit = this.FEED_PAGE_SIZE; // kembali ke paparan terkini setiap tahun baharu
-    const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice, royalHonorOffer } = Sim.ageUp();
+    const { event, died, babyBirth, childMilestoneQueue, secondarySchoolChoice, royalHonorOffer, immigrationEnforcement } = Sim.ageUp();
     GameState.syncActiveSlotToCloud(died ? 'death' : 'age_up');
     this.renderAll();
 
@@ -865,10 +865,17 @@ window.App = {
     };
 
     const runHonorThenEvent = () => {
-      if (royalHonorOffer && Modals.showRoyalHonorOfferModal) {
-        setTimeout(() => Modals.showRoyalHonorOfferModal(royalHonorOffer, () => runEventStep()), 160);
+      const nextStep = () => {
+        if (royalHonorOffer && Modals.showRoyalHonorOfferModal) {
+          setTimeout(() => Modals.showRoyalHonorOfferModal(royalHonorOffer, () => runEventStep()), 160);
+        } else {
+          runEventStep();
+        }
+      };
+      if (immigrationEnforcement && Modals.showImmigrationEnforcementModal) {
+        setTimeout(() => Modals.showImmigrationEnforcementModal(immigrationEnforcement, nextStep), 160);
       } else {
-        runEventStep();
+        nextStep();
       }
     };
 

@@ -2276,16 +2276,20 @@ window.Modals = {
           }
           shown.forEach(dest => {
             const isCit = s.citizenships.includes(dest.id);
+            const banStatus = (window.Sim && Sim.getCountryBanStatus) ? Sim.getCountryBanStatus(dest.id, s) : { banned: false };
+            const isBanned = Boolean(banStatus && banStatus.banned);
             const costLocal = Sim.getMigrationCostLocal(dest.id);
             const afterCost = Math.max(0, s.money - costLocal);
             const converted = Utils.convertMoney(afterCost, s.countryId, dest.id);
             const econTier = (dest.salaryMultiplier || 0.5) >= 1.1 ? 'Ekonomi Tinggi' : (dest.salaryMultiplier || 0.5) >= 0.5 ? 'Sederhana' : 'Membangun';
 
             contentHtml += `
-              <div class="migration-card">
+              <div class="migration-card" style="${isBanned ? 'opacity:0.78;border-color:#fecaca;background:#fef2f2;' : ''}">
                 <div class="mig-head">
                   <div class="mig-title">${dest.flag} ${Utils.escapeHtml(dest.name)} ${isCit ? '<span class="residency-badge citizen">Warganegara</span>' : ''}</div>
-                  <span style="font-size:12px;font-weight:800;color:#dc2626;">Kos: ${Utils.formatMoney(costLocal, s.countryId)}</span>
+                  ${isBanned
+                    ? `<span style="font-size:11.5px;font-weight:800;color:#dc2626;">🚫 ${Utils.escapeHtml(banStatus.label)}</span>`
+                    : `<span style="font-size:12px;font-weight:800;color:#dc2626;">Kos: ${Utils.formatMoney(costLocal, s.countryId)}</span>`}
                 </div>
                 <div class="mig-tags">
                   <span class="mig-tag">💱 ${dest.currency.code}</span>
@@ -2297,7 +2301,11 @@ window.Modals = {
                   Anggaran baki selepas tiba: <strong>${Utils.formatMoney(converted, dest.id)}</strong>
                 </div>
                 <div class="mig-actions">
-                  ${isCit ? `
+                  ${isBanned ? `
+                    <button class="btn-sm secondary" style="grid-column:span 2;color:#b91c1c;" disabled>
+                      🔒 ${Utils.escapeHtml(banStatus.label)}
+                    </button>
+                  ` : isCit ? `
                     <button class="btn-sm primary mig-go-btn" style="grid-column:span 2;" data-dest="${dest.id}" data-visa="work">
                       ✈️ Pulang ke ${Utils.escapeHtml(dest.name)} (Tanpa Visa!)
                     </button>
@@ -2883,6 +2891,63 @@ window.Modals = {
         this.showActivities('crime');
       }
     });
+  },
+
+  showImmigrationEnforcementModal(info, onDone) {
+    if (!info) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    const s = GameState.current;
+    const canPay = Boolean(s && (s.money || 0) >= info.fineLocal);
+    const fineStr = Utils.formatMoney(info.fineLocal, info.countryId);
+    const balStr = Utils.formatMoney((s && s.money) || 0, info.countryId);
+
+    this.open({
+      icon: '🚨',
+      title: 'Notis Penguatkuasaan Imigresen',
+      subtitle: `${info.countryFlag} ${info.countryName} • ${info.label} Tamat Tempoh`,
+      locked: true,
+      bodyHtml: `
+        <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;line-height:1.55;">
+          <strong>⚠️ Status Tanpa Dokumen Sah</strong><br/>
+          Anda gagal memperbaharui <strong>${Utils.escapeHtml(info.label)}</strong> di <strong>${Utils.escapeHtml(info.countryName)}</strong>. Pihak imigresen mengenakan denda tinggi sebanyak <strong>${Utils.escapeHtml(fineStr)}</strong>.<br/>
+          <span style="font-size:12px;">Baki tunai semasa anda: <strong>${Utils.escapeHtml(balStr)}</strong></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+          <button type="button" id="btn-imm-pay-fine" class="primary-btn" style="width:100%;" ${canPay ? '' : 'disabled'}>
+            💳 Bayar Denda (${Utils.escapeHtml(fineStr)}) &amp; Kekal
+          </button>
+          <button type="button" id="btn-imm-deport" class="secondary-btn" style="width:100%;color:#b91c1c;border-color:#fca5a5;background:#fef2f2;font-weight:700;">
+            ✈️ Enggan Bayar / Tidak Mampu (Dihalau Pulang &amp; Sekatan 5 Tahun)
+          </button>
+        </div>
+      `
+    });
+
+    const payBtn = document.getElementById('btn-imm-pay-fine');
+    if (payBtn) {
+      payBtn.addEventListener('click', () => {
+        const res = Sim.resolveVisaEnforcementPay(info);
+        App.toast(res.msg, res.ok ? 'success' : 'error');
+        if (res.ok) {
+          this.close(true);
+          App.renderAll();
+          if (typeof onDone === 'function') onDone();
+        }
+      });
+    }
+
+    const deportBtn = document.getElementById('btn-imm-deport');
+    if (deportBtn) {
+      deportBtn.addEventListener('click', () => {
+        const res = Sim.resolveVisaEnforcementDeport(info);
+        this.close(true);
+        App.renderAll();
+        App.toast(res.msg, 'error');
+        if (typeof onDone === 'function') onDone();
+      });
+    }
   },
 
   // --------------------------------------------------------------------------

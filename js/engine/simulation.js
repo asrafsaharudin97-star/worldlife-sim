@@ -23,6 +23,20 @@ window.Sim = {
     );
     s.yearlyActions = {};
     s.cultureVisitedThisYear = false;
+    s._pendingImmigrationEnforcement = null;
+    if (s.countryBans && typeof s.countryBans === 'object') {
+      const curGen = Number(s.generation || 1);
+      Object.keys(s.countryBans).forEach(cid => {
+        const ban = s.countryBans[cid];
+        if (!ban || typeof ban !== 'object') { delete s.countryBans[cid]; return; }
+        if (ban.type === 'years') {
+          ban.yearsLeft = Number(ban.yearsLeft || 0) - 1;
+          if (ban.yearsLeft <= 0) delete s.countryBans[cid];
+        } else if (ban.type === 'generations') {
+          if (curGen > Number(ban.bannedUntilGen || 0)) delete s.countryBans[cid];
+        }
+      });
+    }
     s.jobAppsThisYear = 0;
     s.jobActionsUsedThisYear = [];
     s.stoleMoneyIdsThisYear = [];
@@ -440,6 +454,9 @@ window.Sim = {
       ? CharacterStatus.checkRoyalHonorEligibility(s)
       : null;
 
+    const immigrationEnforcement = s._pendingImmigrationEnforcement || null;
+    s._pendingImmigrationEnforcement = null;
+
     GameState.save();
     return {
       event,
@@ -447,7 +464,8 @@ window.Sim = {
       babyBirth,
       childMilestoneQueue,
       secondarySchoolChoice: Boolean(s.education && s.education.pendingSecondaryChoice),
-      royalHonorOffer
+      royalHonorOffer,
+      immigrationEnforcement
     };
   },
 
@@ -946,15 +964,236 @@ window.Sim = {
     };
   },
 
-  // Cangkuk (hook) bagi kes gagal bayar pembaharuan Visa/PR — sedia untuk diperluas pada langkah seterusnya
-  handleImmigrationRenewalDefault(state, type, fee) {
-    const c = Utils.getCountry(state.countryId);
-    const label = type === 'PR' ? 'Penduduk Tetap (PR)' : (type === 'Investor Visa' ? 'Visa Pelabur' : 'Visa Pekerja');
+  getCountryBanStatus(countryId, s = GameState.current) {
+    if (!s || !countryId || !s.countryBans || typeof s.countryBans !== 'object') {
+      return { banned: false };
+    }
+    const ban = s.countryBans[countryId];
+    if (!ban || typeof ban !== 'object') return { banned: false };
+    if (ban.type === 'years') {
+      const yrs = Number(ban.yearsLeft || 0);
+      if (yrs <= 0) return { banned: false };
+      return {
+        banned: true,
+        type: 'years',
+        yearsLeft: yrs,
+        label: `Disekat masuk (Baki ${yrs} tahun)`
+      };
+    }
+    if (ban.type === 'generations') {
+      const curGen = Number(s.generation || 1);
+      const untilGen = Number(ban.bannedUntilGen || 0);
+      if (curGen > untilGen) return { banned: false };
+      const gensLeft = Math.max(1, (untilGen - curGen) + 1);
+      return {
+        banned: true,
+        type: 'generations',
+        gensLeft,
+        bannedUntilGen: untilGen,
+        label: `Disekat masuk (Baki ${gensLeft} generasi)`
+      };
+    }
+    return { banned: false };
+  },
+
+  addImmigrationFineDebt(s, amountLocal, countryName, reasonLabel = 'Denda Imigresen') {
+    const amt = Math.max(0, Math.round(Number(amountLocal) || 0));
+    if (!s || amt <= 0) return null;
+    if (!Array.isArray(s.loans)) s.loans = [];
+    const debt = {
+      id: 'immfine_' + Date.now() + '_' + Utils.randInt(10, 99),
+      lenderType: 'bank',
+      isImmigrationFine: true,
+      lenderName: `${reasonLabel} (${countryName})`,
+      principal: amt,
+      balance: amt,
+      interestRate: 0.05,
+      yearlyDue: Math.max(1, Math.round(amt / 3)),
+      yearsElapsed: 0,
+      missedPayments: 0,
+      paidThisYear: false
+    };
+    s.loans.push(debt);
+    return debt;
+  },
+
+  deportToHomeCountry(s, fromCountryId, reasonText = '') {
+    if (!s) return { ok: false };
+    const fromId = fromCountryId || s.countryId;
+    const toId = s.homeCountry || s.birthCountryId || 'MY';
+    const fromC = Utils.getCountry(fromId);
+    const toC = Utils.getCountry(toId);
+
+    // Tamatkan kerja & pengajian di negara lama secara bersih
+    s.job = null;
+    s.partTimeJob = null;
+    if (s.education && s.education.activeStudy) {
+      s.education.activeStudy = null;
+    }
+
+    // Cairkan hartanah tempatan sebelum penukaran mata wang
+    let liquidated = 0;
+    if (s.assets && Array.isArray(s.assets.properties) && s.assets.properties.length > 0) {
+      s.assets.properties.forEach(p => {
+        liquidated += Math.round((p.value || 0) * 0.85);
+      });
+      s.assets.properties = [];
+      s.money = (s.money || 0) + liquidated;
+    }
+
+    if (fromId !== toId) {
+      s.money = Utils.convertMoney(s.money || 0, fromId, toId);
+      s.investments = Utils.convertMoney(s.investments || 0, fromId, toId);
+      s.retirementFund = Utils.convertMoney(s.retirementFund || 0, fromId, toId);
+      if (Array.isArray(s.loans)) {
+        s.loans.forEach(l => {
+          if (!l) return;
+          l.principal = Utils.convertMoney(l.principal || 0, fromId, toId);
+          l.balance = Utils.convertMoney(l.balance || 0, fromId, toId);
+          l.yearlyDue = Math.max(1, Utils.convertMoney(l.yearlyDue || 0, fromId, toId));
+        });
+      }
+    }
+
+    const newCity = Utils.pick(toC.cities);
+    s.countryId = toId;
+    s.country = toId;
+    s.city = newCity;
+    s.residencyStatus = (Array.isArray(s.citizenships) && s.citizenships.includes(toId)) ? 'Citizen' : 'PR';
+    s.yearsInCurrentCountry = 0;
+    s.prNextRenewalAge = null;
+    s.prYearsSinceRenewal = 0;
+    s.pendingDeportation = null;
+
+    if (Array.isArray(s.passportStamps)) {
+      s.passportStamps.push({
+        countryId: toId,
+        city: newCity,
+        year: s.year,
+        age: s.age,
+        type: `Pengusiran dari ${fromC.name}`,
+        status: s.residencyStatus
+      });
+    }
+
+    const liqNote = liquidated > 0 ? ' Hartanah tempatan telah dicairkan dan ditukar ke mata wang negara asal.' : '';
     GameState.addJournalEntry(
-      `⚠️ Pembaharuan ${label} di ${c.name} tertunggak! Baki tunai tidak mencukupi untuk yuran ${Utils.formatMoney(fee, state.countryId)}.`,
+      `✈️🚫 PENGUSIRAN IMIGRESEN: ${reasonText || `Anda telah dihalau pulang dari ${fromC.name} ${fromC.flag} ke ${toC.name} ${toC.flag}.`}${liqNote} Baki tunai & hutang telah ditukar ke mata wang ${toC.name}.`,
       'warning'
     );
-    return { defaulted: true, type, fee };
+    GameState.save();
+    return { ok: true, toCountryId: toId };
+  },
+
+  handleImmigrationRenewalDefault(state, type, fee) {
+    const s = state;
+    const c = Utils.getCountry(s.countryId);
+    if (!s.countryBans || typeof s.countryBans !== 'object') s.countryBans = {};
+
+    if (type === 'PR') {
+      const fineLocal = Math.max(1, Math.round(fee * 5.5));
+      const paid = Math.max(0, Math.min(Math.max(0, s.money || 0), fineLocal));
+      s.money = (s.money || 0) - paid;
+      const unpaid = Math.max(0, fineLocal - paid);
+      if (unpaid > 0) {
+        this.addImmigrationFineDebt(s, unpaid, c.name, 'Denda PR Tamat Tempoh');
+      }
+
+      // Lucutkan status PR, jatuhkan hukuman penjara 2 tahun, jadualkan pengusiran & sekatan 2 generasi
+      s.residencyStatus = 'Revoked';
+      s.prNextRenewalAge = null;
+      s.prYearsSinceRenewal = 0;
+      s.job = null;
+      s.partTimeJob = null;
+
+      const prevServed = (s.prison && s.prison.totalServed) || 0;
+      s.prison = {
+        inPrison: true,
+        yearsLeft: 2,
+        originalSentence: 2,
+        yearsServed: 0,
+        totalServed: prevServed,
+        crimeName: `Pelanggaran Imigresen (PR ${c.name} Tamat Tempoh)`,
+        detentionType: 'prison',
+        isLife: false,
+        isDeathPenalty: false,
+        countryId: s.countryId
+      };
+      s.pendingDeportation = {
+        fromCountry: s.countryId,
+        toCountry: s.homeCountry || s.birthCountryId || 'MY'
+      };
+      s.countryBans[s.countryId] = {
+        type: 'generations',
+        bannedUntilGen: Number(s.generation || 1) + 2,
+        reason: 'PR Tamat Tempoh & Pengusiran'
+      };
+
+      const debtNote = unpaid > 0
+        ? ` Baki denda ${Utils.formatMoney(unpaid, s.countryId)} direkodkan sebagai hutang.`
+        : '';
+      GameState.addJournalEntry(
+        `⛓️🛂 PENAHANAN IMIGRESEN (PR TAMAT TEMPOH): Anda gagal memperbaharui PR di ${c.name}! Status PR dilucutkan serta-merta, dikenakan denda ${Utils.formatMoney(fineLocal, s.countryId)}, hukuman penjara 2 tahun, pengusiran selepas tamat tahanan, serta sekatan masuk ke ${c.name} selama 2 generasi.${debtNote}`,
+        'warning'
+      );
+      GameState.save();
+      return { defaulted: true, type, fee, fineLocal, unpaid, imprisoned: true };
+    }
+
+    // Visa Pekerja / Visa Pelabur: cetus modal penguatkuasaan (2 pilihan)
+    const label = type === 'Investor Visa' ? 'Visa Pelabur' : 'Visa Pekerja';
+    const fineLocal = Math.max(1, Math.round(fee * 4.5));
+    s._pendingImmigrationEnforcement = {
+      type,
+      label,
+      countryId: s.countryId,
+      countryName: c.name,
+      countryFlag: c.flag || '🌍',
+      renewalFee: fee,
+      fineLocal
+    };
+    GameState.addJournalEntry(
+      `⚠️🛂 AMARAN IMIGRESEN: Pembaharuan tahunan ${label} di ${c.name} gagal kerana baki tunai tidak mencukupi. Anda dianggap sebagai pendatang asing tanpa dokumen sah dan berdepan denda ${Utils.formatMoney(fineLocal, s.countryId)} atau pengusiran.`,
+      'warning'
+    );
+    return { defaulted: true, type, fee, fineLocal, needsChoice: true };
+  },
+
+  resolveVisaEnforcementPay(info) {
+    const s = GameState.current;
+    if (!s || !info) return { ok: false, msg: 'Tiada notis penguatkuasaan aktif.' };
+    if ((s.money || 0) < info.fineLocal) {
+      return { ok: false, msg: `Baki tunai tidak mencukupi untuk membayar denda ${Utils.formatMoney(info.fineLocal, s.countryId)}.` };
+    }
+    s.money -= info.fineLocal;
+    GameState.addJournalEntry(
+      `🛂 Anda membayar denda imigresen sebanyak ${Utils.formatMoney(info.fineLocal, s.countryId)}. ${info.label} anda di ${info.countryName} diperbaharui dan anda dibenarkan kekal.`,
+      'migration'
+    );
+    GameState.save();
+    return { ok: true, msg: `Denda dibayar! ${info.label} anda diperbaharui.` };
+  },
+
+  resolveVisaEnforcementDeport(info) {
+    const s = GameState.current;
+    if (!s || !info) return { ok: false, msg: 'Tiada notis penguatkuasaan aktif.' };
+    if (!s.countryBans || typeof s.countryBans !== 'object') s.countryBans = {};
+
+    this.addImmigrationFineDebt(s, info.fineLocal, info.countryName, `Denda ${info.label}`);
+    s.countryBans[info.countryId] = {
+      type: 'years',
+      yearsLeft: 5,
+      reason: `${info.label} Tamat Tempoh & Pengusiran`
+    };
+
+    const homeId = s.homeCountry || s.birthCountryId || 'MY';
+    const homeC = Utils.getCountry(homeId);
+    this.deportToHomeCountry(
+      s,
+      info.countryId,
+      `${info.label} anda di ${info.countryName} dibatalkan dan anda dihalau pulang ke ${homeC.name} dengan sekatan masuk 5 tahun ke ${info.countryName}. Denda yang tidak dibayar direkod sebagai hutang.`
+    );
+    return { ok: true, msg: `Anda telah dihalau pulang ke ${homeC.name} dan disekat masuk ke ${info.countryName} selama 5 tahun.` };
   },
 
   _processImmigrationRenewal(s, c) {
@@ -1053,6 +1292,13 @@ window.Sim = {
             : `🔓🌅 HARI PEMBEBASAN: Selepas ${servedYrs} tahun terkurung di sebalik tirai besi ${releasedFrom}, anda akhirnya melangkah keluar sebagai insan bebas! Namun parut rekod jenayah dewasa masih membayangi pencarian kerja anda.`,
           'milestone'
         );
+        if (s.pendingDeportation) {
+          this.deportToHomeCountry(
+            s,
+            s.pendingDeportation.fromCountry,
+            'Sebaik tamat hukuman penjara 2 tahun, pihak imigresen melaksanakan pengusiran automatik ke negara asal anda.'
+          );
+        }
       } else {
         const placeName = s.prison.detentionType === 'juvenile' ? 'Sekolah Juvana' : 'Penjara';
         const hapDrop = Utils.randInt(8, 15);
@@ -2334,6 +2580,11 @@ window.Sim = {
       };
     }
     if (targetCountryId === s.countryId) return { ok: false, msg: 'Anda sudah menetap di negara ini!' };
+    const banStatus = this.getCountryBanStatus(targetCountryId, s);
+    if (banStatus && banStatus.banned) {
+      const destC = Utils.getCountry(targetCountryId);
+      return { ok: false, msg: `Permohonan ditolak: Anda sedang ${banStatus.label.toLowerCase()} ke ${destC.name}.` };
+    }
 
     const travelHeat = (s.alignment && s.alignment.notoriety) || 0;
     if (travelHeat >= 70 && Utils.chance(0.55)) {
