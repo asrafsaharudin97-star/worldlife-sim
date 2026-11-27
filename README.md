@@ -1,31 +1,31 @@
-# WorldLife — Global Cultural Life Simulator
+# WorldLife — Simulator Kehidupan & Budaya Global
 
-A rich, BitLife-inspired life simulation game in **Bahasa Melayu** spanning **all 195 recognized sovereign countries** — featuring **Malaysia 🇲🇾** as a flagship experience alongside deep cultural, economic, and career mechanics worldwide.
+Game simulasi kehidupan ala BitLife dalam **Bahasa Melayu** yang merangkumi **semua 195 negara berdaulat di dunia** — dengan **Malaysia 🇲🇾** sebagai pengalaman utama, lengkap dengan sistem budaya, ekonomi, dan kerjaya yang mendalam di seluruh dunia.
 
-When your character **migrates to another country**, the simulation dynamically adapts currency, salaries, taxes, real estate, vehicles, healthcare, education, and immigration/citizenship progression!
+Bila watak anda **berhijrah ke negara lain**, segalanya akan berubah secara automatik mengikut negara tersebut — daripada mata wang, gaji, cukai, hartanah, kenderaan, dan rawatan kesihatan, sehinggalah ke sistem pendidikan serta laluan imigresen dan kerakyatan!
 
-## How to Play
-1. **Instant Play (No install required):** Open `index.html` directly in Chrome, Edge, Firefox, or Safari.
-2. **Optional Local Server:** Run `python3 -m http.server 8000` inside this folder and visit `http://localhost:8000`.
+## Cara Main
+1. **Terus Main (Tak perlu pasang apa-apa):** Buka sahaja fail `index.html` menggunakan Chrome, Edge, Firefox, atau Safari.
+2. **Server Tempatan (Pilihan):** Jalankan arahan `python3 -m http.server 8000` di dalam folder ini dan buka `http://localhost:8000` di pelayar anda.
 
-## Highlights
-- **All 195 Sovereign Countries:** Realistic currencies, tax brackets, salary multipliers, cost-of-living tiers, healthcare quality, local naming rules, visa → PR → Citizenship progression, and Passport Stamps.
-- **10 "Peluang Sekali Seumur Hidup" Special Modes (No Static Menu):**
-  - Randomly offered once per lifetime on Age-Up (plus a rare 2–4% **Birth Royalty** trigger in monarchy countries). Declining or exiting permanently locks that mode for the character's life!
-  - Includes **Politik & Kepimpinan**, **Usahawan & CEO**, **Jerung Pasaran (Fund Manager)**, **Selebriti & Content Creator**, **Atlet Pro & E-Sukan**, **Sindiket & Mafia**, **Pertubuhan Rahsia / Kultus**, **Perisik Rahsia** (with 195-country covert missions & *Burn Notice*), **Kerabat Diraja**, and **Pengembara & Pemburu Rekod Dunia** (tracking unique countries out of 195).
-  - Anti-repeat yearly action boards, branching dilemmas, and realistic high-stakes **Exit Risk Warnings** (*Wang Cuci Tangan*, *Burn Notice*, *Renounce Title*, *Insider Trading* Court Trials, etc.).
-- **Strict Role Lock & Realistic Hard Job Hunting:**
-  - **Wajib Letak Jawatan Dahulu:** Must resign from any active job or Special Mode before applying for a new job.
-  - **2-Stage Competitive Hiring:** 5 applications/year cap, weighted CV screening (5–85%, never 100%) with 12 relatable HR rejection/ghosting scenarios, followed by competitive Job Interviews.
-- **Lifelong Education (Up to PhD & `Dr.` Title) & 79 Careers:**
-  - Study full-time or part-time across 10 fields up to PhD, earn 28 field-gated professional certificates, and climb dynamic promotion ladders.
-- **82-Asset Wealth Engine:** Real estate (21), vehicles (26), investments (15), collectibles & mystery auctions (20), mortgages, market trends, heirlooms, and multi-generational inheritance.
-- **70-Activity Dynamic Engine & Mini-Encounters:** Anti-repeat yearly activity decks with rare golden opportunities across 7 categories.
-- **Full Crime, Court Trial, Prison & Fugitive System:** Interactive courtroom trials & lawyers, playable prison escape & riot mini-games, underground illegal emigration, plastic surgery, and fake identities.
-- **Multi-Generational Dynasty & Safe Save Performance:** Heir continuation, Family Reputation, Prime Achievements, centralized HUD/Biodata/Income sync (`CharacterStatus`), `SafeStorage` quota protection, and `.json` save export/import.
+## Apa Yang Menarik?
+- **Semua 195 Negara Berdaulat:** Mata wang sebenar, tangga cukai, pengganda gaji, taraf kos sara hidup, kualiti kesihatan, format nama tempatan, laluan Visa → PR → Warganegara, dan koleksi Cop Pasport.
+- **10 Mod Khas "Peluang Sekali Seumur Hidup" (Tiada Menu Statik):**
+  - Ditawarkan secara rawak sekali seumur hidup semasa `+Umur` (termasuk peluang jarang 2–4% untuk **Lahir Sebagai Kerabat Diraja** di negara beraja). Kalau anda tolak atau keluar daripada mod ini, ia akan terkunci terus sepanjang hayat watak tersebut!
+  - Merangkumi **Politik & Kepimpinan**, **Usahawan & CEO**, **Jerung Pasaran (Pengurus Dana)**, **Selebriti & Content Creator**, **Atlet Pro & E-Sukan**, **Sindiket & Mafia**, **Pertubuhan Rahsia / Kultus**, **Perisik Rahsia** (lengkap dengan misi sulit di 195 negara & *Burn Notice*), **Kerabat Diraja**, dan **Pengembara & Pemburu Rekod Dunia** (rekod negara unik yang dilawati daripada 195 negara).
+  - Papan aksi tahunan tanpa pengulangan, dilema bercabang, dan **Amaran Risiko Keluar** yang realistik (*Wang Cuci Tangan*, *Burn Notice*, *Lucut Gelaran*, Perbicaraan Mahkamah *Insider Trading*, dan lain-lain).
+- **Kunci Peranan Ketat & Cari Kerja Yang Betul-Betul Mencabar:**
+  - **Wajib Letak Jawatan Dahulu:** Kena berhenti daripada kerja semasa atau Mod Khas dahulu sebelum boleh memohon kerja baharu.
+  - **Saringan 2 Peringkat Yang Kompetitif:** Had maksimum 5 permohonan setahun, saringan CV berpemberat (5–85%, tak pernah 100%) lengkap dengan 12 senario HR tolak atau *ghosting* yang cukup realistik, diikuti sesi Temuduga Kerja yang sengit.
+- **Pendidikan Sepanjang Hayat (Sampai PhD & Gelaran `Dr.`) & 79 Kerjaya:**
+  - Boleh belajar sepenuh masa atau separuh masa dalam 10 bidang sehingga ke peringkat PhD, kumpul 28 sijil profesional mengikut bidang, dan panjat tangga kenaikan pangkat secara dinamik.
+- **Enjin Kekayaan 82 Aset:** Hartanah (21), kenderaan (26), pelaburan (15), koleksi & lelongan misteri (20), pinjaman perumahan, trend pasaran, barang pusaka, serta pewarisan harta merentas generasi.
+- **Enjin 70 Aktiviti Dinamik & Pertemuan Rawak:** Dek aktiviti tahunan tanpa pengulangan dengan peluang emas yang jarang muncul merentas 7 kategori.
+- **Sistem Jenayah, Mahkamah, Penjara & Pelarian Penuh:** Perbicaraan mahkamah interaktif dengan peguam, mini-game lari dari penjara & rusuhan, hijrah haram bawah tanah, pembedahan plastik, dan identiti palsu.
+- **Dinasti Merentas Generasi & Sistem Simpanan Selamat:** Sambung legasi melalui pewaris, Reputasi Keluarga, Pencapaian Utama, penyelarasan HUD/Biodata/Pendapatan berpusat (`CharacterStatus`), perlindungan kuota `SafeStorage`, serta eksport/import fail simpanan `.json`.
 
 ## Kategori Ekonomi Negara & Kadar Cukai Yayasan
-Semua **194 negara** dalam WorldLife dikelaskan kepada 4 kategori ekonomi yang menentukan **Yuran Tahunan Yayasan** dan **Cukai Korporat Yayasan** (selain **Cukai Pendapatan Peribadi** masing-masing):
+Kesemua **194 negara** dalam WorldLife dibahagikan kepada 4 kategori ekonomi yang menentukan **Yuran Tahunan Yayasan** dan **Cukai Korporat Yayasan** (selain **Cukai Pendapatan Peribadi** di setiap negara):
 
 | Kategori Ekonomi | Bil. Negara | Yuran Tahunan Yayasan | Cukai Korporat Yayasan | Julat Cukai Pendapatan |
 | :--- | :---: | :---: | :---: | :---: |
@@ -34,7 +34,7 @@ Semua **194 negara** dalam WorldLife dikelaskan kepada 4 kategori ekonomi yang m
 | **Negara Membangun** | 39 | 0.5% | 15% – 25% | 0% – 33% |
 | **Negara Mundur** | 109 | 0.1% | 15% – 22% | 5% – 22% |
 
-👉 Lihat senarai penuh semua 194 negara (Negara Pulau Bebas Cukai, Negara Maju, Negara Membangun & Negara Mundur) berserta kadar cukai masing-masing dalam **[SENARAI_NEGARA_CUKAI.md](SENARAI_NEGARA_CUKAI.md)**.
+👉 Tengok senarai penuh semua 194 negara (Negara Pulau Bebas Cukai, Negara Maju, Negara Membangun & Negara Mundur) berserta kadar cukai masing-masing di sini: **[SENARAI_NEGARA_CUKAI.md](SENARAI_NEGARA_CUKAI.md)**.
 
 ### 21 Negara Pulau Bebas Cukai (0% Yuran & 0% Cukai Korporat Yayasan)
 
