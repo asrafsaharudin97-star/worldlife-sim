@@ -1862,8 +1862,8 @@ window.Modals = {
                 : '⚠️ <strong>Tiada Pengurus Dana Aktif!</strong> Yayasan tanpa pengurus berisiko tinggi menghadapi pecah amanah dan pemantauan kerajaan.'}
             </div>
             <div class="tab-pills" style="margin-bottom:8px;">
-              ${[1, 2, 3, 5].map(y => `
-                <button type="button" class="tab-pill btn-trust-mgr-years ${selectedMgrYears === y ? 'active' : ''}" data-years="${y}">${y} Tahun</button>
+              ${[[1, '3%'], [2, '5.5%'], [3, '8%'], [5, '12%']].map(([y, pct]) => `
+                <button type="button" class="tab-pill btn-trust-mgr-years ${selectedMgrYears === y ? 'active' : ''}" data-years="${y}">${y} Tahun (${pct})</button>
               `).join('')}
             </div>
             <div class="action-list" style="margin-bottom:10px;">
@@ -1871,7 +1871,7 @@ window.Modals = {
                 <button type="button" class="action-item btn-hire-trust-mgr" data-tier="${m.tier}" data-years="${m.years}">
                   <span class="ai-icon">${m.icon}</span>
                   <span class="ai-content">
-                    <span class="ai-title">${Utils.escapeHtml(m.title)} (${m.years} Thn)</span>
+                    <span class="ai-title">${Utils.escapeHtml(m.title)} (${m.years} Thn • ${m.rateLabel || ''})</span>
                     <span class="ai-desc">${Utils.escapeHtml(m.desc)}</span>
                   </span>
                   <span class="ai-right cost">${fmt(m.cost)}</span>

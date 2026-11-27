@@ -524,40 +524,55 @@ window.LegalInheritanceEngine = {
     return Math.max(0, Math.round(trustWealth * rates.annualFeeRate));
   },
 
+  FUND_MANAGER_CONTRACT_RATES: {
+    1: 0.03,
+    2: 0.055,
+    3: 0.08,
+    5: 0.12
+  },
+
   getFundManagerOffers(s, selectedYears = 1) {
     this.ensureFamilyTrust(s);
     const yrs = [1, 2, 3, 5].includes(Number(selectedYears)) ? Number(selectedYears) : 1;
-    const disc = yrs === 5 ? 0.90 : yrs === 3 ? 0.94 : 1.0;
     const cid = (s && s.countryId) || 'MY';
-    const trustWealth = this.getTrustNetWorth(s);
+    const trustNetWorth = Math.max(0, this.getTrustNetWorth(s));
+    const contractRate = this.FUND_MANAGER_CONTRACT_RATES[yrs] || 0.03;
+    const minBaseLocal = Utils.usdToLocal(15000 * yrs, cid);
+    const baseContractCost = Math.max(minBaseLocal, Math.round(trustNetWorth * contractRate));
     const tiers = [
       {
         tier: 'junior',
         icon: '📋',
         title: 'Pengurus Dana Junior',
         desc: 'Yuran lantikan mampu milik; pengurusan asas tetapi terdedah kepada kesilapan audit dan risiko pecah amanah.',
-        annualCost: Utils.usdToLocal(600, cid) + Math.round(trustWealth * 0.003)
+        mult: 0.6
       },
       {
         tier: 'profesional',
         icon: '💼',
         title: 'Pengurus Korporat Profesional',
         desc: 'Yuran sederhana; pematuhan cukai lebih teratur dan risiko terkawal.',
-        annualCost: Utils.usdToLocal(2200, cid) + Math.round(trustWealth * 0.008)
+        mult: 0.8
       },
       {
         tier: 'elit',
         icon: '🏆',
         title: 'Pengurus Dana Elit (Padu)',
         desc: 'Yuran lantikan premium; pengurusan aset mantap serta perlindungan kukuh terhadap audit cukai dan pecah amanah.',
-        annualCost: Utils.usdToLocal(5500, cid) + Math.round(trustWealth * 0.015)
+        mult: 1.0
       }
     ];
-    return tiers.map(t => ({
-      ...t,
-      years: yrs,
-      cost: Math.max(1, Math.round(t.annualCost * yrs * disc))
-    }));
+    return tiers.map(t => {
+      const effPct = Number((contractRate * t.mult * 100).toFixed(1));
+      const cost = Math.max(Math.round(minBaseLocal * t.mult), Math.round(baseContractCost * t.mult));
+      return {
+        ...t,
+        years: yrs,
+        ratePct: effPct,
+        rateLabel: `${effPct}%`,
+        cost
+      };
+    });
   },
 
   hireFundManager(s, tier, selectedYears = 1) {
@@ -915,6 +930,7 @@ window.LegalInheritanceEngine = {
     triggerProb = Math.min(0.45, triggerProb);
 
     ft.offshoreAuditRisk = Math.min(0.60, Number(((ft.offshoreAuditRisk || 0) + 0.08).toFixed(2)));
+    ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
     if (window.Utils && Utils.chance && Utils.chance(triggerProb)) {
       ft.underAudit = true;
       ft.offshoreAuditRisk = Math.min(0.85, Number(((ft.offshoreAuditRisk || 0) + 0.35).toFixed(2)));
@@ -1370,6 +1386,9 @@ window.LegalInheritanceEngine = {
       };
     }
 
+    // Susutkan auditHeat secara perlahan setiap tahun (+Umur)
+    ft.auditHeat = Math.max(0, Number(((ft.auditHeat || 0) - 0.25).toFixed(2)));
+
     // Peristiwa B: Pemantauan Kerajaan & Siasatan Lari Cukai (2 PILIHAN SAHAJA)
     const effectiveAuditChance = Math.min(0.92, auditChance + (ft.offshoreAuditRisk || 0));
     ft.offshoreAuditRisk = Math.max(0, Number(((ft.offshoreAuditRisk || 0) - 0.15).toFixed(2)));
@@ -1377,17 +1396,25 @@ window.LegalInheritanceEngine = {
       ft.underAudit = true;
       ft.offshoreAuditRisk = 0;
       const penalty = Math.max(Utils.usdToLocal(4000, s.countryId), Math.round(trustNet * 0.18));
-      const hideSuccessChance = tier === 'elit' ? 0.55 : tier === 'profesional' ? 0.40 : tier === 'junior' ? 0.25 : 0.15;
+      const smartsBonus = ((s.stats && s.stats.smarts) || 0) >= 80 ? 0.05 : 0;
+      const mgrBonus = tier === 'elit' ? 0.10 : tier === 'profesional' ? 0.06 : tier === 'junior' ? 0.03 : 0;
+      const cappedBase = Math.min(0.58, 0.45 + Math.min(0.15, smartsBonus + mgrBonus));
+      const heatPenalty = Math.floor(ft.auditHeat || 0) * 0.15;
+      const hideSuccessChance = Math.max(0.10, Number((cappedBase - heatPenalty).toFixed(2)));
+      const heatNarrative = (ft.auditHeat || 0) >= 2
+        ? ' Pihak berkuasa kini memantau rapat rekod kewangan Yayasan anda.'
+        : '';
       return {
         id: 'trust_tax_audit_' + s.year,
         icon: '🏛️',
         title: 'Pemantauan Kerajaan & Siasatan Lari Cukai!',
-        text: `Pihak berkuasa hasil mengesyaki Tabung Yayasan Keluarga anda digunakan untuk mengelak cukai secara haram. Siasatan rasmi telah dibuka!`,
+        text: `Pihak berkuasa hasil mengesyaki Tabung Yayasan Keluarga anda digunakan untuk mengelak cukai secara haram. Siasatan rasmi telah dibuka!${heatNarrative}`,
         choices: [
           {
             label: `💵 Bayar Denda (${Utils.formatMoney(penalty, s.countryId)})`,
             action: () => {
               ft.underAudit = false;
+              ft.auditHeat = Math.max(0, Number(((ft.auditHeat || 0) - 2).toFixed(2)));
               if (ft.balance >= penalty) {
                 ft.balance -= penalty;
               } else {
@@ -1404,6 +1431,7 @@ window.LegalInheritanceEngine = {
             action: () => {
               ft.underAudit = false;
               if (Utils.chance(hideSuccessChance)) {
+                ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
                 if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 10, stress: 12 });
                 return 'Anda berjaya menyembunyikan rekod kewangan dan melepasi audit tanpa dikenakan denda!';
               }
@@ -1416,6 +1444,7 @@ window.LegalInheritanceEngine = {
                 s.money -= rem;
               }
               ft.lapsed = true;
+              ft.auditHeat = 1;
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 35, stress: 28, karma: -18 });
               if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
                 PrisonFugitive.enterPrisonState(s, 'Pengelakan Cukai & Pemalsuan Dokumen Yayasan', 5, 'maximum');
