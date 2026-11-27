@@ -1561,18 +1561,65 @@ window.Modals = {
   showOffshoreProxyModal(mode, amt, onBack = null) {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
+    LegalInheritanceEngine.ensureFamilyTrust(s);
     const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const fmtUsdShort = (u) => {
+      const n = Math.max(0, Math.round(Number(u) || 0));
+      if (n >= 1000000) return `$${Number((n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1))}M`;
+      if (n >= 1000) return `$${Number((n / 1000).toFixed(n % 1000 === 0 ? 0 : 1))}K`;
+      return `$${n.toLocaleString('en-US')}`;
+    };
     const domC = LegalInheritanceEngine.getTrustDomicileCountry(s);
     const curC = Utils.getCountry(s.countryId);
     const domLabel = domC ? `${domC.flag || ''} ${domC.name}` : (s.familyTrust.domicileCountry || 'Luar Negara');
     const curLabel = curC ? `${curC.flag || ''} ${curC.name}` : s.countryId;
     const isDeposit = mode === 'deposit';
     const usdEq = Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(amt, s.countryId) : null;
+    const amountUsd = Math.round((window.Utils && Utils.localToUsd) ? Utils.localToUsd(amt, s.countryId) : (amt / 4.5));
+    const trustUsd = LegalInheritanceEngine.getTrustNetWorthUsd(s);
 
-    const legalFee = Math.max(1, Math.round(amt * LegalInheritanceEngine.OFFSHORE_PROXY_RATES.legal));
+    const limOff = LegalInheritanceEngine.OFFSHORE_PROXY_LIMITS.official;
+    const limShd = LegalInheritanceEngine.OFFSHORE_PROXY_LIMITS.shadow;
+    const usedOff = Math.max(0, Math.round((s.familyTrust.proxyUsedUsdThisYear && s.familyTrust.proxyUsedUsdThisYear.official) || 0));
+    const usedShd = Math.max(0, Math.round((s.familyTrust.proxyUsedUsdThisYear && s.familyTrust.proxyUsedUsdThisYear.shadow) || 0));
+    const remOffUsd = Math.max(0, limOff.annualLimitUsd - usedOff);
+    const remShdUsd = Math.max(0, limShd.annualLimitUsd - usedShd);
+    const remOffLocal = (window.Utils && Utils.usdToLocal) ? Utils.usdToLocal(remOffUsd, s.countryId) : remOffUsd;
+    const remShdLocal = (window.Utils && Utils.usdToLocal) ? Utils.usdToLocal(remShdUsd, s.countryId) : remShdUsd;
+
+    const legalFee = Math.max(1, Math.round(amt * limOff.feeRate));
     const legalNet = Math.max(0, amt - legalFee);
-    const shadowFee = Math.max(1, Math.round(amt * LegalInheritanceEngine.OFFSHORE_PROXY_RATES.shadow));
+    const shadowFee = Math.max(1, Math.round(amt * limShd.feeRate));
     const shadowNet = Math.max(0, amt - shadowFee);
+
+    let offDisabled = false;
+    let offBtnLabel = '✅ Sahkan Melalui Firma Guaman Rasmi';
+    if (trustUsd < limOff.minTrustUsd) {
+      offDisabled = true;
+      offBtnLabel = '🔒 Perlu Nilai Bersih Yayasan ≥ $1M USD';
+    } else if (remOffUsd <= 0) {
+      offDisabled = true;
+      offBtnLabel = '🔒 Had tahunan dicapai — reset tahun hadapan';
+    } else if (amountUsd < limOff.minTxUsd) {
+      offDisabled = true;
+      offBtnLabel = '🔒 Transaksi minimum $100K USD';
+    } else if (amountUsd > remOffUsd) {
+      offDisabled = true;
+      offBtnLabel = '🔒 Melebihi baki had tahun ini';
+    }
+
+    let shdDisabled = false;
+    let shdBtnLabel = '🕶️ Sahkan Melalui Ejen Proksi Bayangan';
+    if (remShdUsd <= 0) {
+      shdDisabled = true;
+      shdBtnLabel = '🔒 Had tahunan dicapai — reset tahun hadapan';
+    } else if (amountUsd < limShd.minTxUsd) {
+      shdDisabled = true;
+      shdBtnLabel = '🔒 Transaksi minimum $10K USD';
+    } else if (amountUsd > remShdUsd) {
+      shdDisabled = true;
+      shdBtnLabel = '🔒 Melebihi baki had tahun ini';
+    }
 
     this.open({
       icon: '🌐',
@@ -1584,32 +1631,40 @@ window.Modals = {
           Jumlah Dipindahkan: <strong>${fmt(amt)}</strong>${usdEq ? ` <span style="color:#64748b;">(${usdEq})</span>` : ''}
         </div>
 
-        <div class="migration-card" style="border-color:#22c55e;margin-bottom:10px;">
+        <div class="migration-card" style="border-color:${offDisabled ? '#cbd5e1' : '#22c55e'};margin-bottom:10px;${offDisabled ? 'opacity:0.82;' : ''}">
           <div class="mig-head">
             <div class="mig-title">⚖️ Firma Guaman &amp; Pemegang Amanah Rasmi</div>
             <span class="cat-badge" style="background:#dcfce7;color:#166534;">Yuran 3.5%</span>
           </div>
-          <p style="font-size:12px;color:#475569;margin:6px 0 8px;">Pemindahan rentas sempadan secara rasmi melalui pemegang amanah berlesen. Selamat daripada siasatan pihak berkuasa.</p>
+          <p style="font-size:12px;color:#475569;margin:6px 0 6px;">Pemindahan rentas sempadan secara rasmi melalui pemegang amanah berlesen. Selamat daripada siasatan pihak berkuasa.</p>
+          <div style="font-size:11px;color:#334155;margin-bottom:6px;line-height:1.5;">
+            📊 Baki Had Tahun Ini: <strong>${fmtUsdShort(remOffUsd)} / $25M USD</strong> <span style="color:#64748b;">(~${fmt(remOffLocal)})</span><br/>
+            💵 Min: <strong>$100K USD</strong> • Syarat: <strong>Nilai Bersih Yayasan ≥ $1M USD</strong>
+          </div>
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:11.5px;margin-bottom:8px;line-height:1.55;">
             Jumlah Dipindahkan: <strong>${fmt(amt)}</strong><br/>
             Yuran Proksi (3.5%): <strong style="color:#dc2626;">-${fmt(legalFee)}</strong><br/>
             Jumlah Bersih Diterima: <strong style="color:#059669;">${fmt(legalNet)}</strong>
           </div>
-          <button class="btn-sm primary" id="btn-proxy-confirm-legal" style="width:100%;">✅ Sahkan Melalui Firma Guaman Rasmi</button>
+          <button class="btn-sm ${offDisabled ? 'secondary' : 'primary'}" id="btn-proxy-confirm-legal" style="width:100%;" ${offDisabled ? 'disabled' : ''}>${offBtnLabel}</button>
         </div>
 
-        <div class="migration-card" style="border-color:#f59e0b;margin-bottom:10px;">
+        <div class="migration-card" style="border-color:${shdDisabled ? '#cbd5e1' : '#f59e0b'};margin-bottom:10px;${shdDisabled ? 'opacity:0.82;' : ''}">
           <div class="mig-head">
             <div class="mig-title">🕶️ Ejen Proksi Bayangan (Kurier Luar Pesisir)</div>
             <span class="cat-badge" style="background:#fef3c7;color:#92400e;">Yuran 1.5%</span>
           </div>
-          <p style="font-size:12px;color:#475569;margin:6px 0 8px;">Yuran lebih rendah melalui rangkaian proksi peribadi, namun berisiko menarik perhatian pihak berkuasa cukai.</p>
+          <p style="font-size:12px;color:#475569;margin:6px 0 6px;">Yuran lebih rendah melalui rangkaian proksi peribadi, namun berisiko menarik perhatian pihak berkuasa cukai.</p>
+          <div style="font-size:11px;color:#334155;margin-bottom:6px;line-height:1.5;">
+            📊 Baki Had Tahun Ini: <strong>${fmtUsdShort(remShdUsd)} / $5M USD</strong> <span style="color:#64748b;">(~${fmt(remShdLocal)})</span><br/>
+            💵 Min: <strong>$10K USD</strong> • Terbuka kepada semua Yayasan aktif
+          </div>
           <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 9px;font-size:11.5px;margin-bottom:8px;line-height:1.55;">
             Jumlah Dipindahkan: <strong>${fmt(amt)}</strong><br/>
             Yuran Proksi (1.5%): <strong style="color:#b45309;">-${fmt(shadowFee)}</strong><br/>
             Jumlah Bersih Diterima: <strong style="color:#059669;">${fmt(shadowNet)}</strong>
           </div>
-          <button class="btn-sm warning" id="btn-proxy-confirm-shadow" style="width:100%;">🕶️ Sahkan Melalui Ejen Proksi Bayangan</button>
+          <button class="btn-sm ${shdDisabled ? 'secondary' : 'warning'}" id="btn-proxy-confirm-shadow" style="width:100%;" ${shdDisabled ? 'disabled' : ''}>${shdBtnLabel}</button>
         </div>
       `,
       footerHtml: `<button class="btn-sm secondary" id="btn-proxy-back">← Kembali ke Yayasan</button>`
@@ -1625,7 +1680,7 @@ window.Modals = {
     };
 
     const btnLegal = document.getElementById('btn-proxy-confirm-legal');
-    if (btnLegal) btnLegal.addEventListener('click', () => exec('legal'));
+    if (btnLegal) btnLegal.addEventListener('click', () => exec('official'));
     const btnShadow = document.getElementById('btn-proxy-confirm-shadow');
     if (btnShadow) btnShadow.addEventListener('click', () => exec('shadow'));
     const btnBack = document.getElementById('btn-proxy-back');

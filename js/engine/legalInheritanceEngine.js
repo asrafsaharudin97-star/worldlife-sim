@@ -1198,6 +1198,7 @@ window.LegalInheritanceEngine = {
     if (!s || !s.alive) return null;
     this.ensureFamilyTrust(s);
     const ft = s.familyTrust;
+    ft.proxyUsedUsdThisYear = { official: 0, shadow: 0 };
     if (!ft.active) return null;
 
     // 0. Simpan nilai tahun sebelumnya untuk kiraan prestasi
