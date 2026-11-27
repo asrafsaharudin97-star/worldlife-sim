@@ -845,7 +845,8 @@ window.GameState = {
         baselineValue: baseValLocal,
         domicileCountry: inheritedDomicile,
         isDomicileLocked: isLocked,
-        proxyUsedUsdThisYear: { official: 0, shadow: 0 }
+        proxyUsedUsdThisYear: { official: 0, shadow: 0 },
+        latestFundReport: pft.latestFundReport ? JSON.parse(JSON.stringify(pft.latestFundReport)) : null
       };
       this.addJournalEntry(
         `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)}, ${transferredAssets.length} aset & ${transferredInvs.length} pelaburan yayasan dipindahkan terus ke Generasi ${state.generation}!`,

@@ -2153,6 +2153,46 @@ window.Modals = {
               `;
             })()}
 
+            ${(ft.latestFundReport || ft.fundManager) ? (() => {
+              const rep = ft.latestFundReport;
+              const isLoading = Boolean(LegalInheritanceEngine && LegalInheritanceEngine._fundReportLoading);
+              if (isLoading) {
+                return `
+                  <div id="trust-fund-report-card" class="migration-card" style="border-color:#94a3b8;margin-bottom:10px;padding:10px;">
+                    <div style="font-size:12px;color:#475569;">⏳ <strong>Pengurus Dana sedang menyusun laporan tahunan...</strong></div>
+                  </div>
+                `;
+              }
+              if (!rep) {
+                return `
+                  <div id="trust-fund-report-card" class="info-banner" style="font-size:11.5px;margin-bottom:10px;color:#475569;">
+                    📊 Laporan tahunan pertama daripada Pengurus Dana akan diterbitkan selepas pusingan tahun hadapan.
+                  </div>
+                `;
+              }
+              const nadaBg = rep.nadaPasaran === 'Optimis' ? '#dcfce7' : rep.nadaPasaran === 'Defensif' ? '#fee2e2' : '#fef3c7';
+              const nadaCol = rep.nadaPasaran === 'Optimis' ? '#166534' : rep.nadaPasaran === 'Defensif' ? '#991b1b' : '#92400e';
+              const plBg = rep.profitLossDirection === 'untung' ? '#dcfce7' : rep.profitLossDirection === 'rugi' ? '#fee2e2' : '#f1f5f9';
+              const plCol = rep.profitLossDirection === 'untung' ? '#166534' : rep.profitLossDirection === 'rugi' ? '#991b1b' : '#475569';
+              return `
+                <div id="trust-fund-report-card" class="migration-card" style="border-color:#cbd5e1;margin-bottom:10px;padding:10px;">
+                  <div class="mig-head" style="margin-bottom:6px;flex-wrap:wrap;gap:4px;">
+                    <div class="mig-title" style="font-size:12.5px;">📊 Laporan Tahunan Pengurus Dana (Tahun ${rep.year})</div>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                      <span class="cat-badge" style="background:${nadaBg};color:${nadaCol};">${Utils.escapeHtml(rep.nadaPasaran)}</span>
+                      <span class="cat-badge" style="background:${plBg};color:${plCol};">${Utils.escapeHtml(rep.profitLossFormatted)}</span>
+                    </div>
+                  </div>
+                  <div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:6px;">${Utils.escapeHtml(rep.tajuk)}</div>
+                  <div style="font-size:11.5px;color:#334155;line-height:1.5;display:flex;flex-direction:column;gap:5px;">
+                    <div><strong>📈 Untung &amp; Rugi:</strong> ${Utils.escapeHtml(rep.untungRugi)}</div>
+                    <div><strong>⚠️ Aset &amp; Faktor Berisiko:</strong> ${Utils.escapeHtml(rep.asetBerisiko)}</div>
+                    <div><strong>🧭 Pelan Jangka Panjang:</strong> ${Utils.escapeHtml(rep.pelanJangkaPanjang)}</div>
+                  </div>
+                </div>
+              `;
+            })() : ''}
+
             ${trustAssets.length > 0 ? `
               <div class="section-heading" style="margin-top:6px;">🏛️ Aset Dalam Yayasan (${trustAssets.length})</div>
               ${trustAssets.map(a => {

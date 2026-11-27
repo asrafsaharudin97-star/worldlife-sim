@@ -1,3 +1,5 @@
+const FUND_REPORT_WORKER_URL = "https://worldlife-fund-report.asraf-saharudin97.workers.dev";
+
 /* ==========================================================================
    WorldLife — Enjin Undang-Undang Sivil, Perceraian & Pewarisan Wasiat
    Sistem Sivil & Wasiat Seragam untuk Semua Negara (Bahasa Melayu)
@@ -220,6 +222,7 @@ window.LegalInheritanceEngine = {
       if (typeof ft.fundManager.yearsLeft !== 'number') ft.fundManager.yearsLeft = 1;
     } else {
       ft.fundManager = null;
+    ft.latestFundReport = null;
     }
     ft.underAudit = Boolean(ft.underAudit);
     ft.lapsed = Boolean(ft.lapsed);
@@ -614,6 +617,8 @@ window.LegalInheritanceEngine = {
     });
   },
 
+  FUND_REPORT_WORKER_URL,
+  _fundReportLoading: false,
   MAX_FUND_MANAGER_YEARS: 10,
   MAX_TRUST_COLLECTIBLES: 20,
 
@@ -661,6 +666,146 @@ window.LegalInheritanceEngine = {
     );
     GameState.save();
     return { ok: true, msg: `${mgrName} (${offer.title}) dilantik untuk kontrak ${yrs} tahun!` };
+  },
+
+  _buildFallbackFundReport(payload) {
+    const dir = payload.profitLossDirection;
+    const nada = dir === 'untung' && payload.flaggedRisks.length <= 1
+      ? 'Optimis'
+      : (dir === 'rugi' || payload.flaggedRisks.length >= 2 ? 'Defensif' : 'Berhati-hati');
+    const tajuk = dir === 'untung'
+      ? `Prestasi Positif Yayasan Tahun ${payload.year}`
+      : dir === 'rugi'
+        ? `Semakan Semula Risiko & Pemulihan Tahun ${payload.year}`
+        : `Kestabilan Aset Yayasan Tahun ${payload.year}`;
+    const untungRugi = dir === 'untung'
+      ? `Nilai bersih Yayasan mencatatkan pertumbuhan bersih ${payload.profitLossFormatted} kepada ${payload.netWorthFormatted} dengan baki tunai cair ${payload.cashBalanceFormatted}.`
+      : dir === 'rugi'
+        ? `Yayasan merekodkan penyusutan bersih ${payload.profitLossFormatted} (nilai semasa ${payload.netWorthFormatted}); kawalan aliran tunai amat disarankan.`
+        : `Nilai bersih Yayasan kekal stabil pada ${payload.netWorthFormatted} dengan kecairan semasa ${payload.cashBalanceFormatted}.`;
+    const asetBerisiko = payload.flaggedRisks.length > 0
+      ? payload.flaggedRisks.join(' • ')
+      : 'Tiada risiko kritikal dikesan pada struktur aset dan kecairan Yayasan tahun ini.';
+    const pelanJangkaPanjang = payload.flaggedRisks.length > 0
+      ? `Utamakan penstabilan tunai cair di ${payload.domicileCountry} dan seimbangkan semula pegangan aset berisiko untuk melindungi legasi generasi akan datang.`
+      : `Teruskan kepelbagaian aset antara pelaburan dan hartanah sambil mengekalkan rizab tunai mencukupi di ${payload.domicileCountry}.`;
+    return {
+      year: payload.year,
+      tajuk,
+      nadaPasaran: nada,
+      untungRugi,
+      asetBerisiko,
+      pelanJangkaPanjang,
+      profitLossFormatted: payload.profitLossFormatted,
+      profitLossDirection: dir
+    };
+  },
+
+  async generateYearlyFundReport(s, prevNetWorth) {
+    if (!s || !s.familyTrust || !s.familyTrust.active) return null;
+    const ft = s.familyTrust;
+    if (!ft.fundManager || (ft.fundManager.yearsLeft || 0) <= 0) return null;
+
+    const currentNetWorth = this.getTrustNetWorth(s);
+    const prevVal = Math.max(0, Math.round(Number(prevNetWorth) || 0));
+    const netProfitLoss = currentNetWorth - prevVal;
+    const dir = netProfitLoss > 0 ? 'untung' : netProfitLoss < 0 ? 'rugi' : 'mendatar';
+    const sign = netProfitLoss > 0 ? '+' : netProfitLoss < 0 ? '-' : '';
+    const fmt = (v) => Utils.formatMoney(Math.abs(v), s.countryId);
+    const profitLossFormatted = `${sign}${fmt(netProfitLoss)}`;
+
+    const domC = this.getTrustDomicileCountry(s);
+    const rates = this.getTrustCountryRates(domC);
+    const nextAnnualFee = this.getTrustAnnualFee(s);
+    const invVal = this.getTrustInvestmentsValue(s);
+    const propCount = (ft.assets || []).filter(a => a && a.trustAssetType === 'property').length;
+    const vehCount = (ft.assets || []).filter(a => a && a.trustAssetType === 'vehicle').length;
+    const dispColCount = (ft.assets || []).filter(a => a && a.trustAssetType === 'collectible' && a.isDisplayed).length;
+
+    const flaggedRisks = [];
+    if (currentNetWorth > 0 && (invVal / currentNetWorth) > 0.60) {
+      flaggedRisks.push('Pendedahan pelaburan/saham melebihi 60% daripada jumlah nilai bersih Yayasan.');
+    }
+    if (nextAnnualFee > 0 && (ft.balance || 0) < nextAnnualFee) {
+      flaggedRisks.push('Baki tunai cair Yayasan tidak mencukupi untuk menampung anggaran yuran tahunan hadapan.');
+    }
+    if (!rates.isTaxHaven && rates.annualFeeRate >= 0.015) {
+      flaggedRisks.push(`Domisil semasa (${domC ? domC.name : ft.domicileCountry}) mengenakan kadar yuran tahunan tinggi.`);
+    }
+    if ((ft.unpaidFees || 0) > 0) {
+      flaggedRisks.push(`Terdapat tunggakan yuran Yayasan sebanyak ${fmt(ft.unpaidFees)}.`);
+    }
+    if ((ft.auditHeat || 0) >= 2) {
+      flaggedRisks.push('Tahap perhatian audit pihak berkuasa sedang meningkat.');
+    }
+
+    const payload = {
+      year: s.year || 2026,
+      domicileCountry: `${domC ? domC.name : ft.domicileCountry} (${Number((rates.annualFeeRate * 100).toFixed(2))}%/thn)`,
+      netWorthFormatted: fmt(currentNetWorth),
+      profitLossFormatted,
+      profitLossDirection: dir,
+      cashBalanceFormatted: fmt(ft.balance || 0),
+      unpaidFees: Math.max(0, Math.round(ft.unpaidFees || 0)),
+      auditHeat: Number(ft.auditHeat) || 0,
+      contractYearsLeft: Number(ft.fundManager.yearsLeft) || 0,
+      assetSummary: {
+        pelaburanCount: (ft.investments || []).length,
+        pelaburanValue: fmt(invVal),
+        hartanahCount: propCount,
+        kenderaanCount: vehCount,
+        pusakaDipamerkanCount: dispColCount
+      },
+      flaggedRisks
+    };
+
+    const fallbackReport = this._buildFallbackFundReport(payload);
+    this._fundReportLoading = true;
+
+    try {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 7000) : null;
+      try {
+        const resp = await fetch(this.FUND_REPORT_WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller ? controller.signal : undefined
+        });
+        if (timer) clearTimeout(timer);
+        if (resp && resp.ok) {
+          const data = await resp.json();
+          if (data && data.untungRugi && data.asetBerisiko && data.pelanJangkaPanjang) {
+            ft.latestFundReport = {
+              year: payload.year,
+              tajuk: String(data.tajuk || fallbackReport.tajuk).slice(0, 120),
+              nadaPasaran: ['Optimis', 'Berhati-hati', 'Defensif'].includes(data.nadaPasaran) ? data.nadaPasaran : fallbackReport.nadaPasaran,
+              untungRugi: String(data.untungRugi).slice(0, 320),
+              asetBerisiko: String(data.asetBerisiko).slice(0, 320),
+              pelanJangkaPanjang: String(data.pelanJangkaPanjang).slice(0, 320),
+              profitLossFormatted,
+              profitLossDirection: dir
+            };
+          } else {
+            ft.latestFundReport = fallbackReport;
+          }
+        } else {
+          ft.latestFundReport = fallbackReport;
+        }
+      } catch (e) {
+        if (timer) clearTimeout(timer);
+        ft.latestFundReport = fallbackReport;
+      }
+    } catch (e) {
+      ft.latestFundReport = fallbackReport;
+    } finally {
+      this._fundReportLoading = false;
+      if (window.GameState && GameState.save) GameState.save();
+      if (document.getElementById('trust-fund-report-card') && window.Modals && Modals.showWasiatModal) {
+        Modals.showWasiatModal();
+      }
+    }
+    return ft.latestFundReport;
   },
 
   transferAssetToTrust(s, assetType, uid, proxyChannel = null) {
@@ -1422,6 +1567,7 @@ window.LegalInheritanceEngine = {
     s.familyTrust.lapsed = false;
     s.familyTrust.underAudit = false;
     s.familyTrust.fundManager = null;
+    s.familyTrust.latestFundReport = null;
     s.familyTrust.lastPaidAge = null;
     s.familyTrust.founderName = null;
     s.familyTrust.founderGen = null;
@@ -1605,6 +1751,11 @@ window.LegalInheritanceEngine = {
       };
     } else {
       ft.unpaidStreakYears = 0;
+    }
+
+    // 2B. Jana Laporan Tahunan Pengurus Dana AI (Non-Blocking)
+    if (ft.fundManager && (ft.fundManager.yearsLeft || 0) > 0) {
+      this.generateYearlyFundReport(s, valueBeforeYear);
     }
 
     // 3. Kontrak Pengurus Dana
