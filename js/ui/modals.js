@@ -2888,7 +2888,7 @@ window.Modals = {
     }
   },
 
-  async showSaveSlotsModal(confirmDeleteSlotId = null) {
+  async showSaveSlotsModal(confirmDeleteSlotId = null, lastOpError = null) {
     const fb = window.FirebaseService;
     const reqId = ++this._slotModalReqId;
 
@@ -2896,11 +2896,21 @@ window.Modals = {
       icon: '☁️',
       title: 'Slot Simpanan & Cloud Save',
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
-      bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot simpanan...</div>`,
+      bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot terus dari pelayan Cloud...</div>`,
       _isSlotModalRender: true
     });
 
-    const { slots, localOnlyIds, isCloud, activeSlotId, cloudError } = await GameState.getMergedSlots();
+    const {
+      slots,
+      isCloud,
+      activeSlotId,
+      cloudError,
+      offline,
+      source,
+      totalBytes,
+      errorDetail,
+      errorMsg
+    } = await GameState.getMergedSlots();
     if (reqId !== this._slotModalReqId) return;
     if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
@@ -2911,34 +2921,71 @@ window.Modals = {
       const mm = String(d.getMinutes()).padStart(2, '0');
       return `${hh}:${mm}`;
     };
+    const formatKB = (bytes) => {
+      const b = Number(bytes || 0);
+      if (!b || b <= 0) return '0 KB';
+      if (b < 1024) return '1 KB';
+      return `${Math.round(b / 1024)} KB`;
+    };
+
     const isGuest = Boolean(window.GameState && GameState.isGuest && GameState.isGuest());
-    const syncTimeStr = (isCloud && fb.lastSyncAt) ? ` (${formatSyncTime(fb.lastSyncAt)})` : '';
-    const syncBadgeText = !isCloud
-      ? (isGuest ? '👤 Mod Tetamu (Tiada Simpanan)' : '💾 Mod Tempatan')
-      : fb.syncState === 'syncing'
-        ? '🔄 Menyegerak...'
-        : fb.syncState === 'error'
-          ? `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`
-          : `☁️ Disegerakkan${syncTimeStr}`;
+    const syncTimeStr = (isCloud && fb.syncState === 'synced' && fb.lastSyncAt) ? ` (${formatSyncTime(fb.lastSyncAt)})` : '';
+    let syncBadgeText = isGuest ? '👤 Mod Tetamu (Tiada Simpanan)' : '💾 Mod Tempatan';
+    let syncBadgeColor = '#475569';
+    if (isCloud) {
+      if (fb.syncState === 'syncing') {
+        syncBadgeText = '🔄 Menyegerak...';
+        syncBadgeColor = '#2563eb';
+      } else if (fb.syncState === 'offline' || offline) {
+        syncBadgeText = '⚠️ Mod Luar Talian';
+        syncBadgeColor = '#d97706';
+      } else if (fb.syncState === 'error' || cloudError) {
+        syncBadgeText = `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`;
+        syncBadgeColor = '#dc2626';
+      } else if (fb.syncState === 'synced') {
+        syncBadgeText = `☁️ Disegerakkan${syncTimeStr}`;
+        syncBadgeColor = '#16a34a';
+      } else {
+        syncBadgeText = '☁️ Sedia';
+        syncBadgeColor = '#475569';
+      }
+    }
 
     let authBarHtml = '';
     if (isCloud) {
       const u = fb.user;
+      const shortUid = (fb.getShortUid && fb.getShortUid()) || String(u.uid || '').slice(-6);
+      const effectiveSource = source || fb.lastSyncSource;
+      const sourceLabel = effectiveSource === 'server'
+        ? 'Pelayan'
+        : effectiveSource === 'cache'
+          ? 'Cache'
+          : '—';
+      const bytesForDiag = totalBytes || fb.lastPayloadBytes || 0;
       const avatar = u.photoURL
         ? `<img src="${Utils.escapeHtml(u.photoURL)}" alt="" style="width:34px;height:34px;border-radius:999px;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />`
         : `<span style="width:34px;height:34px;border-radius:999px;background:#e0e7ff;display:grid;place-items:center;font-size:16px;flex-shrink:0;">👤</span>`;
       authBarHtml = `
-        <div class="info-banner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;">
-          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-            ${avatar}
-            <div style="min-width:0;">
-              <div style="font-weight:700;font-size:13px;color:#0f172a;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
-              <div style="font-size:11.5px;font-weight:600;color:${fb.syncState === 'error' ? '#dc2626' : '#16a34a'};">${syncBadgeText}</div>
+        <div class="info-banner" style="background:#f8fafc;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              ${avatar}
+              <div style="min-width:0;">
+                <div style="font-weight:700;font-size:13px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
+                <div style="font-size:11.5px;font-weight:600;color:${syncBadgeColor};">${syncBadgeText}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" id="slots-btn-force-sync" class="btn-sm primary" style="padding:6px 10px;font-size:11.5px;">🔄 Segerak Cloud Sekarang</button>
+              <button type="button" id="slots-btn-logout" class="secondary-btn" style="padding:6px 11px;font-size:12px;">Log Keluar</button>
             </div>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" id="slots-btn-force-sync" class="btn-sm primary" style="padding:6px 10px;font-size:11.5px;">🔄 Segerak Cloud Sekarang</button>
-            <button type="button" id="slots-btn-logout" class="secondary-btn" style="padding:6px 11px;font-size:12px;">Log Keluar</button>
+          <div style="margin-top:8px;padding-top:7px;border-top:1px dashed #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:#64748b;font-weight:600;">
+            <span>🪪 ID: <code style="background:#e2e8f0;color:#0f172a;padding:1px 5px;border-radius:4px;">${Utils.escapeHtml(shortUid)}</code></span>
+            <span>•</span>
+            <span>📡 Sumber: <strong style="color:${effectiveSource === 'server' ? '#15803d' : '#b45309'};">${sourceLabel}</strong></span>
+            <span>•</span>
+            <span>📦 Saiz: <strong>${formatKB(bytesForDiag)}</strong></span>
           </div>
         </div>
       `;
@@ -2966,25 +3013,34 @@ window.Modals = {
       `;
     }
 
-    const cloudErrorBanner = cloudError ? `
-      <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="font-size:12px;line-height:1.45;">
-          <strong>⚠️ Gagal memuatkan senarai slot dari Cloud.</strong><br/>
-          Sila cuba muat semula. Tindakan menimpa atau mencipta slot baru dikunci sementara bagi melindungi simpanan Cloud anda.
-        </div>
-        <button type="button" id="slots-btn-retry-cloud" class="btn-sm primary" style="background:#dc2626;">🔄 Cuba Lagi</button>
+    const opErrorBanner = lastOpError ? `
+      <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;font-size:12px;line-height:1.45;">
+        <strong>❌ Operasi Cloud Gagal</strong><br/>
+        <span>${Utils.escapeHtml(lastOpError)}</span>
       </div>
     ` : '';
 
-    const uploadLocalBanner = (isCloud && !cloudError && localOnlyIds.length > 0) ? `
-      <div class="info-banner highlight" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="font-size:12px;">
-          <strong>💾 ${localOnlyIds.length} simpanan tempatan ditemui!</strong><br/>
-          Muat naik ke slot Cloud yang kosong supaya tidak hilang?
+    const cloudErrorBanner = cloudError ? (offline ? `
+      <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12px;line-height:1.45;">
+          <strong>⚠️ Mod Luar Talian</strong> (${Utils.escapeHtml(errorDetail || 'offline')})<br/>
+          ${source === 'cache'
+            ? 'Memaparkan salinan daripada <strong>Cache</strong> pelayar. Sambung internet &amp; tekan <em>Segerak Cloud Sekarang</em> untuk menarik data terkini dari pelayan.'
+            : `${Utils.escapeHtml(errorMsg || 'Tiada sambungan internet ke pelayan Cloud.')}`}
+          <br/><span style="opacity:0.9;">Tindakan menulis/memadam dikunci sementara bagi melindungi simpanan Cloud anda.</span>
         </div>
-        <button type="button" id="slots-btn-upload-local" class="btn-sm primary">☁️ Muat Naik ke Cloud</button>
+        <button type="button" id="slots-btn-retry-cloud" class="btn-sm primary" style="background:#d97706;">🔄 Cuba Lagi</button>
       </div>
-    ` : '';
+    ` : `
+      <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12px;line-height:1.45;">
+          <strong>❌ Ralat Pelayan Cloud</strong> (<code style="background:#fee2e2;padding:1px 4px;border-radius:4px;">${Utils.escapeHtml(errorDetail || 'unknown')}</code>)<br/>
+          ${Utils.escapeHtml(errorMsg || 'Gagal memuatkan senarai slot dari pelayan Firestore.')}<br/>
+          Tindakan menimpa atau mencipta slot baru dikunci sementara bagi melindungi simpanan Cloud anda.
+        </div>
+        <button type="button" id="slots-btn-retry-cloud" class="btn-sm primary" style="background:#dc2626;">🔄 Cuba Lagi</button>
+      </div>
+    `) : '';
 
     const canSaveCurrentHere = Boolean(isCloud && !cloudError && !GameState.isGuestMode && GameState.current);
 
@@ -3006,7 +3062,7 @@ window.Modals = {
                 </button>
               ` : ''}
               <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-new-btn" data-slot="${slotId}" style="width:100%;" ${cloudError ? 'disabled' : ''}>
-                ${cloudError ? '🔒 Dikunci (Ralat Cloud)' : '➕ Mula Kehidupan Baru di Slot Ini'}
+                ${cloudError ? '🔒 Dikunci (Luar Talian / Ralat)' : '➕ Mula Kehidupan Baru di Slot Ini'}
               </button>
             </div>
           </div>
@@ -3014,8 +3070,10 @@ window.Modals = {
       }
 
       const confirming = confirmDeleteSlotId === slotId;
-      const srcBadge = item.inCloud
-        ? '<span class="cat-badge synergy">☁️ Cloud</span>'
+      const srcBadge = isCloud
+        ? (item.source === 'cache'
+            ? '<span class="cat-badge" style="background:#fef3c7;color:#92400e;">📦 Cache</span>'
+            : '<span class="cat-badge synergy">☁️ Cloud</span>')
         : '<span class="cat-badge">💾 Tempatan</span>';
 
       return `
@@ -3030,13 +3088,13 @@ window.Modals = {
           <div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:8px;">
             <strong>Slot ${slotNum}</strong> • Umur <strong>${item.age} thn</strong> • Gen ${item.generation || 1} • ${Utils.escapeHtml(item.country || 'Dunia')}<br/>
             💼 ${Utils.escapeHtml(item.career || 'Tiada Kerjaya')} • 💰 <strong>${Utils.escapeHtml(item.netWorthFormatted || String(item.netWorth || 0))}</strong><br/>
-            <span style="font-size:11px;opacity:0.8;">🕒 Disimpan: ${Utils.escapeHtml(this._formatSlotTime(item.updatedAt))}</span>
+            <span style="font-size:11px;opacity:0.8;">🕒 Disimpan: ${Utils.escapeHtml(this._formatSlotTime(item.updatedAt || item.savedAt))}</span>
           </div>
           ${confirming ? `
             <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px;margin-bottom:6px;font-size:12px;color:#991b1b;">
-              ⚠️ Pasti mahu memadam <strong>Slot ${slotNum} (${Utils.escapeHtml(item.characterName)})</strong> secara kekal? Slot lain tidak akan terjejas.
+              ⚠️ Pasti mahu memadam <strong>Slot ${slotNum} (${Utils.escapeHtml(item.characterName)})</strong> secara kekal dari Cloud? Slot lain tidak akan terjejas.
               <div style="display:flex;gap:6px;margin-top:6px;">
-                <button type="button" class="btn-sm primary slot-confirm-del-btn" data-slot="${slotId}" style="flex:1;background:#dc2626;">🗑️ Ya, Padam</button>
+                <button type="button" class="btn-sm primary slot-confirm-del-btn" data-slot="${slotId}" style="flex:1;background:#dc2626;" ${cloudError ? 'disabled' : ''}>🗑️ Ya, Padam</button>
                 <button type="button" class="btn-sm secondary slot-cancel-del-btn" style="flex:1;">Batal</button>
               </div>
             </div>
@@ -3046,10 +3104,9 @@ window.Modals = {
                 ${isActive ? '💾 Kemas Kini Simpanan' : '💾 Timpa dengan Permainan Semasa'}
               </button>
             ` : ''}
-            <div class="mig-actions" style="grid-template-columns:${isCloud && !cloudError && !canSaveCurrentHere ? 'repeat(3,1fr)' : 'repeat(2,1fr)'};">
+            <div class="mig-actions" style="grid-template-columns:repeat(2,1fr);">
               <button type="button" class="btn-sm ${canSaveCurrentHere ? 'secondary' : 'primary'} slot-load-btn" data-slot="${slotId}">▶ Muatkan</button>
-              ${isCloud && !cloudError && !canSaveCurrentHere ? `<button type="button" class="btn-sm secondary slot-sync-btn" data-slot="${slotId}">☁️ Sync</button>` : ''}
-              <button type="button" class="btn-sm secondary slot-del-btn" data-slot="${slotId}" style="color:#dc2626;">🗑️ Padam</button>
+              <button type="button" class="btn-sm secondary slot-del-btn" data-slot="${slotId}" style="color:#dc2626;" ${cloudError ? 'disabled' : ''}>🗑️ Padam</button>
             </div>
           `}
         </div>
@@ -3062,8 +3119,8 @@ window.Modals = {
       subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
       bodyHtml: `
         ${authBarHtml}
+        ${opErrorBanner}
         ${cloudErrorBanner}
-        ${uploadLocalBanner}
         <div class="section-heading">📂 Senarai Slot Simpanan (Slot 1 – Slot 5)</div>
         ${slotsHtml}
       `
@@ -3071,7 +3128,7 @@ window.Modals = {
 
     const retryCloudBtn = document.getElementById('slots-btn-retry-cloud');
     if (retryCloudBtn) {
-      retryCloudBtn.addEventListener('click', () => this.showSaveSlotsModal(null));
+      retryCloudBtn.addEventListener('click', () => this.showSaveSlotsModal(null, null));
     }
 
     const forceSyncBtn = document.getElementById('slots-btn-force-sync');
@@ -3081,14 +3138,18 @@ window.Modals = {
         forceSyncBtn.textContent = '🔄 Menyegerak...';
         const res = await GameState.pullCloudAndRefreshActive();
         if (res && res.cloudError) {
-          App.toast('⚠️ Gagal menyegerak dari Cloud. Sila semak sambungan internet.', 'error');
-        } else if (res && res.updated) {
-          App.renderAll();
-          App.toast('☁️ Simpanan Cloud terkini berjaya ditarik & disegerakkan!', 'success');
-        } else {
-          App.toast('☁️ Semua slot sudah selaras dengan Cloud.', 'success');
+          const errText = `${res.errorDetail || 'error'}: ${res.errorMsg || 'Gagal menghubungi pelayan Cloud.'}`;
+          App.toast(`⚠️ ${errText}`, 'error');
+          this.showSaveSlotsModal(null, errText);
+          return;
         }
-        this.showSaveSlotsModal(null);
+        if (res && res.updated) {
+          App.renderAll();
+          App.toast('☁️ Simpanan terkini berjaya ditarik terus dari pelayan Cloud!', 'success');
+        } else {
+          App.toast('☁️ Semua slot sudah 100% selaras dengan pelayan Cloud.', 'success');
+        }
+        this.showSaveSlotsModal(null, null);
       });
     }
 
@@ -3109,31 +3170,15 @@ window.Modals = {
     const logoutBtn = document.getElementById('slots-btn-logout');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', async () => {
+        const uidBefore = (window.FirebaseService && FirebaseService.user && FirebaseService.user.uid) || null;
         const res = await FirebaseService.signOutUser();
+        if (res && res.ok) {
+          if (uidBefore) GameState.clearAccountLocalCache(uidBefore);
+          GameState.resetSessionState({ clearCurrent: true });
+        }
         App.toast(res.msg, res.ok ? 'culture' : 'error');
         if (App.renderStartAuthBar) App.renderStartAuthBar();
         this.showSaveSlotsModal();
-      });
-    }
-
-    const uploadBtn = document.getElementById('slots-btn-upload-local');
-    if (uploadBtn) {
-      uploadBtn.addEventListener('click', async () => {
-        let res = null;
-        try {
-          res = await App.runWithCloudProgress('save', () => GameState.uploadLocalSlotsToCloud());
-          if (res && res.busy) return;
-          App.toast((res && res.msg) || 'Muat naik Cloud selesai.', res && res.ok ? 'success' : 'error');
-        } catch (err) {
-          console.error('[Slots] uploadLocalSlotsToCloud error:', err);
-          App.toast('Gagal memuat naik simpanan ke Cloud.', 'error');
-        } finally {
-          if (App.cloudProgress && App.cloudProgress.active) {
-            App.cloudProgress.active = false;
-            App.renderCloudProgressOverlay();
-          }
-          if (!res || !res.busy) this.showSaveSlotsModal();
-        }
       });
     }
 
@@ -3143,7 +3188,8 @@ window.Modals = {
         const item = slots[sid];
         if (!item) return;
         const res = await App.runWithCloudProgress('load', async () => {
-          if (GameState.current && GameState.getActiveSlotId() !== sid) {
+          const curActive = GameState.getActiveSlotId({ allowNull: true });
+          if (GameState.current && curActive && curActive !== sid) {
             await GameState.syncActiveSlotToCloud('switch_slot');
           }
           GameState.loadSlotPayload(sid, item);
@@ -3161,34 +3207,13 @@ window.Modals = {
       });
     });
 
-    document.querySelectorAll('.slot-sync-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const sid = btn.dataset.slot;
-        let res = null;
-        try {
-          res = await App.runWithCloudProgress('save', () => GameState.syncSlotToCloud(sid, slots[sid]));
-          if (res && res.busy) return;
-          App.toast((res && res.msg) || 'Simpanan Cloud selesai.', res && res.ok ? 'success' : 'error');
-        } catch (err) {
-          console.error('[Slots] syncSlotToCloud error:', err);
-          App.toast('Gagal menyegerakkan slot ke Cloud.', 'error');
-        } finally {
-          if (App.cloudProgress && App.cloudProgress.active) {
-            App.cloudProgress.active = false;
-            App.renderCloudProgressOverlay();
-          }
-          if (!res || !res.busy) this.showSaveSlotsModal();
-        }
-      });
-    });
-
     document.querySelectorAll('.slot-save-current-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sid = btn.dataset.slot;
         if (!sid) return;
         const res = await App.handleSaveCurrentToSlot(sid, slots[sid] || null);
         if (res && (res.busy || res.cancelled)) return;
-        this.showSaveSlotsModal();
+        this.showSaveSlotsModal(null, res && res.ok === false ? (res.msg || 'Gagal menyimpan ke pelayan Cloud.') : null);
       });
     });
 
@@ -3201,15 +3226,14 @@ window.Modals = {
         btn.disabled = true;
 
         // 1. Jika sedang bermain di slot lain, simpan & segerakkan slot semasa dahulu secara selamat sebelum menukar activeSlotId
-        const prevSlotId = GameState.getActiveSlotId();
-        if (GameState.current && prevSlotId !== sid) {
-          try { GameState.save(); } catch (err) { console.warn('[Slots] Gagal simpan lokal sebelum tukar slot:', err); }
+        const prevSlotId = GameState.getActiveSlotId({ allowNull: true });
+        if (GameState.current && prevSlotId && prevSlotId !== sid) {
           const syncRes = await App.runWithCloudProgress('save', async () => {
             try {
-              return await GameState.syncActiveSlotToCloud('switch_slot');
+              return await GameState.saveSlotDirectToCloud(prevSlotId, GameState.current);
             } catch (err) {
               console.warn('[Slots] Gagal segerak cloud sebelum tukar slot:', err);
-              return { ok: false };
+              return { ok: false, msg: 'Gagal menyegerak slot sebelum ini ke Cloud.' };
             }
           });
           if (syncRes && syncRes.busy) {
@@ -3217,11 +3241,12 @@ window.Modals = {
             return;
           }
           if (syncRes && syncRes.ok === false) {
-            App.toast(syncRes.msg || 'Cloud Save gagal/tamat masa, meneruskan ke slot baharu...', 'error');
+            App.toast(syncRes.msg || 'Cloud Save gagal, meneruskan ke slot baharu...', 'error');
           }
         }
 
         // 2. Kosongkan watak aktif dalam memori sebelum menukar activeSlotId supaya slot baharu tidak ditimpa
+        GameState.cancelPendingAutoSave();
         GameState.current = null;
         GameState.setActiveSlotId(sid);
 
@@ -3240,7 +3265,7 @@ window.Modals = {
     });
 
     document.querySelectorAll('.slot-cancel-del-btn').forEach(btn => {
-      btn.addEventListener('click', () => this.showSaveSlotsModal(null));
+      btn.addEventListener('click', () => this.showSaveSlotsModal(null, null));
     });
 
     document.querySelectorAll('.slot-confirm-del-btn').forEach(btn => {
@@ -3252,14 +3277,15 @@ window.Modals = {
           if (res && res.busy) return;
           App.toast((res && res.msg) || 'Slot telah dipadam.', res && res.ok === false ? 'error' : 'culture');
         } catch (err) {
-          App.toast('Gagal memadam slot simpanan.', 'error');
+          res = { ok: false, msg: 'Gagal memadam slot simpanan.' };
+          App.toast(res.msg, 'error');
         } finally {
           if (App.cloudProgress && App.cloudProgress.active) {
             App.cloudProgress.active = false;
             App.renderCloudProgressOverlay();
           }
           if (!res || !res.busy) {
-            this.showSaveSlotsModal(null);
+            this.showSaveSlotsModal(null, res && res.ok === false ? (res.msg || 'Gagal memadam slot.') : null);
           }
         }
       });

@@ -164,9 +164,13 @@ window.App = {
       this._fbListenersBound = true;
       FirebaseService.onAuthChange((user) => {
         const nextUid = user && user.uid ? user.uid : null;
-        const uidChanged = this._lastAuthUid !== undefined && this._lastAuthUid !== nextUid;
+        const prevUid = this._lastAuthUid;
+        const uidChanged = prevUid !== undefined && prevUid !== nextUid;
         if (uidChanged) {
           if (window.Modals) Modals.close(true);
+          if (prevUid && !nextUid && GameState.clearAccountLocalCache) {
+            GameState.clearAccountLocalCache(prevUid);
+          }
           GameState.resetSessionState({ clearCurrent: true });
         }
         this._lastAuthUid = nextUid;
@@ -179,7 +183,7 @@ window.App = {
           const startScreen = document.getElementById('start-screen');
           const inStart = startScreen && !startScreen.classList.contains('hidden');
 
-          // Tarik versi Cloud terkini dahulu supaya peranti kedua tidak terperangkap pada cache localStorage lama
+          // Tarik versi pelayan Cloud terkini dahulu supaya peranti kedua tidak terperangkap pada cache localStorage lama
           GameState.pullCloudAndRefreshActive().then((syncRes) => {
             const loaded = GameState.current || GameState.load();
             if (loaded && (!inGate || (syncRes && syncRes.updated))) {
@@ -242,7 +246,8 @@ window.App = {
     const bar = document.getElementById('auth-cloud-bar');
     const slotBadge = document.getElementById('creator-slot-badge');
     if (slotBadge && window.GameState) {
-      const slotNum = GameState.getActiveSlotId().replace('slot_', '');
+      const activeId = GameState.getActiveSlotId({ allowNull: true }) || 'slot_1';
+      const slotNum = activeId.replace('slot_', '');
       slotBadge.innerHTML = `📂 Slot Sasaran Semasa: <strong>Slot ${slotNum}</strong> <span style="opacity:0.75;">(Tukar di "Sambung Kehidupan Disimpan")</span>`;
     }
     if (!bar) return;
@@ -250,11 +255,21 @@ window.App = {
     const fb = window.FirebaseService;
     if (fb && fb.isLoggedIn()) {
       const u = fb.user;
-      const syncLabel = fb.syncState === 'syncing'
-        ? '🔄 Menyegerak...'
-        : fb.syncState === 'error'
-          ? `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`
-          : '☁️ Disegerakkan';
+      let syncLabel = '☁️ Sedia';
+      let syncColor = '#475569';
+      if (fb.syncState === 'syncing') {
+        syncLabel = '🔄 Menyegerak...';
+        syncColor = '#2563eb';
+      } else if (fb.syncState === 'offline') {
+        syncLabel = '⚠️ Mod Luar Talian';
+        syncColor = '#d97706';
+      } else if (fb.syncState === 'error') {
+        syncLabel = `⚠️ Ralat Sync${fb.syncErrorDetail ? `: ${Utils.escapeHtml(fb.syncErrorDetail)}` : ''}`;
+        syncColor = '#dc2626';
+      } else if (fb.syncState === 'synced') {
+        syncLabel = '☁️ Disegerakkan';
+        syncColor = '#16a34a';
+      }
       const avatarHtml = u.photoURL
         ? `<img src="${Utils.escapeHtml(u.photoURL)}" alt="" style="width:28px;height:28px;border-radius:999px;object-fit:cover;flex-shrink:0;" referrerpolicy="no-referrer" />`
         : `<span style="width:28px;height:28px;border-radius:999px;background:#e0e7ff;display:grid;place-items:center;font-size:14px;flex-shrink:0;">👤</span>`;
@@ -264,7 +279,7 @@ window.App = {
             ${avatarHtml}
             <div style="min-width:0;">
               <div style="font-size:12.5px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Utils.escapeHtml(u.displayName || u.email || 'Pengguna Google')}</div>
-              <div style="font-size:11px;color:${fb.syncState === 'error' ? '#dc2626' : '#16a34a'};font-weight:600;">${syncLabel}</div>
+              <div style="font-size:11px;color:${syncColor};font-weight:600;">${syncLabel}</div>
             </div>
           </div>
           <button type="button" id="btn-start-logout" class="secondary-btn" style="padding:5px 10px;font-size:11.5px;">Log Keluar</button>
@@ -273,8 +288,10 @@ window.App = {
       const logoutBtn = document.getElementById('btn-start-logout');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
+          const uidBefore = (fb.user && fb.user.uid) || null;
           const res = await FirebaseService.signOutUser();
           if (res.ok) {
+            if (uidBefore && GameState.clearAccountLocalCache) GameState.clearAccountLocalCache(uidBefore);
             GameState.resetSessionState({ clearCurrent: true });
           }
           this.toast(res.msg, res.ok ? 'culture' : 'error');
@@ -463,7 +480,10 @@ window.App = {
 
     document.getElementById('btn-start-life').addEventListener('click', () => {
       if (!GameState.isGuestMode) {
-        const activeSlotId = GameState.getActiveSlotId();
+        let activeSlotId = GameState.getActiveSlotId({ allowNull: true });
+        if (!activeSlotId) {
+          activeSlotId = GameState.setActiveSlotId('slot_1');
+        }
         const existing = GameState.getLocalSlot(activeSlotId);
         if (existing) {
           const slotNum = activeSlotId.replace('slot_', '');
@@ -702,7 +722,7 @@ window.App = {
     }
 
     const slotNum = targetSlotId.replace('slot_', '');
-    const activeSlotId = GameState.getActiveSlotId();
+    const activeSlotId = GameState.getActiveSlotId({ allowNull: true });
     if (existingSlotItem && targetSlotId !== activeSlotId) {
       const existingName = existingSlotItem.characterName || 'Watak Sedia Ada';
       const confirmed = window.confirm(
@@ -719,7 +739,7 @@ window.App = {
         const deepCopyState = JSON.parse(JSON.stringify(GameState.current));
         const now = Date.now();
         const payload = GameState.buildSlotPayload(targetSlotId, deepCopyState);
-        if (!payload) return { ok: false, msg: 'Gagal membina data simpanan.' };
+        if (!payload) return { ok: false, code: 'empty-payload', msg: 'Gagal membina data simpanan.' };
         payload.slotId = targetSlotId;
         payload.savedAt = now;
         payload.updatedAt = now;
@@ -731,22 +751,22 @@ window.App = {
           payload.unlocked = JSON.parse(JSON.stringify(KarmaEndings.getUnlocked()));
         }
 
-        // Simpan salinan tempatan & Cloud ke targetSlotId tanpa menukar activeSlotId
-        GameState.saveLocalSlot(targetSlotId, deepCopyState, payload);
-        return await GameState.syncSlotToCloud(targetSlotId, payload);
+        // Hantar terus ke pelayan Firestore & tunggu await selesai dahulu sebelum mengemas kini cache localStorage
+        return await GameState.saveSlotDirectToCloud(targetSlotId, deepCopyState, payload);
       });
 
       if (res && res.busy) return res;
       if (res && res.ok) {
-        this.toast(`Permainan semasa berjaya disimpan ke Slot ${slotNum}!`, 'success');
+        this.toast(`Permainan semasa berjaya disimpan ke pelayan Cloud (Slot ${slotNum})!`, 'success');
       } else {
         this.toast((res && res.msg) || `Gagal menyimpan permainan ke Slot ${slotNum}.`, 'error');
       }
       return res || { ok: false };
     } catch (err) {
       console.error('[App] handleSaveCurrentToSlot error:', err);
-      this.toast(`Gagal menyimpan permainan ke Slot ${slotNum}.`, 'error');
-      return { ok: false };
+      const errMsg = `Gagal menyimpan permainan ke Slot ${slotNum} (${(err && (err.code || err.message)) || 'unknown'}).`;
+      this.toast(errMsg, 'error');
+      return { ok: false, msg: errMsg };
     } finally {
       if (this.cloudProgress && this.cloudProgress.active) {
         this.cloudProgress.active = false;
