@@ -2425,34 +2425,9 @@ window.Modals = {
             <span class="ai-icon">🏥</span>
             <span class="ai-content">
               <span class="ai-title">Hospital &amp; Klinik${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? ` (${s.illnesses.length} Penyakit Aktif)` : ''}</span>
-              <span class="ai-desc">${(s.prison && s.prison.inPrison) ? 'Klinik Penjara — rawatan asas semasa dalam tahanan' : 'Rawatan penyakit, Hospital Pakar Swasta, pemeriksaan kesihatan &amp; Cuti Sakit (MC)'}</span>
+              <span class="ai-desc">${(s.prison && s.prison.inPrison) ? 'Klinik Penjara — rawatan asas semasa dalam tahanan' : 'Pemeriksaan kesihatan, Klinik Awam, Hospital Pakar Swasta, rawatan penyakit &amp; Cuti Sakit (MC)'}</span>
             </span>
             <span class="ai-right">${Array.isArray(s.illnesses) && s.illnesses.length > 0 ? 'Rawat →' : 'Buka →'}</span>
-          </button>
-          ${s.age >= 18 ? `
-          <button class="action-item" id="btn-open-loans" style="border-color:${Array.isArray(s.loans) && s.loans.length > 0 ? '#f59e0b' : '#3b82f6'};">
-            <span class="ai-icon">💳</span>
-            <span class="ai-content">
-              <span class="ai-title">Pinjaman &amp; Hutang${Array.isArray(s.loans) && s.loans.length > 0 ? ` (${s.loans.length} Aktif)` : ''}</span>
-              <span class="ai-desc">Pinjaman Bank, Skor Kredit, Pinjaman Ah Long &amp; bayaran ansuran hutang</span>
-            </span>
-            <span class="ai-right">Buka →</span>
-          </button>` : ''}
-          <button class="action-item" id="act-doc-pub" ${docPubDone || !canAffordPub ? 'disabled' : ''}>
-            <span class="ai-icon">🏥</span>
-            <span class="ai-content">
-              <span class="ai-title">Klinik Awam (${c.healthcare.type.split(' ')[0]})</span>
-              <span class="ai-desc">${docPubDone ? 'Selesai tahun ini' : 'Pemeriksaan kesihatan asas di klinik kerajaan'}</span>
-            </span>
-            <span class="ai-right cost">${docPubDone ? 'Selesai tahun ini' : (c.healthcare.doctorCost === 0 ? 'PERCUMA' : Utils.formatMoney(c.healthcare.doctorCost, s.countryId))}</span>
-          </button>
-          <button class="action-item" id="act-doc-priv" ${docPrivDone || !canAffordPriv ? 'disabled' : ''}>
-            <span class="ai-icon">🩺</span>
-            <span class="ai-content">
-              <span class="ai-title">Hospital Pakar Swasta</span>
-              <span class="ai-desc">${docPrivDone ? 'Selesai tahun ini' : 'Pemeriksaan &amp; rawatan pakar yang lebih pantas'}</span>
-            </span>
-            <span class="ai-right cost">${docPrivDone ? 'Selesai tahun ini' : Utils.formatMoney(c.healthcare.privateCost, s.countryId)}</span>
           </button>
         </div>
 
@@ -2490,9 +2465,17 @@ window.Modals = {
             </span>
             <span class="ai-right">${s.yearlyActions.familyHobby ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
+          <button class="action-item" id="act-meditate" ${s.yearlyActions.meditate ? 'disabled' : ''}>
+            <span class="ai-icon">🧘</span>
+            <span class="ai-content">
+              <span class="ai-title">Tenangkan Fikiran di Taman</span>
+              <span class="ai-desc">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Ambil angin segar &amp; tenangkan fikiran di taman'}</span>
+            </span>
+            <span class="ai-right">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Percuma'}</span>
+          </button>
         </div>
 
-        <div class="section-heading">💪 Minda, Jiwa &amp; Badan</div>
+        <div class="section-heading">💪 Minda &amp; Pembangunan Diri</div>
         <div class="action-list">
           <button class="action-item" id="act-community-charity" ${s.yearlyActions.communityCharity || !canAffordCharity ? 'disabled' : ''}>
             <span class="ai-icon">🤝</span>
@@ -2510,25 +2493,33 @@ window.Modals = {
             </span>
             <span class="ai-right">${s.yearlyActions.library ? 'Selesai tahun ini' : 'Percuma'}</span>
           </button>
-          <button class="action-item" id="act-meditate" ${s.yearlyActions.meditate ? 'disabled' : ''}>
-            <span class="ai-icon">🧘</span>
-            <span class="ai-content">
-              <span class="ai-title">Tenangkan Fikiran di Taman</span>
-              <span class="ai-desc">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Ambil angin segar &amp; tenangkan fikiran di taman'}</span>
-            </span>
-            <span class="ai-right">${s.yearlyActions.meditate ? 'Selesai tahun ini' : 'Percuma'}</span>
-          </button>
-          ${s.age >= 16 && !(s.licenses && s.licenses.moto && s.licenses.car) ? `
-            <button class="action-item" id="act-driving-test" ${s.prison && s.prison.inPrison ? 'disabled' : ''}>
-              <span class="ai-icon">🪪</span>
-              <span class="ai-content">
-                <span class="ai-title">Ambil Lesen Memandu</span>
-                <span class="ai-desc">Lesen Motosikal (16+) &amp; Lesen Kereta (17+) di Institut Memandu</span>
-              </span>
-              <span class="ai-right">Buka →</span>
-            </button>
-          ` : ''}
         </div>
+
+        ${(s.age >= 18 || (s.age >= 16 && !(s.licenses && s.licenses.moto && s.licenses.car))) ? `
+          <div class="section-heading">🏛️ Perkhidmatan &amp; Urusan Rasmi</div>
+          <div class="action-list">
+            ${s.age >= 18 ? `
+              <button class="action-item" id="btn-open-loans" style="border-color:${Array.isArray(s.loans) && s.loans.length > 0 ? '#f59e0b' : '#3b82f6'};">
+                <span class="ai-icon">💳</span>
+                <span class="ai-content">
+                  <span class="ai-title">Pinjaman &amp; Hutang${Array.isArray(s.loans) && s.loans.length > 0 ? ` (${s.loans.length} Aktif)` : ''}</span>
+                  <span class="ai-desc">Pinjaman Bank, Skor Kredit, Pinjaman Ah Long &amp; bayaran ansuran hutang</span>
+                </span>
+                <span class="ai-right">Buka →</span>
+              </button>
+            ` : ''}
+            ${s.age >= 16 && !(s.licenses && s.licenses.moto && s.licenses.car) ? `
+              <button class="action-item" id="act-driving-test" ${s.prison && s.prison.inPrison ? 'disabled' : ''}>
+                <span class="ai-icon">🪪</span>
+                <span class="ai-content">
+                  <span class="ai-title">Ambil Lesen Memandu</span>
+                  <span class="ai-desc">Lesen Motosikal (16+) &amp; Lesen Kereta (17+) di Institut Memandu</span>
+                </span>
+                <span class="ai-right">Buka →</span>
+              </button>
+            ` : ''}
+          </div>
+        ` : ''}
       `;
     } else if (activeSubTab === 'crime') {
       const crimeOpts = s.age >= 14 ? Sim.getYearlyCrimeOptions(s) : [];
