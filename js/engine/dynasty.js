@@ -209,9 +209,7 @@ window.Dynasty = {
     };
 
     // 1–2 sorotan utama sahaja (bukan log penuh tahun demi tahun)
-    const hl = Array.isArray(s.highlights) ? s.highlights.slice(-2).reverse().map(h => clip(h.text || h, 120)) : [];
-    let topHighlight = hl.length > 0 ? hl[0] : (s.causeOfDeath || 'Menjalani kehidupan penuh warna');
-
+    const hl = Array.isArray(s.highlights) ? s.highlights.slice(-4).reverse().map(h => clip(h.text || h, 120)) : [];
     const posthumous = (window.CharacterStatus && CharacterStatus.evaluatePosthumousDegree)
       ? CharacterStatus.evaluatePosthumousDegree(s)
       : null;
@@ -221,6 +219,12 @@ window.Dynasty = {
     const titledName = window.CharacterStatus ? CharacterStatus.getDisplayNameWithTitles(s) : s.name;
     const finalOcc = window.CharacterStatus ? CharacterStatus.getDisplayOccupation(s) : { title: 'Tiada Pekerjaan' };
     const peakRole = s.peakRole || finalOcc.title;
+
+    // Elak frasa berulang yang sama dengan Peranan Utama
+    const peakLower = String(peakRole || '').toLowerCase();
+    const nonRepeatingHl = hl.find(item => !peakLower || !String(item).toLowerCase().includes(peakLower));
+    let topHighlight = nonRepeatingHl || s.causeOfDeath || 'Menjalani kehidupan penuh warna';
+
     if (posthumous) {
       topHighlight = `${posthumous.icon} ${posthumous.legacyNote}`;
     } else if (alias) {
@@ -231,30 +235,99 @@ window.Dynasty = {
 
     const netWorth = GameState.getNetWorth();
     const peakNetWorth = Math.max(netWorth, s.peakNetWorth || 0);
+    const genNum = s.generation || d.generation || 1;
+    const redemptionCount = Math.max(0, Math.floor(Number(s.redemptionCount) || 0));
 
-    // Elak duplikat untuk watak yang sama
-    if (!d.dynastyHistory.some(h => h.id === s.id)) {
+    // Bersihkan sebarang klon lama sebelum menambah kad generasi tunggal
+    this.sanitizeDynastyHistory();
+
+    // Pengawal keselamatan: 1 Generasi = 1 Kad kematian sahaja
+    const existingIdx = d.dynastyHistory.findIndex(h => h && (h.id === s.id || h.generation === genNum));
+    if (existingIdx === -1) {
       d.dynastyHistory.unshift({
         id: s.id,
-        generation: s.generation || d.generation || 1,
+        generation: genNum,
         name: alias ? `${trueName} (a.k.a. ${alias})` : titledName,
         alias,
         peakRole,
         age: s.age,
         lifespan: s.age,
         yearDied: s.year,
-        countryFlag: c.flag,
+        countryFlag: (c && c.flag && c.flag !== '🌟') ? c.flag : '🌐',
         peakNetWorth,
         peakWealthFormatted: Utils.formatMoney(peakNetWorth, s.countryId, true),
         endingTitle: `${ending.icon} ${ending.title}`,
         notableEvent: clip(topHighlight, 200),
-        highlights: hl,
-        legacyStatusAtDeath: d.legacyStatus
+        highlights: hl.slice(0, 2),
+        legacyStatusAtDeath: d.legacyStatus,
+        redemptionCount
       });
       if (d.dynastyHistory.length > this.MAX_HISTORY) d.dynastyHistory = d.dynastyHistory.slice(0, this.MAX_HISTORY);
+    } else if (redemptionCount > 0) {
+      d.dynastyHistory[existingIdx].redemptionCount = Math.max(d.dynastyHistory[existingIdx].redemptionCount || 0, redemptionCount);
     }
     this.save();
     return d.dynastyHistory[0];
+  },
+
+  sanitizeDynastyHistory() {
+    const d = this._data;
+    if (!d || !Array.isArray(d.dynastyHistory) || d.dynastyHistory.length === 0) return 0;
+    const isRedeemClone = (h) => Boolean(
+      h && (
+        String(h.id || '').startsWith('redeem_') ||
+        String(h.endingTitle || '').includes('Kebangkitan & Penebusan Legasi')
+      )
+    );
+    const redeemByGen = {};
+    const kept = [];
+    let removed = 0;
+
+    for (const h of d.dynastyHistory) {
+      if (!h) { removed++; continue; }
+      const g = h.generation || 1;
+      if (isRedeemClone(h)) {
+        redeemByGen[g] = (redeemByGen[g] || 0) + 1;
+        removed++;
+        continue;
+      }
+      kept.push(h);
+    }
+
+    // Dedup kad berkongsi nombor generasi sama (kekalkan kad kematian umur paling tua)
+    const byGen = new Map();
+    for (const h of kept) {
+      const g = h.generation || 1;
+      const prev = byGen.get(g);
+      if (!prev) {
+        byGen.set(g, h);
+      } else {
+        removed++;
+        if ((h.age || 0) > (prev.age || 0)) {
+          h.redemptionCount = Math.max(h.redemptionCount || 0, prev.redemptionCount || 0);
+          byGen.set(g, h);
+        } else {
+          prev.redemptionCount = Math.max(prev.redemptionCount || 0, h.redemptionCount || 0);
+        }
+      }
+    }
+
+    const cleaned = Array.from(byGen.values());
+    cleaned.forEach(h => {
+      const g = h.generation || 1;
+      if (redeemByGen[g]) {
+        h.redemptionCount = Math.max(h.redemptionCount || 0, redeemByGen[g]);
+      }
+      if (!h.countryFlag || h.countryFlag === '🌟') {
+        h.countryFlag = '🌐';
+      }
+    });
+
+    if (removed > 0) {
+      d.dynastyHistory = cleaned;
+      this.save();
+    }
+    return removed;
   },
 
   recordLivingHandover(parent, child) {
@@ -546,18 +619,9 @@ window.Dynasty = {
         const oldReason = d.tarnishReason;
         d.tarnishReason = null;
         d.familyReputation = Utils.clamp(Math.max(68, d.familyReputation + Utils.randInt(32, 46)), 0, 100);
-        d.dynastyHistory.unshift({
-          id: 'redeem_' + Date.now(),
-          generation: d.generation,
-          name: st.name,
-          age: st.age,
-          yearDied: st.year,
-          countryFlag: '🌟',
-          peakWealthFormatted: Utils.formatMoney(GameState.getNetWorth(), st.countryId, true),
-          endingTitle: '🌟 Kebangkitan & Penebusan Legasi',
-          notableEvent: `Membersihkan nama keluarga daripada: ${oldReason || 'skandal lalu'} melalui ${label}`,
-          legacyStatusAtDeath: 'Redeemed'
-        });
+        st.redemptionCount = (st.redemptionCount || 0) + 1;
+        if (!Array.isArray(st.redemptionNotes)) st.redemptionNotes = [];
+        st.redemptionNotes.push(`Membersihkan nama keluarga daripada: ${oldReason || 'skandal lalu'} melalui ${label}`);
         this.save();
         GameState.adjustStats({ happiness: 24 });
         if (window.KarmaEndings) {

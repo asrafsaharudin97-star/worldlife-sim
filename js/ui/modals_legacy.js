@@ -54,17 +54,24 @@ window.LegacyModals = {
       `)
     ].join('');
 
+    if (window.Dynasty && Dynasty.sanitizeDynastyHistory) Dynasty.sanitizeDynastyHistory();
     const historyHtml = (d.dynastyHistory && d.dynastyHistory.length > 0)
-      ? d.dynastyHistory.map(h => `
+      ? d.dynastyHistory.map(h => {
+          const flag = (h.countryFlag && h.countryFlag !== '🌟') ? h.countryFlag : '🌐';
+          const redBadge = (h.redemptionCount || 0) > 0
+            ? ` <span class="cat-badge synergy" style="font-size:10px;">🌟 Penebus Legasi${h.redemptionCount > 1 ? ` (${h.redemptionCount}x)` : ''}</span>`
+            : '';
+          return `
           <div class="dynasty-node">
             <div class="dn-top">
-              <strong>${h.countryFlag || '👑'} Gen ${h.generation}: ${Utils.escapeHtml(h.name)}</strong>
+              <strong>${flag} Gen ${h.generation}: ${Utils.escapeHtml(h.name)}${redBadge}</strong>
               <span class="dn-meta">Umur ${h.age} • ${h.yearDied}</span>
             </div>
             <div class="dn-sub">${Utils.escapeHtml(h.endingTitle)} • Harta: <strong>${Utils.escapeHtml(h.peakWealthFormatted)}</strong></div>
             <div class="dn-event">${Utils.escapeHtml(h.notableEvent)}</div>
           </div>
-        `).join('')
+        `;
+        }).join('')
       : `<div class="info-banner">Anda ialah pengasas Generasi 1! Apabila watak ini menamatkan hayatnya, teruskan sebagai pewaris untuk membina salasilah dinasti anda.</div>`;
 
     const traitsHtml = (s && s.traits && s.traits.length > 0)
