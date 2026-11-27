@@ -311,6 +311,7 @@ window.CharacterStatus = {
   checkRoyalHonorEligibility(s) {
     if (!s || !s.alive || s.age < 18) return null;
     if (s.prison && s.prison.inPrison) return null;
+    if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s)) return null;
     const a = s.alignment || {};
     const stats = s.stats || {};
     const fame = a.fame || 0;
@@ -384,7 +385,8 @@ window.CharacterStatus = {
     let baseName = s.name || '';
     const prefixes = [];
 
-    if (s.honors && s.honors.currentTitle && !(s.prison && s.prison.inPrison)) {
+    const isRoyal = window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s);
+    if (!isRoyal && s.honors && s.honors.currentTitle && !(s.prison && s.prison.inPrison)) {
       prefixes.push(s.honors.currentTitle);
     }
 

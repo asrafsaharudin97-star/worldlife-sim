@@ -886,19 +886,25 @@ window.SpecialModesEngine = {
     const info = this.getActiveInfo(s);
     if (!info) return;
     const { def, state: am } = info;
-    while (am.rankIndex < def.ranks.length - 1) {
+    const maxRankIdx = (def.id === 'royalty' && !this.canHoldMonarchThrone(s))
+      ? Math.min(2, def.ranks.length - 1)
+      : def.ranks.length - 1;
+    while (am.rankIndex < maxRankIdx) {
       const next = def.ranks[am.rankIndex + 1];
       if (am.yearsInMode >= next.reqYears && am.metric1 >= next.reqM1) {
         am.rankIndex += 1;
+        const displayTitle = (def.id === 'royalty' && !this.canHoldMonarchThrone(s) && am.rankIndex === 2)
+          ? (s.gender === 'female' ? 'Puteri Raja' : 'Putera Raja')
+          : next.title;
         if (window.Dynasty) Dynasty.adjustReputation(5);
         if (window.KarmaEndings) {
           KarmaEndings.adjustAlignment({ fame: 10 });
-          KarmaEndings.addHighlight(def.icon, `Naik pangkat ke ${next.title} dalam ${def.title}`);
+          KarmaEndings.addHighlight(def.icon, `Naik pangkat ke ${displayTitle} dalam ${def.title}`);
         }
         if (window.CharacterStatus) CharacterStatus.recordPeakRole(s);
         if (window.Utils && Utils.playTone) Utils.playTone('achievement');
         GameState.addJournalEntry(
-          `🏆 KENAIKAN PANGKAT MOD KHAS! Anda kini bergelar ${def.icon} ${next.title} dalam ${def.title}!`,
+          `🏆 KENAIKAN PANGKAT MOD KHAS! Anda kini bergelar ${def.icon} ${displayTitle} dalam ${def.title}!`,
           'milestone'
         );
       } else {
