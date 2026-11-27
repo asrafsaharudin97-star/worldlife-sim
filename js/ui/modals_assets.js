@@ -4,6 +4,7 @@
    ========================================================================== */
 
 window.AssetModals = {
+  _marketScope: 'local',
   _activeTab: 'portfolio',
   _vehSubTab: 'new',
 
@@ -1006,5 +1007,57 @@ window.AssetModals = {
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('collectibles');
       }));
     }
+  }
+,
+  _renderGlobalScopePills(c) {
+    const sc = this._marketScope || 'local';
+    return `
+      <div class="tab-pills" style="margin-bottom:8px;">
+        <button type="button" class="tab-pill asset-scope-btn ${sc === 'local' ? 'active' : ''}" data-scope="local">📍 Pasaran Tempatan (${Utils.escapeHtml((c && c.name) || 'Semasa')})</button>
+        <button type="button" class="tab-pill asset-scope-btn ${sc === 'global' ? 'active' : ''}" data-scope="global">🌍 Pasaran Global (Luar Negara)</button>
+      </div>
+    `;
+  },
+
+  _renderGlobalPropertiesHtml(s) {
+    AssetsEngine.ensureGlobalMarkets(s);
+    const list = (s.assetMarket && s.assetMarket.globalProperties) || [];
+    if (list.length === 0) {
+      return '<div class="info-banner" style="font-size:12px;">Tiada lagi tawaran hartanah luar negara tahun ini. Semak semula tahun hadapan.</div>';
+    }
+    return list.map(item => `
+      <div class="migration-card" style="padding:9px 10px;margin-bottom:8px;">
+        <div class="mig-head">
+          <div class="mig-title">${item.flag} ${Utils.escapeHtml(item.countryName)} • ${item.icon} ${Utils.escapeHtml(item.name)}</div>
+          <span class="cat-badge">${Utils.escapeHtml(item.tag)}</span>
+        </div>
+        <div style="font-size:11.5px;color:#475569;margin:4px 0 8px;line-height:1.5;">
+          Harga Aset: <strong>${Utils.formatMoney(item.price, s.countryId)}</strong> • Duti Pembeli Asing &amp; Broker (5%): <strong>${Utils.formatMoney(item.dutyFee, s.countryId)}</strong><br/>
+          Jumlah Kos: <strong style="color:#059669;">${Utils.formatMoney(item.totalCost, s.countryId)}</strong> • Anggaran Sewa: ${item.yieldPct}%/thn
+        </div>
+        <button type="button" class="btn-sm primary btn-buy-global-prop" data-lid="${item.lid}" style="width:100%;">🌍 Beli Hartanah Luar Negara (${Utils.formatMoney(item.totalCost, s.countryId)})</button>
+      </div>
+    `).join('');
+  },
+
+  _renderGlobalVehiclesHtml(s) {
+    AssetsEngine.ensureGlobalMarkets(s);
+    const list = (s.assetMarket && s.assetMarket.globalVehicles) || [];
+    if (list.length === 0) {
+      return '<div class="info-banner" style="font-size:12px;">Tiada lagi tawaran kenderaan import tahun ini. Semak semula tahun hadapan.</div>';
+    }
+    return list.map(item => `
+      <div class="migration-card" style="padding:9px 10px;margin-bottom:8px;">
+        <div class="mig-head">
+          <div class="mig-title">${item.flag} ${Utils.escapeHtml(item.countryName)} • ${item.icon} ${Utils.escapeHtml(item.name)}</div>
+          <span class="cat-badge">Import Eksklusif</span>
+        </div>
+        <div style="font-size:11.5px;color:#475569;margin:4px 0 8px;line-height:1.5;">
+          Harga Asas: <strong>${Utils.formatMoney(item.price, s.countryId)}</strong> • Caj Import &amp; Penghantaran (12%): <strong>${Utils.formatMoney(item.importFee, s.countryId)}</strong><br/>
+          Jumlah Kos: <strong style="color:#059669;">${Utils.formatMoney(item.totalCost, s.countryId)}</strong>
+        </div>
+        <button type="button" class="btn-sm primary btn-buy-global-veh" data-lid="${item.lid}" style="width:100%;">🌍 Import Kenderaan (${Utils.formatMoney(item.totalCost, s.countryId)})</button>
+      </div>
+    `).join('');
   }
 };

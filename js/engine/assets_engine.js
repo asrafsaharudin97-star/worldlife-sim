@@ -245,6 +245,8 @@ window.AssetsEngine = {
       m.invPrices[inst.id] = { price: nextPrice, changePct: Number((pct * 100).toFixed(1)) };
     });
 
+    if (!opts.isRefresh) { m.globalProperties = []; m.globalVehicles = []; this.ensureGlobalMarkets(s); }
+
     // 4) Pasaran Lelongan Pusaka & Koleksi Tahunan Terhad (1–3 item unik setahun; tidak ditambah semasa refresh)
     if (!opts.isRefresh) {
       const ownedSet = this._getOwnedCollectibleKeys(s);
@@ -642,7 +644,7 @@ window.AssetsEngine = {
       return { ok: false, msg: `Perlukan ${Utils.formatMoney(totalCost, s.countryId)}${useInspection ? ' (termasuk Inspeksi 1%)' : ''}.` };
     }
 
-    s.money -= totalCost;
+    s.money -= finalCost;
 
     // Risiko "Aset Busuk" (15%–20% peluang; turun ke ~3% jika mengupah pemeriksa/inspeksi!)
     const lemonProb = useInspection ? 0.03 : 0.18;
@@ -1158,6 +1160,142 @@ window.AssetsEngine = {
   // --------------------------------------------------------------------------
   // 5. KOLEKSI, LELONGAN MISTERI & PUSAKA KELUARGA (HEIRLOOMS)
   // --------------------------------------------------------------------------
+  GLOBAL_PROPERTIES_CATALOG: [
+    { id: 'gp_jp_ryokan',   countryId: 'JP', flag: '🇯🇵', countryName: 'Jepun',        name: 'Ryokan Tradisional Kyoto',     icon: '🏯', baseUsd: 680000,  yieldPct: 6.2, tag: '📈 Lokasi Pelancongan' },
+    { id: 'gp_us_loft',     countryId: 'US', flag: '🇺🇸', countryName: 'AS',           name: 'Loft Mewah Manhattan',         icon: '🏙️', baseUsd: 1450000, yieldPct: 5.5, tag: '✨ Pegangan Bebas' },
+    { id: 'gp_gb_town',     countryId: 'GB', flag: '🇬🇧', countryName: 'UK',           name: 'Townhouse Kensington London',  icon: '🏘️', baseUsd: 1850000, yieldPct: 4.8, tag: '✨ Pegangan Bebas' },
+    { id: 'gp_ch_chalet',   countryId: 'CH', flag: '🇨🇭', countryName: 'Switzerland',  name: 'Chalet Alpine Zermatt',        icon: '🏔️', baseUsd: 2200000, yieldPct: 5.0, tag: '📈 Lokasi Pelancongan' },
+    { id: 'gp_it_villa',    countryId: 'IT', flag: '🇮🇹', countryName: 'Itali',        name: 'Vila Tuscany & Ladang Anggur', icon: '🏡', baseUsd: 950000,  yieldPct: 5.8, tag: '📈 Lokasi Pelancongan' },
+    { id: 'gp_fr_paris',    countryId: 'FR', flag: '🇫🇷', countryName: 'Perancis',     name: 'Apartmen Haussmann Paris',     icon: '🗼', baseUsd: 1250000, yieldPct: 4.9, tag: '✨ Pegangan Bebas' },
+    { id: 'gp_sg_condo',    countryId: 'SG', flag: '🇸🇬', countryName: 'Singapura',    name: 'Penthouse Marina Bay',         icon: '🏢', baseUsd: 2600000, yieldPct: 4.5, tag: '✨ Pegangan Bebas' },
+    { id: 'gp_au_sydney',   countryId: 'AU', flag: '🇦🇺', countryName: 'Australia',    name: 'Vila Pinggir Pantai Bondi',    icon: '🏖️', baseUsd: 1350000, yieldPct: 5.4, tag: '📈 Lokasi Pelancongan' },
+    { id: 'gp_ae_dubai',    countryId: 'AE', flag: '🇦🇪', countryName: 'UAE',          name: 'Vila Palm Jumeirah Dubai',     icon: '🌴', baseUsd: 2900000, yieldPct: 6.5, tag: '✨ Pegangan Bebas' },
+    { id: 'gp_bs_island',   countryId: 'BS', flag: '🇧🇸', countryName: 'Bahamas',      name: 'Vila Persendirian Nassau',     icon: '🏝️', baseUsd: 1750000, yieldPct: 6.0, tag: '📈 Lokasi Pelancongan' }
+  ],
+
+  GLOBAL_VEHICLES_CATALOG: [
+    { id: 'gv_jp_jdm',      countryId: 'JP', flag: '🇯🇵', countryName: 'Jepun',        name: 'JDM Klasik Skyline GT-R',      icon: '🏎️', baseUsd: 145000, upkeepPct: 0.03 },
+    { id: 'gv_it_super',    countryId: 'IT', flag: '🇮🇹', countryName: 'Itali',        name: 'Supercar V12 Maranello',       icon: '🏎️', baseUsd: 420000, upkeepPct: 0.04 },
+    { id: 'gv_us_muscle',   countryId: 'US', flag: '🇺🇸', countryName: 'AS',           name: 'Muscle Car V8 Klasik 1969',    icon: '🚗', baseUsd: 115000, upkeepPct: 0.03 },
+    { id: 'gv_de_coupe',    countryId: 'DE', flag: '🇩🇪', countryName: 'Jerman',       name: 'Coupe Mewah Stuttgart GT',     icon: '🚘', baseUsd: 230000, upkeepPct: 0.035 },
+    { id: 'gv_gb_gt',       countryId: 'GB', flag: '🇬🇧', countryName: 'UK',           name: 'Grand Tourer Klasik Britain',  icon: '🚘', baseUsd: 285000, upkeepPct: 0.035 }
+  ],
+
+  ensureGlobalMarkets(s) {
+    if (!s || !s.assetMarket) return;
+    const m = s.assetMarket;
+    if (!Array.isArray(m.globalProperties) || m.globalProperties.length === 0) {
+      const pool = this.GLOBAL_PROPERTIES_CATALOG.filter(x => x.countryId !== s.countryId);
+      const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, Utils.randInt(3, 5));
+      m.globalProperties = picked.map((tpl, i) => {
+        const basePrice = Math.round(Utils.usdToLocal(tpl.baseUsd, s.countryId) * (0.92 + Math.random() * 0.16));
+        return {
+          lid: `gp_${s.year}_${i}_${tpl.id}`,
+          tplId: tpl.id,
+          countryId: tpl.countryId,
+          flag: tpl.flag,
+          countryName: tpl.countryName,
+          name: tpl.name,
+          icon: tpl.icon,
+          price: basePrice,
+          dutyFee: Math.round(basePrice * 0.05),
+          totalCost: Math.round(basePrice * 1.05),
+          yieldPct: tpl.yieldPct,
+          upkeep: Math.round(basePrice * 0.012),
+          tag: tpl.tag
+        };
+      });
+    }
+    if (!Array.isArray(m.globalVehicles) || m.globalVehicles.length === 0) {
+      const pool = this.GLOBAL_VEHICLES_CATALOG.filter(x => x.countryId !== s.countryId);
+      const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, Utils.randInt(2, 3));
+      m.globalVehicles = picked.map((tpl, i) => {
+        const basePrice = Math.round(Utils.usdToLocal(tpl.baseUsd, s.countryId) * (0.94 + Math.random() * 0.14));
+        return {
+          lid: `gv_${s.year}_${i}_${tpl.id}`,
+          tplId: tpl.id,
+          countryId: tpl.countryId,
+          flag: tpl.flag,
+          countryName: tpl.countryName,
+          name: tpl.name,
+          icon: tpl.icon,
+          price: basePrice,
+          importFee: Math.round(basePrice * 0.12),
+          totalCost: Math.round(basePrice * 1.12),
+          upkeep: Math.round(basePrice * tpl.upkeepPct)
+        };
+      });
+    }
+  },
+
+  buyGlobalProperty(listingId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    this.ensureGlobalMarkets(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia ketika di penjara.' };
+    const item = (s.assetMarket.globalProperties || []).find(x => x.lid === listingId);
+    if (!item) return { ok: false, msg: 'Tawaran hartanah luar negara tidak ditemui.' };
+    if (s.money < item.totalCost) {
+      return { ok: false, msg: `Baki tidak mencukupi — jumlah kos (termasuk Duti Pembeli Asing & Broker 5%) ialah ${Utils.formatMoney(item.totalCost, s.countryId)}.` };
+    }
+    s.money -= item.totalCost;
+    s.assets.properties.push({
+      uid: `prop_glb_${Date.now()}_${Utils.randInt(10, 99)}`,
+      id: item.tplId,
+      name: `${item.flag} ${item.name}`,
+      icon: item.icon,
+      assetCountry: item.countryId,
+      assetCountryName: item.countryName,
+      assetCountryFlag: item.flag,
+      purchasePrice: item.price,
+      value: item.price,
+      mortgage: 0,
+      annualMortgage: 0,
+      upkeep: item.upkeep,
+      yieldPct: item.yieldPct,
+      rented: false,
+      condition: 95,
+      isGlobal: true
+    });
+    s.assetMarket.globalProperties = s.assetMarket.globalProperties.filter(x => x.lid !== listingId);
+    GameState.adjustStats({ happiness: 8 });
+    GameState.addJournalEntry(`🌍 Anda membeli hartanah luar negara ${item.flag} ${item.name} (${item.countryName}) dengan jumlah kos ${Utils.formatMoney(item.totalCost, s.countryId)} (termasuk Duti Asing & Broker 5%).`, 'milestone');
+    GameState.save();
+    return { ok: true, msg: `${item.flag} ${item.name} berjaya dibeli!` };
+  },
+
+  buyGlobalVehicle(listingId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    this.ensureGlobalMarkets(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia ketika di penjara.' };
+    const item = (s.assetMarket.globalVehicles || []).find(x => x.lid === listingId);
+    if (!item) return { ok: false, msg: 'Tawaran kenderaan import tidak ditemui.' };
+    if (s.money < item.totalCost) {
+      return { ok: false, msg: `Baki tidak mencukupi — jumlah kos (termasuk Caj Import & Penghantaran 12%) ialah ${Utils.formatMoney(item.totalCost, s.countryId)}.` };
+    }
+    s.money -= item.totalCost;
+    s.assets.vehicles.push({
+      uid: `veh_glb_${Date.now()}_${Utils.randInt(10, 99)}`,
+      id: item.tplId,
+      name: `${item.flag} ${item.name}`,
+      icon: item.icon,
+      originCountry: item.countryId,
+      originCountryName: item.countryName,
+      originFlag: item.flag,
+      purchasePrice: item.price,
+      value: item.price,
+      upkeep: item.upkeep,
+      condition: 98,
+      isGlobal: true
+    });
+    s.assetMarket.globalVehicles = s.assetMarket.globalVehicles.filter(x => x.lid !== listingId);
+    GameState.adjustStats({ happiness: 7 });
+    GameState.addJournalEntry(`🌍 Anda mengimport kenderaan ${item.flag} ${item.name} (${item.countryName}) dengan jumlah kos ${Utils.formatMoney(item.totalCost, s.countryId)} (termasuk Caj Import 12%).`, 'culture');
+    GameState.save();
+    return { ok: true, msg: `${item.flag} ${item.name} berjaya diimport!` };
+  },
+
   MAX_PERSONAL_COLLECTIBLES: 10,
 
   _getOwnedCollectibleKeys(s) {
