@@ -1759,3 +1759,83 @@ if (window.GAME_EVENTS && Array.isArray(GAME_EVENTS.ageUpRandomPool)) {
     ]}
   );
 }
+
+// Kolam Khusus Event & Dilema Misteri Sekular (8 Variasi Baharu)
+if (window.GAME_EVENTS) {
+  GAME_EVENTS.mysteryPool = [
+    {
+      id: 'mys_locked_box', minAge: 14, maxAge: 85, icon: '🗝️', category: 'misteri',
+      title: 'Peti Berkunci di {tempat}',
+      text: 'Di sudut sunyi berhampiran {tempat}, anda terjumpa sebuah peti logam kecil berkunci dengan ukiran tahun lama dan inisial yang tidak dikenali.',
+      choices: [
+        { label: 'Bawa ke tukang kunci untuk dibuka secara sah', effects: { moneyUsd: 260, smarts: 3, happiness: 4 }, outcome: 'Di dalamnya terdapat koleksi syiling antik dan catatan pelayaran lama dari {negara} yang bernilai!' },
+        { label: 'Serahkan kepada pihak pengurusan tempatan', effects: { karma: 6, happiness: 3 }, outcome: 'Pihak pengurusan berterima kasih atas kejujuran anda dan merekodkan laporan penemuan.' },
+        { label: 'Biarkan sahaja di tempat asalnya', effects: { happiness: 1 }, outcome: 'Anda berlalu pergi tanpa mahu mencampuri urusan orang lain.' }
+      ]
+    },
+    {
+      id: 'mys_midnight_call', minAge: 16, maxAge: 85, icon: '📞', category: 'misteri',
+      title: 'Panggilan Misteri Tengah Malam',
+      text: 'Telefon anda berdering tepat pukul 12 tengah malam daripada nombor rahsia. Suara di hujung talian hanya menyebut nama anda dan satu alamat lama di {negara}.',
+      choices: [
+        { label: 'Jejaki alamat tersebut pada waktu siang', effects: { smarts: 4, happiness: 3 }, outcome: 'Alamat itu rupanya sebuah kedai buku arkib lama yang menyimpan rujukan berguna berkaitan {jawatan}.' },
+        { label: 'Tamatkan panggilan dan sekat nombor tersebut', effects: { health: 2, happiness: 2 }, outcome: 'Anda memilih keselamatan diri dan tidur lena tanpa gangguan.' }
+      ]
+    },
+    {
+      id: 'mys_hidden_corridor', minAge: 14, maxAge: 80, icon: '🏛️', category: 'misteri',
+      title: 'Lorong Tersembunyi di Bangunan Lama',
+      text: 'Semasa melawat sebuah bangunan bersejarah di {negara}, anda ternampak pintu kayu kecil separa terbuka menuju ke bilik arkib tersembunyi.',
+      choices: [
+        { label: 'Tinjau seketika dengan berhati-hati', effects: { smarts: 4, happiness: 4 }, outcome: 'Anda menemui peta bandar lama yang jarang dilihat dan berkongsi penemuan itu dengan penjaga bangunan.' },
+        { label: 'Maklumkan kepada pengawal bertugas', effects: { karma: 4, happiness: 2 }, outcome: 'Pengawal segera mengunci semula pintu bilik arkib tersebut dan mengucapkan terima kasih.' }
+      ]
+    },
+    {
+      id: 'mys_heirloom_note', minAge: 15, maxAge: 85, icon: '📜', category: 'misteri',
+      title: 'Nota Berkode Dalam Dokumen Lama',
+      text: 'Di celah fail lama di rumah, anda menemui sekeping nota bertulisan tangan dengan susunan nombor dan petunjuk arah di sekitar {negara}.',
+      choices: [
+        { label: 'Luangkan masa merungkai kod tersebut', effects: { smarts: 5, moneyUsd: 180, happiness: 3 }, outcome: 'Kod itu merujuk kepada peti simpanan lama yang menyimpan barangan koleksi kecil!' },
+        { label: 'Minta pendapat {rakan} untuk menyemaknya', effects: { smarts: 2, happiness: 4 }, outcome: 'Perbincangan bersama {rakan} menjadi sesi teka-teki petang yang menghiburkan.' },
+        { label: 'Simpan sahaja sebagai kenangan', effects: { happiness: 1 }, outcome: 'Nota itu kekal tersimpan rapi dalam laci anda.' }
+      ]
+    },
+    {
+      id: 'mys_hatted_stranger', minAge: 18, maxAge: 85, icon: '🕵️', category: 'misteri',
+      title: 'Orang Asing Bertopi di {tempat}',
+      text: 'Seorang individu bertopi di {tempat} meletakkan sekeping sampul tanpa nama di meja anda sambil berbisik tentang peluang besar dalam {jawatan}, lalu terus hilang dalam orang ramai.',
+      choices: [
+        { label: 'Buka dan teliti isi sampul tersebut', effects: { smarts: 4, moneyUsd: 320, happiness: 2 }, outcome: 'Sampul itu mengandungi analisis pasaran sahih yang membantu anda membuat keputusan kewangan bijak.' },
+        { label: 'Buang sampul kerana terlalu mencurigakan', effects: { health: 1, happiness: 1 }, outcome: 'Anda enggan mengambil risiko daripada sumber yang tidak dikenali.' }
+      ]
+    },
+    {
+      id: 'mys_unmarked_key', minAge: 14, maxAge: 85, icon: '🔑', category: 'misteri',
+      title: 'Kunci Bernombor Tanpa Pemilik',
+      text: 'Anda menjumpai anak kunci tembaga bernombor loker stesen di bangku berhampiran {tempat}.',
+      choices: [
+        { label: 'Serahkan ke kaunter barang hilang stesen', effects: { karma: 5, happiness: 3 }, outcome: 'Petugas kaunter mengesahkan pemiliknya sedang mencari kunci tersebut sejak pagi.' },
+        { label: 'Periksa nombor loker terlebih dahulu', effects: { smarts: 2, happiness: 2 }, outcome: 'Loker itu hanya mengandungi buku catatan harian lama yang kemudiannya anda serahkan ke kaunter.' }
+      ]
+    },
+    {
+      id: 'mys_wrong_parcel', minAge: 18, maxAge: 85, icon: '📦', category: 'misteri',
+      title: 'Bungkusan Tanpa Pengirim',
+      text: 'Sebuah bungkusan kemas tanpa alamat pengirim tiba di hadapan pintu rumah anda di {negara} dengan label bertulis "Untuk Pemilik Baharu".',
+      choices: [
+        { label: 'Hubungi syarikat kurier untuk pengesahan', effects: { smarts: 2, karma: 4, happiness: 2 }, outcome: 'Kurier mengesahkan ia hadiah penghargaan daripada kenalan industri lama anda.' },
+        { label: 'Buka dengan berhati-hati di luar rumah', effects: { happiness: 4, moneyUsd: 120 }, outcome: 'Di dalamnya terdapat set pen klasik dan nota ringkas memuji usaha anda.' }
+      ]
+    },
+    {
+      id: 'mys_archived_photo', minAge: 12, maxAge: 85, icon: '📷', category: 'misteri',
+      title: 'Foto Lama Berlatar Belakang {negara}',
+      text: 'Di kedai antik berhampiran {tempat}, anda ternampak sekeping foto lama yang menampilkan individu seiras wajah anda di hadapan mercu tanda {negara}.',
+      choices: [
+        { label: 'Beli foto itu dan kaji sejarahnya', effects: { moneyUsd: -30, smarts: 3, happiness: 5 }, outcome: 'Kajian kecil anda mendedahkan kisah menarik tentang sejarah bandar lama tersebut.' },
+        { label: 'Senyum sahaja dan teruskan berjalan', effects: { happiness: 2 }, outcome: 'Kebetulan yang unik itu menceriakan petang anda.' }
+      ]
+    }
+  ];
+}

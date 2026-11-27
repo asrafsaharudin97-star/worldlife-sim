@@ -24,6 +24,7 @@ window.Sim = {
     s.yearlyActions = {};
     s.cultureVisitedThisYear = false;
     s.scholarshipIvUsedThisYear = false;
+    s.hospitalVisitedThisYear = false;
     if (window.SecurityThreats && SecurityThreats.tickYearlySecurity) SecurityThreats.tickYearlySecurity(s);
     s._pendingImmigrationEnforcement = null;
     if (s.countryBans && typeof s.countryBans === 'object') {
@@ -1689,6 +1690,18 @@ window.Sim = {
       return this._applyPopupInterpolation({ ...ev, choices: shuffledChoices, isAgeUpRandom: true }, s);
     };
 
+    // 6A. Kolam Khusus Event Misteri (peluang adil 18% + reset dek jika habis dipusing)
+    if (s.age >= 12 && !(s.prison && s.prison.inPrison) && Array.isArray(GAME_EVENTS.mysteryPool) && Utils.chance(0.18)) {
+      let mysPool = GAME_EVENTS.mysteryPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id));
+      if (mysPool.length === 0) {
+        const mysIds = new Set(GAME_EVENTS.mysteryPool.map(x => x && x.id));
+        s.recentPopupIds = s.recentPopupIds.filter(id => !mysIds.has(id));
+        s.recentRandomEventIds = s.recentPopupIds.slice(0, 20);
+        mysPool = GAME_EVENTS.mysteryPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge);
+      }
+      if (mysPool.length > 0) return recordRecent(Utils.pick(mysPool));
+    }
+
     const customRandomPool = (GAME_EVENTS.ageUpRandomPool || []).filter(
       e => s.age >= e.minAge && s.age <= e.maxAge && !recentSet.has(e.id)
     );
@@ -3318,6 +3331,7 @@ window.Sim = {
 
   visitDoctor(isPrivate = false) {
     const s = GameState.current;
+    if (s && s.hospitalVisitedThisYear) return { ok: false, msg: 'Anda sudah menjalani rawatan di klinik/hospital tahun ini. Rawatan lanjut hanya dibuka selepas +Umur.' };
     const c = Utils.getCountry(s.countryId);
     const actId = isPrivate ? 'doc_priv' : 'doc_pub';
     if (!Array.isArray(s.yearlyActions.usedActivitiesThisYear)) s.yearlyActions.usedActivitiesThisYear = [];
@@ -3333,7 +3347,7 @@ window.Sim = {
     const heal = isPrivate ? Utils.randInt(14, 24) : Utils.randInt(9, 16);
     GameState.adjustStats({ health: heal, happiness: 3 });
     GameState.addJournalEntry(
-      `🏥 Mendapatkan rawatan di ${isPrivate ? 'hospital pakar swasta' : c.healthcare.type} di ${c.name} (${Utils.formatMoney(cost, s.countryId)}). Kesihatan meningkat +${heal}%!`
+      (s.hospitalVisitedThisYear = true, `🏥 Mendapatkan rawatan di ${isPrivate ? 'hospital pakar swasta' : c.healthcare.type} di ${c.name} (${Utils.formatMoney(cost, s.countryId)}). Kesihatan meningkat +${heal}%!`)
     );
     GameState.save();
     return { ok: true, msg: `Kesihatan meningkat +${heal}%!` };

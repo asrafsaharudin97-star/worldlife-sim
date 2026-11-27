@@ -459,6 +459,7 @@ window.GameState = {
     if (typeof s.loanBlacklisted !== 'boolean') s.loanBlacklisted = false;
     if (typeof s.cultureVisitedThisYear !== 'boolean') s.cultureVisitedThisYear = false;
     if (typeof s.scholarshipIvUsedThisYear !== 'boolean') s.scholarshipIvUsedThisYear = false;
+    if (typeof s.hospitalVisitedThisYear !== 'boolean') s.hospitalVisitedThisYear = false;
     if (typeof s.hasTakenFoundation !== 'boolean') s.hasTakenFoundation = false;
     if (!Array.isArray(s.recentPopupIds)) s.recentPopupIds = [];
     if (!Array.isArray(s.secrets)) s.secrets = [];
@@ -750,6 +751,7 @@ window.GameState = {
       loans: this._inheritGenerationalDebts(parent, cId),
       pendingDeportation: null,
       scholarshipIvUsedThisYear: false,
+      hospitalVisitedThisYear: false,
       hasTakenFoundation: false,
       pastLives: Array.isArray(parent.pastLives) ? [...parent.pastLives] : [],
 

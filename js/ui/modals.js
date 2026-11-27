@@ -1751,7 +1751,7 @@ window.Modals = {
         `}
         <div style="font-size:11.5px;color:#64748b;line-height:1.5;margin-bottom:12px;">
           ${isOffshore
-            ? 'Baki tunai peribadi tidak disentuh dalam mod Luar Pesisir. Untuk memindahkan tunai, gunakan saluran Proksi di atas. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.'
+            ? `Yuran Proksi Guaman Luar Pesisir (0.5%, Min $150K – Maks $5M USD): <strong>${fmt(LegalInheritanceEngine.getOffshoreBulkProxyFee(s))}</strong> (ditolak daripada tunai peribadi). Untuk memindahkan tunai, gunakan saluran Proksi di atas.`
             : 'Aset yang dipindahkan menjadi milik Tabung Yayasan Keluarga sepenuhnya. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.'}
         </div>
         <button type="button" class="btn-sm primary" id="btn-bulk-confirm-go" style="width:100%;">✅ ${isOffshore ? 'Sahkan Pindah Semua Aset &amp; Pusaka' : 'Sahkan Pindah Semua ke Yayasan'}</button>

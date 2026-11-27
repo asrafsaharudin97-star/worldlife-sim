@@ -1330,6 +1330,28 @@ window.LegalInheritanceEngine = {
     };
   },
 
+  getOffshoreBulkProxyFee(s) {
+    if (!s) return 0;
+    let totalVal = 0;
+    const pf = (s.assets && s.assets.portfolio) || {};
+    Object.keys(pf).forEach(instId => {
+      const pos = pf[instId];
+      if (!pos || pos.units <= 0 || this._isTrustFlagged(pos)) return;
+      const uPrice = this.getTrustInvestmentUnitPrice(s, { instId, units: pos.units, totalCost: pos.totalCost });
+      totalVal += Math.round(pos.units * uPrice);
+    });
+    ['properties', 'vehicles', 'collectibles'].forEach(k => {
+      ((s.assets && s.assets[k]) || []).forEach(item => {
+        if (item && !this._isTrustFlagged(item)) totalVal += Math.max(0, Math.round(item.value || 0));
+      });
+    });
+    const cid = s.countryId || 'MY';
+    const raw = Math.round(totalVal * 0.005);
+    const minFee = Utils.usdToLocal(150000, cid);
+    const maxFee = Utils.usdToLocal(5000000, cid);
+    return Math.min(maxFee, Math.max(minFee, raw));
+  },
+
   transferAllPersonalWealthToTrust(s, opts = {}) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
@@ -1341,10 +1363,16 @@ window.LegalInheritanceEngine = {
     }
     const isOffshore = this.isTrustOffshore(s);
     const preview = this.getBulkTransferPreview(s);
+    let offshoreProxyFee = 0;
     if (isOffshore) {
       if (!preview.hasNonCash) {
         return { ok: false, msg: 'Tiada aset atau pusaka peribadi yang layak untuk dipindahkan.' };
       }
+      offshoreProxyFee = this.getOffshoreBulkProxyFee(s);
+      if ((s.money || 0) < offshoreProxyFee) {
+        return { ok: false, msg: `Tunai peribadi tidak mencukupi untuk menampung yuran Proksi Guaman Luar Pesisir (${Utils.formatMoney(offshoreProxyFee, s.countryId)}).` };
+      }
+      s.money -= offshoreProxyFee;
     } else if (!preview.hasAny) {
       return { ok: false, msg: 'Tiada harta peribadi yang layak untuk dipindahkan.' };
     }
@@ -1393,7 +1421,7 @@ window.LegalInheritanceEngine = {
     this.deduplicateTrustAssets(s);
     if (totalBasisDelta > 0) this._adjustTrustBasis(s, totalBasisDelta);
     const logText = isOffshore
-      ? '📦 Semua aset pelaburan, hartanah, kenderaan, dan pusaka peribadi telah dipindahkan ke dalam Tabung Yayasan Keluarga.'
+      ? `📦 Semua aset pelaburan, hartanah, kenderaan, dan pusaka peribadi telah dipindahkan ke dalam Tabung Yayasan Keluarga melalui Proksi Guaman (Yuran Proksi: -${Utils.formatMoney(offshoreProxyFee, s.countryId)}).`
       : '📦 Semua harta peribadi layak telah dipindahkan serentak ke dalam Tabung Yayasan Keluarga.';
     GameState.addJournalEntry(logText, 'milestone');
     GameState.save();
