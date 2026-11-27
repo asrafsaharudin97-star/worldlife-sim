@@ -5,6 +5,15 @@
 
 window.Sim = {
   ageUp() {
+    if (window.GameState && GameState.beginSaveBatch) GameState.beginSaveBatch();
+    try {
+      return this._ageUpCore();
+    } finally {
+      if (window.GameState && GameState.endSaveBatch) GameState.endSaveBatch();
+    }
+  },
+
+  _ageUpCore() {
     const s = GameState.current;
     if (!s || !s.alive) return { event: null, died: false };
     GameState.ensureUpgradedState();

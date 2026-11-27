@@ -2194,7 +2194,23 @@ window.GameState = {
     }
   },
 
+  _saveBatchDepth: 0,
+  _saveBatchDirty: false,
+
+  beginSaveBatch() {
+    this._saveBatchDepth = (this._saveBatchDepth || 0) + 1;
+  },
+
+  endSaveBatch() {
+    if (this._saveBatchDepth > 0) this._saveBatchDepth -= 1;
+    if (this._saveBatchDepth === 0 && this._saveBatchDirty) {
+      this._saveBatchDirty = false;
+      this.save();
+    }
+  },
+
   save() {
+    if (this._saveBatchDepth > 0) { this._saveBatchDirty = true; return; }
     if (this._saveTimer && typeof clearTimeout === 'function') {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
