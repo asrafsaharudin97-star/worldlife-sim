@@ -1282,6 +1282,7 @@ window.AssetsEngine = {
     let cukaiPintuAnnual = 0, cukaiTanahAnnual = 0;
 
     for (const p of s.assets.properties) {
+      if (!p || p.inTrust || p.isInTrust || p.owner === 'trust') continue;
       const pv = p.value || 0;
       propVal += pv;
       totalMortgage += (p.mortgage || 0);
@@ -1293,12 +1294,13 @@ window.AssetsEngine = {
     }
 
     for (const v of s.assets.vehicles) {
+      if (!v || v.inTrust || v.isInTrust || v.owner === 'trust') continue;
       vehVal += (v.value || 0);
       maintenanceCost += (v.upkeep || 0);
     }
 
     for (const [instId, pos] of Object.entries(s.assets.portfolio || {})) {
-      if (!pos || pos.units <= 0) continue;
+      if (!pos || pos.units <= 0 || pos.inTrust || pos.isInTrust || pos.owner === 'trust') continue;
       const inst = AssetsData.INVESTMENTS.find(x => x.id === instId);
       const mPrice = (s.assetMarket.invPrices[instId] && s.assetMarket.invPrices[instId].price)
         || this._scaleUsdToLocal(inst ? inst.baseUnitUsd : 100, s.countryId, false);
@@ -1311,6 +1313,7 @@ window.AssetsEngine = {
 
     let displayRoyaltyGross = 0, displayInsuranceCost = 0;
     for (const c of s.assets.collectibles) {
+      if (!c || c.inTrust || c.isInTrust || c.owner === 'trust') continue;
       colVal += (c.value || 0);
       if (c.isDisplayed) {
         const fin = this.getCollectibleDisplayFinances(s, c);

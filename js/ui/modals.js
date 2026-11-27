@@ -1611,7 +1611,24 @@ window.Modals = {
           <strong>🏛️ Sistem Pewarisan:</strong> ${Utils.escapeHtml(report.systemName)}<br/>
           <strong>📜 Wasiat Semasa:</strong> ${Utils.escapeHtml(LegalInheritanceEngine.getWasiatSummary(s))}<br/>
           Harta Peribadi Boleh Agih: <strong>${fmt(Math.max(0, report.distributable || 0))}</strong>${report.taxRatePct > 0 ? ` (Cukai Pusaka ${report.taxRatePct}%)` : ' (0% Cukai Pusaka)'}
-          ${ft.active ? `<div style="font-size:11.5px;color:#475569;margin-top:4px;">ℹ️ Aset Tabung Yayasan Keluarga diurus secara berasingan dan bebas Cukai Pusaka.</div>` : ''}
+          ${(() => {
+            const aSum = (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) ? AssetsEngine.getAssetCashflowSummary(s) : null;
+            const cashVal = Math.max(0, Math.round(s.money || 0));
+            const invVal = Math.round(((aSum && aSum.invVal) || 0) + (s.investments || 0));
+            const assetColVal = Math.round(((aSum && aSum.propVal) || 0) + ((aSum && aSum.vehVal) || 0) + ((aSum && aSum.colVal) || 0));
+            const bizVal = (window.SpecialModesEngine && SpecialModesEngine.getCeoEquityLocal) ? Math.round(SpecialModesEngine.getCeoEquityLocal(s) || 0) : 0;
+            const loansVal = (window.LoansEngine && LoansEngine.getTotalDebt) ? Math.round(LoansEngine.getTotalDebt(s) || 0) : 0;
+            const totalDebtVal = Math.round(((aSum && aSum.totalDebt) || 0) + loansVal + (s.money < 0 ? Math.abs(Math.round(s.money)) : 0));
+            const parts = [];
+            if (cashVal > 0) parts.push(`Tunai ${fmt(cashVal)}`);
+            if (invVal > 0) parts.push(`Pelaburan ${fmt(invVal)}`);
+            if (assetColVal > 0) parts.push(`Aset/Pusaka ${fmt(assetColVal)}`);
+            if (bizVal > 0) parts.push(`Perniagaan ${fmt(bizVal)}`);
+            if (totalDebtVal > 0) parts.push(`Hutang -${fmt(totalDebtVal)}`);
+            const breakdownLine = parts.length > 0 ? `Pecahan Peribadi: ${parts.join(' • ')}` : 'Pecahan Peribadi: Tiada aset peribadi';
+            const trustNote = ft.active ? ' • Tidak termasuk Tabung Yayasan Keluarga' : '';
+            return `<div style="font-size:11px;color:#475569;margin-top:4px;line-height:1.45;">${breakdownLine}${trustNote}</div>`;
+          })()}
         </div>
         ${(window.GameState && GameState.getEligibleHeirs && GameState.getEligibleHeirs(s).length === 0) ? `
           <div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:12px;margin-top:8px;">
