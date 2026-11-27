@@ -1862,7 +1862,7 @@ window.Modals = {
                     : 0;
                   return totalGalleryNet > 0 ? `Royalti Pameran Galeri: <strong style="color:#16a34a;">+${fmt(totalGalleryNet)}/thn</strong><br/>` : '';
                 })()}
-                Kadar Yuran Tahunan: <strong>${annualFeePctStr}/thn</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
+                Kadar Yuran Tahunan: <strong>${trustRates.isTaxHaven ? '0%/thn — Bebas Cukai' : `${annualFeePctStr}/thn (Maks: $${Math.round((trustRates.annualFeeCapUsd || 0) / 1000000)}M USD/thn)`}</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
               </div>
             </div>`;
           })() : `
@@ -1883,8 +1883,8 @@ window.Modals = {
             ${hasArrears ? `
               <div class="info-banner" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;font-size:12px;line-height:1.5;margin-bottom:8px;">
                 <strong>⚠️ Tunggakan Yuran: ${fmt(unpaidFees)}${unpaidUsdEq ? ` (${unpaidUsdEq})` : ''}</strong><br/>
-                Had Maksimum Tunggakan: <strong>$100M USD</strong> (pembubaran automatik jika dicapai).<br/>
-                Kemasukan/pengeluaran dana, pemindahan aset, dan pembubaran sukarela dikunci sehingga semua tunggakan dilangsaikan.
+                ⏳ <strong>Pembubaran paksa dalam ${Math.max(1, 4 - (ft.unpaidStreakYears || 0))} tahun</strong> • Brek Had Hutang Kumulatif: <strong>$100M USD</strong>.<br/>
+                Kemasukan/pengeluaran dana, pemindahan aset, dan pembubaran sukarela dikunci sehingga semua tunggakan dilangsaikan (jualan aset/pelaburan Yayasan kekal dibuka).
               </div>
               <button type="button" class="primary-btn" id="btn-trust-reactivate" style="width:100%;margin-bottom:8px;background:#d97706;">
                 💳 Langsaikan Tunggakan Yuran (${fmt(unpaidFees)})
