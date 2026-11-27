@@ -24,8 +24,19 @@ When your character **migrates to another country**, the simulation dynamically 
 - **Full Crime, Court Trial, Prison & Fugitive System:** Interactive courtroom trials & lawyers, playable prison escape & riot mini-games, underground illegal emigration, plastic surgery, and fake identities.
 - **Multi-Generational Dynasty & Safe Save Performance:** Heir continuation, Family Reputation, Prime Achievements, centralized HUD/Biodata/Income sync (`CharacterStatus`), `SafeStorage` quota protection, and `.json` save export/import.
 
-## Negara Pulau Bebas Cukai (Tabung Yayasan Keluarga — 0% Yuran & 0% Cukai Korporat)
-Pemain yang menetap di mana-mana **21 Negara Pulau Bebas Cukai** di bawah menikmati **0% Yuran Tahunan Yayasan** dan **0% Cukai Korporat Yayasan** (berbanding kadar biasa bagi Negara Maju, Membangun, dan Mundur):
+## Kategori Ekonomi Negara & Kadar Cukai Yayasan
+Semua **194 negara** dalam WorldLife dikelaskan kepada 4 kategori ekonomi yang menentukan **Yuran Tahunan Yayasan** dan **Cukai Korporat Yayasan** (selain **Cukai Pendapatan Peribadi** masing-masing):
+
+| Kategori Ekonomi | Bil. Negara | Yuran Tahunan Yayasan | Cukai Korporat Yayasan | Julat Cukai Pendapatan |
+| :--- | :---: | :---: | :---: | :---: |
+| **Negara Pulau Bebas Cukai** | 21 | 0% | 0% | 0% – 24% |
+| **Negara Maju** | 25 | 1.5% | 15% – 25% | 0% – 42% |
+| **Negara Membangun** | 39 | 0.5% | 15% – 25% | 0% – 33% |
+| **Negara Mundur** | 109 | 0.1% | 15% – 22% | 5% – 22% |
+
+👉 Lihat senarai penuh semua 194 negara (Negara Pulau Bebas Cukai, Negara Maju, Negara Membangun & Negara Mundur) berserta kadar cukai masing-masing dalam **[SENARAI_NEGARA_CUKAI.md](SENARAI_NEGARA_CUKAI.md)**.
+
+### 21 Negara Pulau Bebas Cukai (0% Yuran & 0% Cukai Korporat Yayasan)
 
 | Kod | Negara | Kod | Negara | Kod | Negara |
 | :---: | :--- | :---: | :--- | :---: | :--- |
