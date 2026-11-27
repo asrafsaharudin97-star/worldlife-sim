@@ -2148,6 +2148,12 @@ window.GameState = {
   },
 
   async deleteSlot(slotId) {
+    if (this._slotOpInFlight) return { ok: false, msg: 'Operasi slot sedang berjalan, sila tunggu sebentar.' };
+    this._slotOpInFlight = true;
+    try { return await this._deleteSlotInner(slotId); } finally { this._slotOpInFlight = false; }
+  },
+
+  async _deleteSlotInner(slotId) {
     const label = String(slotId || '').replace('slot_', '');
     if (this._isDeleting || this._isMutating) {
       return { ok: false, busy: true, msg: 'Operasi Cloud sedang berjalan. Sila tunggu sebentar.' };

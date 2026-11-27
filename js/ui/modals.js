@@ -3542,7 +3542,7 @@ window.Modals = {
     }
   },
 
-  async showSaveSlotsModal(confirmDeleteSlotId = null, lastOpError = null, openedFrom = null) {
+  async showSaveSlotsModal(confirmDeleteSlotId = null, lastOpError = null, openedFrom = null, useCache = false) {
     const fb = window.FirebaseService;
     const reqId = ++this._slotModalReqId;
     if (openedFrom !== null && openedFrom !== undefined) {
@@ -3552,13 +3552,35 @@ window.Modals = {
     }
     const backSource = this._slotModalOpenedFrom;
 
-    this.open({
-      icon: '☁️',
-      title: 'Slot Simpanan & Cloud Save',
-      subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
-      bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot terus dari pelayan Cloud...</div>`,
-      _isSlotModalRender: true
-    });
+    const canReuseCache = Boolean((confirmDeleteSlotId !== null || useCache) && this._cachedSlotsSnapshot && (Date.now() - (this._cachedSlotsAt || 0) < 30000));
+    let mergedRes;
+    if (canReuseCache) {
+      mergedRes = this._cachedSlotsSnapshot;
+    } else {
+      this.open({
+        icon: '☁️',
+        title: 'Slot Simpanan & Cloud Save',
+        subtitle: 'Urus sehingga 5 kehidupan berasingan (Slot 1 – Slot 5)',
+        bodyHtml: `<div class="info-banner">🔄 Memuatkan senarai slot...</div>`,
+        _isSlotModalRender: true
+      });
+      const timeoutFallback = new Promise(resolve => setTimeout(() => resolve({
+        slots: (this._cachedSlotsSnapshot && this._cachedSlotsSnapshot.slots) || [],
+        isCloud: Boolean(fb && fb.isSignedIn && fb.isSignedIn()),
+        activeSlotId: GameState.activeSlotId || 'slot_1',
+        cloudError: true,
+        offline: true,
+        source: 'timeout',
+        totalBytes: 0,
+        errorDetail: 'Sambungan Cloud perlahan',
+        errorMsg: 'Sambungan ke pelayan Cloud mengambil masa terlalu lama.'
+      }), 5000));
+      mergedRes = await Promise.race([GameState.getMergedSlots(), timeoutFallback]);
+      if (mergedRes && mergedRes.source !== 'timeout') {
+        this._cachedSlotsSnapshot = mergedRes;
+        this._cachedSlotsAt = Date.now();
+      }
+    }
 
     const {
       slots,
@@ -3570,7 +3592,7 @@ window.Modals = {
       totalBytes,
       errorDetail,
       errorMsg
-    } = await GameState.getMergedSlots();
+    } = mergedRes;
     if (reqId !== this._slotModalReqId) return;
     if (window.App && App.renderStartAuthBar) App.renderStartAuthBar();
 
@@ -3925,7 +3947,7 @@ window.Modals = {
     });
 
     document.querySelectorAll('.slot-cancel-del-btn').forEach(btn => {
-      btn.addEventListener('click', () => this.showSaveSlotsModal(null, null));
+      btn.addEventListener('click', () => this.showSaveSlotsModal(null, null, null, true));
     });
 
     document.querySelectorAll('.slot-confirm-del-btn').forEach(btn => {
@@ -3933,7 +3955,14 @@ window.Modals = {
         const sid = btn.dataset.slot;
         let res = null;
         try {
-          res = await App.runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
+          if (this._slotActionInProgress) return;
+          this._slotActionInProgress = true;
+          try {
+            res = await App.runWithCloudProgress('delete', () => GameState.deleteSlot(sid));
+            this._cachedSlotsSnapshot = null;
+          } finally {
+            this._slotActionInProgress = false;
+          }
           if (res && res.busy) return;
           App.toast((res && res.msg) || 'Slot telah dipadam.', res && res.ok === false ? 'error' : 'culture');
         } catch (err) {
