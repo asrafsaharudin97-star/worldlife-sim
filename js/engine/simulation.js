@@ -1667,12 +1667,14 @@ window.Sim = {
       }
     }
 
-    // 6. Kolam Peristiwa Rawak Tahunan (Anti-Ulang 15 peristiwa terakhir — sentiasa segar setiap Age-Up!)
+    // 6. Dek Anti-Ulangan (Shuffle Bag — 20 popup terakhir + Slot Konteks Dinamik)
+    if (!Array.isArray(s.recentPopupIds)) s.recentPopupIds = [];
     if (!Array.isArray(s.recentRandomEventIds)) s.recentRandomEventIds = [];
-    const recentSet = new Set(s.recentRandomEventIds);
+    const recentSet = new Set([...s.recentPopupIds, ...s.recentRandomEventIds]);
     const recordRecent = (ev) => {
       if (!ev || !ev.id) return ev;
-      s.recentRandomEventIds = [ev.id, ...s.recentRandomEventIds.filter(id => id !== ev.id)].slice(0, 15);
+      s.recentPopupIds = [ev.id, ...s.recentPopupIds.filter(id => id !== ev.id)].slice(0, 20);
+      s.recentRandomEventIds = s.recentPopupIds.slice(0, 20);
       const shuffledChoices = Array.isArray(ev.choices) ? [...ev.choices] : ev.choices;
       if (Array.isArray(shuffledChoices) && shuffledChoices.length > 1) {
         for (let i = shuffledChoices.length - 1; i > 0; i--) {
@@ -1680,7 +1682,7 @@ window.Sim = {
           [shuffledChoices[i], shuffledChoices[j]] = [shuffledChoices[j], shuffledChoices[i]];
         }
       }
-      return { ...ev, choices: shuffledChoices, isAgeUpRandom: true };
+      return this._applyPopupInterpolation({ ...ev, choices: shuffledChoices, isAgeUpRandom: true }, s);
     };
 
     const customRandomPool = (GAME_EVENTS.ageUpRandomPool || []).filter(
@@ -1706,6 +1708,15 @@ window.Sim = {
       const picked = Utils.pick(uniPool);
       s.seenEventIds.push(picked.id);
       return recordRecent(picked);
+    }
+
+    // Jika dek ageUpRandomPool habis dipusing, kosongkan ID kategori ini sahaja & mula pusingan baharu
+    if (customRandomPool.length === 0 && Array.isArray(GAME_EVENTS.ageUpRandomPool)) {
+      const poolIds = new Set(GAME_EVENTS.ageUpRandomPool.map(x => x && x.id));
+      s.recentPopupIds = s.recentPopupIds.filter(id => !poolIds.has(id));
+      s.recentRandomEventIds = s.recentPopupIds.slice(0, 20);
+      const freshPool = GAME_EVENTS.ageUpRandomPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge);
+      if (freshPool.length > 0) return recordRecent(Utils.pick(freshPool));
     }
 
     // Jika masih ada dalam ageUpRandomPool yang belum baru muncul, pilih segera
@@ -2250,6 +2261,38 @@ window.Sim = {
       ...ev,
       choices: newChoices
     };
+  },
+
+  interpolatePopupText(text, state) {
+    if (!text || typeof text !== 'string') return text || '';
+    const s = state || GameState.current || {};
+    const c = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    const negara = (c && c.name) || s.countryId || 'negara ini';
+    const jawatan = (s.job && s.job.title) || (s.partTimeJob && s.partTimeJob.title) || 'bidang kerjaya anda';
+    const friends = Array.isArray(s.relationships) ? s.relationships.filter(r => r && r.alive !== false && (r.category === 'friend' || r.category === 'partner')) : [];
+    const fallbackNames = ['Daniel', 'Farah', 'Amir', 'Siti', 'Haziq', 'Nadia', 'Kenji', 'Lucas', 'Maya'];
+    const rakan = friends.length > 0 ? Utils.pick(friends).name : Utils.pick(fallbackNames);
+    const tempat = Utils.pick(['kafe berhampiran', 'pusat bandar', 'stesen transit', 'taman awam', 'kedai serbaneka']);
+    return text
+      .replace(/\{negara\}/g, negara)
+      .replace(/\{jawatan\}/g, jawatan)
+      .replace(/\{rakan\}/g, rakan)
+      .replace(/\{tempat\}/g, tempat);
+  },
+
+  _applyPopupInterpolation(ev, s) {
+    if (!ev || typeof ev !== 'object') return ev;
+    const clone = { ...ev };
+    if (typeof clone.title === 'string') clone.title = this.interpolatePopupText(clone.title, s);
+    if (typeof clone.text === 'string') clone.text = this.interpolatePopupText(clone.text, s);
+    if (Array.isArray(clone.choices)) {
+      clone.choices = clone.choices.map(ch => ({
+        ...ch,
+        label: typeof ch.label === 'string' ? this.interpolatePopupText(ch.label, s) : ch.label,
+        outcome: typeof ch.outcome === 'string' ? this.interpolatePopupText(ch.outcome, s) : ch.outcome
+      }));
+    }
+    return clone;
   },
 
   _hydrateDynamicEvent(ev, s, curr) {

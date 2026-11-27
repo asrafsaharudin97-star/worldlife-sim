@@ -1634,3 +1634,128 @@ window.GAME_EVENTS = {
     }
   ]
 };
+
+// 28 Variasi Popup Pilihan Baharu (Anti-Ulangan & Slot Konteks Dinamik)
+if (window.GAME_EVENTS && Array.isArray(GAME_EVENTS.ageUpRandomPool)) {
+  GAME_EVENTS.ageUpRandomPool.push(
+    // --- KANAK-KANAK & REMAJA / SEKOLAH (7) ---
+    { id: 'pop_sch_arcade', minAge: 9, maxAge: 17, icon: '🕹️', title: 'Ajakan Ponteng ke Arked', text: '{rakan} mengajak anda ponteng kelas petang ini untuk mencuba mesin permainan baharu di pusat beli-belah.', choices: [
+      { label: 'Tolak dan kekal di kelas', effects: { smarts: 3, happiness: -1 }, outcome: 'Anda memilih untuk menyiapkan nota kelas; guru memuji disiplin anda.' },
+      { label: 'Ikut senyap-senyap untuk sejam', effects: { happiness: 5, smarts: -2 }, outcome: 'Anda berseronok di arked bersama {rakan}, namun terpaksa mengejar semula pelajaran esoknya.' }
+    ]},
+    { id: 'pop_sch_group', minAge: 10, maxAge: 17, icon: '📑', title: 'Projek Kumpulan Bermasalah', text: 'Tarikh akhir projek berkumpulan tinggal dua hari, tetapi ahli kumpulan lain masih belum menghantar bahagian mereka.', choices: [
+      { label: 'Siapkan keseluruhan tugasan sendiri', effects: { smarts: 4, health: -2, happiness: -2 }, outcome: 'Pembentangan berjalan lancar dan markah anda cemerlang walaupun keletihan.' },
+      { label: 'Laporkan secara jujur kepada guru', effects: { smarts: 2, happiness: 1 }, outcome: 'Guru membahagikan penilaian secara individu supaya usaha anda tidak sia-sia.' }
+    ]},
+    { id: 'pop_sch_wallet', minAge: 7, maxAge: 17, icon: '👛', title: 'Dompet Tercicir di Kantin', text: 'Anda terjumpa sebuah dompet berisi wang tunai di bawah meja kantin sekolah ketika waktu rehat.', choices: [
+      { label: 'Serahkan terus ke pejabat sekolah', effects: { happiness: 4, karma: 6 }, outcome: 'Pemilik dompet itu amat lega dan berterima kasih atas kejujuran anda.' },
+      { label: 'Ambil wang dan tinggalkan dompet', effects: { moneyUsd: 25, karma: -8 }, outcome: 'Anda menyimpan wang tersebut, namun rasa bersalah menghantui fikiran anda.' }
+    ]},
+    { id: 'pop_sch_quiz', minAge: 10, maxAge: 17, icon: '🧠', title: 'Wakil Kuiz Saat Akhir', text: 'Wakil sekolah untuk pertandingan kuiz antara daerah demam mengejut. Cikgu meminta anda menggantikannya esok.', choices: [
+      { label: 'Terima cabaran dan ulang kaji malam ini', effects: { smarts: 5, happiness: 3 }, outcome: 'Anda tampil berani di pentas kuiz dan mengharumkan nama sekolah!' },
+      { label: 'Tolak secara sopan kerana tidak bersedia', effects: { happiness: 1 }, outcome: 'Cikgu memahami dan mencari peserta simpanan lain.' }
+    ]},
+    { id: 'pop_sch_snack', minAge: 11, maxAge: 17, icon: '🍪', title: 'Perniagaan Snek Kecil-Kecilan', text: '{rakan} mencadangkan untuk menjual biskut buatan sendiri kepada rakan sekelas pada waktu rehat.', choices: [
+      { label: 'Sertai sebagai rakan kongsi', effects: { moneyUsd: 45, smarts: 2, happiness: 3 }, outcome: 'Jualan habis dalam dua hari! Anda belajar asas untung rugi sejak muda.' },
+      { label: 'Fokus pada pelajaran sahaja', effects: { smarts: 2 }, outcome: 'Anda memilih untuk tidak mengambil risiko melanggar peraturan sekolah.' }
+    ]},
+    { id: 'pop_sch_library', minAge: 8, maxAge: 17, icon: '📚', title: 'Buku Misteri di Perpustakaan', text: 'Anda terjumpa buku lama yang jarang dipinjam tentang sejarah tokoh hebat di {negara}.', choices: [
+      { label: 'Pinjam dan baca sehingga habis', effects: { smarts: 4, happiness: 2 }, outcome: 'Bacaan itu membuka perspektif baharu tentang cita-cita masa depan anda.' },
+      { label: 'Letak semula dan berbual dengan kawan', effects: { happiness: 3 }, outcome: 'Anda menikmati waktu rehat yang santai bersama rakan-rakan.' }
+    ]},
+    { id: 'pop_sch_sports', minAge: 9, maxAge: 17, icon: '🏃', title: 'Larian Merentas Desa', text: 'Hari sukan sekolah semakin hampir dan pasukan rumah sukan anda kekurangan pelari jarak jauh.', choices: [
+      { label: 'Daftar dan berlatih setiap petang', effects: { health: 5, happiness: 3 }, outcome: 'Stamina anda meningkat ketara dan anda berjaya menamatkan larian dengan bangga.' },
+      { label: 'Bantu sebagai petugas minuman sahaja', effects: { happiness: 2 }, outcome: 'Anda tetap menyumbang tenaga memastikan acara berjalan lancar.' }
+    ]},
+
+    // --- KERJAYA & PEJABAT (8) ---
+    { id: 'pop_work_credit', minAge: 18, maxAge: 65, icon: '💼', title: 'Kredit Pembentangan Dicuri', text: 'Dalam mesyuarat pasukan {jawatan}, {rakan} membentangkan idea asal anda seolah-olah hasil kerjanya sendiri.', choices: [
+      { label: 'Tunjukkan draf asal secara profesional', effects: { smarts: 3, happiness: 2 }, outcome: 'Pengurus menyedari sumbangan sebenar anda dan memuji ketegasan profesional anda.' },
+      { label: 'Berdiam diri demi menjaga suasana', effects: { happiness: -4 }, outcome: 'Anda mengelak konflik, tetapi berasa tidak dihargai sepanjang minggu.' }
+    ]},
+    { id: 'pop_work_weekend', minAge: 18, maxAge: 65, icon: '🗓️', title: 'Tugasan Kecemasan Hujung Minggu', text: 'Pengurus meminta anda menyiapkan laporan kecemasan pada hari Sabtu untuk klien penting di {negara}.', choices: [
+      { label: 'Siapkan dengan cemerlang', effects: { moneyUsd: 350, health: -3, happiness: -2 }, outcome: 'Klien berpuas hati dan pihak pengurusan memberikan elaun penghargaan.' },
+      { label: 'Maklumkan anda sudah ada komitmen peribadi', effects: { happiness: 3, health: 2 }, outcome: 'Anda menjaga keseimbangan hidup dan kembali bertenaga pada hari Isnin.' }
+    ]},
+    { id: 'pop_work_sideproj', minAge: 18, maxAge: 65, icon: '💻', title: 'Tawaran Projek Sampingan', text: 'Seorang kenalan industri di {negara} menawarkan projek perundingan ringkas berkaitan {jawatan} pada waktu malam.', choices: [
+      { label: 'Terima projek sampingan ini', effects: { moneyUsd: 600, smarts: 2, health: -2 }, outcome: 'Projek selesai tepat pada masanya dan menambah simpanan tunai anda.' },
+      { label: 'Tolak untuk menjaga kesihatan diri', effects: { health: 3, happiness: 2 }, outcome: 'Anda mendapat rehat berkualiti tanpa tekanan tambahan.' }
+    ]},
+    { id: 'pop_work_gossip', minAge: 18, maxAge: 65, icon: '🗣️', title: 'Gosip Penstrukturan Syarikat', text: 'Khabar angin tersebar di ruang pantri bahawa beberapa jabatan bakal digabungkan hujung suku ini.', choices: [
+      { label: 'Kemas kini kemahiran dan fokus prestasi', effects: { smarts: 3, happiness: 1 }, outcome: 'Persediaan rapi membuatkan kedudukan anda kekal kukuh.' },
+      { label: 'Ikut berbual dan mengumpul cerita', effects: { happiness: -2 }, outcome: 'Perbualan panjang hanya menambah keresahan tanpa kepastian.' }
+    ]},
+    { id: 'pop_work_clash', minAge: 18, maxAge: 65, icon: '⏰', title: 'Pertembungan Jadual Penting', text: 'Mesyuarat strategi {jawatan} bertembung dengan janji temu peribadi yang sudah lama dirancang.', choices: [
+      { label: 'Utamakan mesyuarat kerja', effects: { smarts: 2, happiness: -3 }, outcome: 'Kehadiran anda dihargai pasukan, namun anda perlu memujuk semula kenalan anda.' },
+      { label: 'Hantar wakil dan hadir hal peribadi', effects: { happiness: 4 }, outcome: 'Urusan peribadi selesai dengan baik dan wakil anda menyampaikan nota dengan kemas.' }
+    ]},
+    { id: 'pop_work_mentor', minAge: 18, maxAge: 65, icon: '🧭', title: 'Pelawaan Sesi Mentor', text: 'Seorang tokoh berpengalaman dalam {jawatan} menawarkan sesi bimbingan kerjaya di {tempat}.', choices: [
+      { label: 'Hadir dan catat setiap nasihat', effects: { smarts: 4, happiness: 3 }, outcome: 'Pandangan tajam beliau memberi arah jelas untuk langkah kerjaya seterusnya.' },
+      { label: 'Tangguhkan ke masa lain', effects: { happiness: 1 }, outcome: 'Anda terlepas peluang berharga itu buat sementara waktu.' }
+    ]},
+    { id: 'pop_work_coffee', minAge: 18, maxAge: 65, icon: '☕', title: 'Rehat Kopi Bersama Rakan Sekerja', text: '{rakan} mengajak anda berehat sebentar di {tempat} selepas minggu kerja yang padat.', choices: [
+      { label: 'Sertai dan belanja kopi', effects: { moneyUsd: -25, happiness: 5 }, outcome: 'Perbualan santai meredakan tekanan dan mengeratkan hubungan kerja.' },
+      { label: 'Makan di meja kerja sahaja', effects: { smarts: 1, happiness: -1 }, outcome: 'Kerja siap sedikit awal tetapi hari terasa agak hambar.' }
+    ]},
+    { id: 'pop_work_error', minAge: 18, maxAge: 65, icon: '🔍', title: 'Kesilapan Kecil Dalam Laporan', text: 'Anda menyedari kesilapan angka kecil dalam laporan yang sudah dihantar pagi tadi.', choices: [
+      { label: 'Hantar pembetulan segera secara telus', effects: { smarts: 2, karma: 4 }, outcome: 'Pihak atasan menghargai ketelusan anda sebelum angka itu digunakan.' },
+      { label: 'Biarkan sahaja dengan harapan tidak disedari', effects: { happiness: -3, karma: -3 }, outcome: 'Anda gelisah sepanjang minggu memikirkan kemungkinan ia terbongkar.' }
+    ]},
+
+    // --- KEWANGAN & GAYA HIDUP (7) ---
+    { id: 'pop_fin_scheme', minAge: 18, maxAge: 80, icon: '📉', title: 'Skim Pelaburan "Pasti Untung"', text: 'Kenalan lama menghubungi anda dan mempromosikan skim pelaburan luar biasa yang kononnya menggandakan wang dalam sebulan.', choices: [
+      { label: 'Tolak tegas kerana kelihatan mencurigakan', effects: { smarts: 3, happiness: 2 }, outcome: 'Beberapa bulan kemudian, skim itu runtuh! Anda terselamat daripada kerugian besar.' },
+      { label: 'Cuba masukkan sedikit modal', effects: { moneyUsd: -400, happiness: -5 }, outcome: 'Penganjur gagal dihubungi selepas sebulan — pengajaran mahal tentang disiplin kewangan.' }
+    ]},
+    { id: 'pop_fin_flashsale', minAge: 18, maxAge: 80, icon: '🏷️', title: 'Lelongan Kilat Barangan Terpakai', text: 'Satu jualan lelongan kilat barangan koleksi dan perabot berkualiti berlangsung di {tempat}.', choices: [
+      { label: 'Beli barang berguna pada harga rendah', effects: { moneyUsd: -120, happiness: 5 }, outcome: 'Anda berjaya mendapatkan barangan berkualiti tinggi pada harga berbaloi.' },
+      { label: 'Tinjau sahaja tanpa berbelanja', effects: { smarts: 1, happiness: 1 }, outcome: 'Anda berjaya mengawal bajet bulanan dengan berhemah.' }
+    ]},
+    { id: 'pop_fin_neighbor', minAge: 18, maxAge: 80, icon: '🤝', title: 'Jiran Memohon Bantuan Kecemasan', text: 'Jiran anda mengetuk pintu dan meminta pinjaman kecil kerana keretanya rosak di tepi jalan.', choices: [
+      { label: 'Bantu sekadar termampu', effects: { moneyUsd: -150, karma: 6, happiness: 3 }, outcome: 'Jiran anda amat terharu dan hubungan kejiranan menjadi semakin erat.' },
+      { label: 'Tolak dengan sopan kerana bajet ketat', effects: { happiness: -1 }, outcome: 'Jiran anda memahami keadaan anda dan mencari bantuan lain.' }
+    ]},
+    { id: 'pop_fin_gear', minAge: 18, maxAge: 80, icon: '⚙️', title: 'Peralatan Terpakai Berkualiti Tinggi', text: 'Seorang profesional di {negara} menjual peralatan kerja premium terpakai pada harga diskaun besar.', choices: [
+      { label: 'Beli untuk tingkatkan produktiviti', effects: { moneyUsd: -280, smarts: 3, happiness: 3 }, outcome: 'Peralatan itu masih seperti baharu dan mempercepatkan tugasan harian anda.' },
+      { label: 'Kekalkan peralatan sedia ada', effects: { happiness: 1 }, outcome: 'Simpanan tunai anda kekal terpelihara.' }
+    ]},
+    { id: 'pop_fin_gala', minAge: 20, maxAge: 80, icon: '🥂', title: 'Majlis Rangkaian Eksklusif', text: 'Anda menerima jemputan ke majlis rangkaian usahawan dan pelabur di {negara}.', choices: [
+      { label: 'Hadir dan luaskan kenalan', effects: { moneyUsd: -180, smarts: 3, happiness: 4 }, outcome: 'Anda bertukar kad perniagaan dengan beberapa tokoh berpengaruh.' },
+      { label: 'Rehat di rumah sahaja', effects: { health: 2, happiness: 2 }, outcome: 'Malam yang tenang tanpa perlu berbelanja untuk majlis formal.' }
+    ]},
+    { id: 'pop_fin_budget', minAge: 18, maxAge: 80, icon: '📊', title: 'Semakan Langganan Bulanan', text: 'Anda menyemak penyata bank dan mendapati beberapa langganan digital yang jarang digunakan masih aktif.', choices: [
+      { label: 'Batalkan semua langganan tidak perlu', effects: { moneyUsd: 180, smarts: 2 }, outcome: 'Aliran tunai tahunan anda menjadi jauh lebih kemas.' },
+      { label: 'Biarkan dahulu sehingga hujung tahun', effects: { moneyUsd: -90 }, outcome: 'Caj kecil terus ditolak secara senyap setiap bulan.' }
+    ]},
+    { id: 'pop_fin_cafe', minAge: 18, maxAge: 80, icon: '🍽️', title: 'Makan Malam Bersama Kenalan Lama', text: '{rakan} mengajak anda mencuba restoran baharu yang terkenal di {tempat}.', choices: [
+      { label: 'Hadir dan nikmati hidangan', effects: { moneyUsd: -95, happiness: 5 }, outcome: 'Hidangan yang enak dan gelak tawa mengembalikan semangat anda.' },
+      { label: 'Cadangkan tempat yang lebih jimat', effects: { moneyUsd: -25, happiness: 3 }, outcome: 'Kalian tetap menikmati perbualan mesra tanpa membazir.' }
+    ]},
+
+    // --- SOSIAL & HARIAN RAWAK (6) ---
+    { id: 'pop_soc_help', minAge: 14, maxAge: 85, icon: '🤲', title: 'Orang Asing Perlukan Bantuan', text: 'Ketika berada di {tempat}, anda melihat seorang pelancong kelihatan bingung mencari arah stesen utama.', choices: [
+      { label: 'Luangkan masa tunjukkan jalan', effects: { karma: 5, happiness: 4 }, outcome: 'Pelancong itu memuji keramahan penduduk {negara} sebelum meneruskan perjalanan.' },
+      { label: 'Bergegas meneruskan urusan anda', effects: { happiness: -1 }, outcome: 'Anda sampai awal ke destinasi tetapi terfikir jika mereka berjaya menemui jalan.' }
+    ]},
+    { id: 'pop_soc_noise', minAge: 18, maxAge: 85, icon: '🔊', title: 'Jiran Bising Lewat Malam', text: 'Muzik kuat kedengaran dari rumah sebelah walaupun jam sudah melepasi tengah malam.', choices: [
+      { label: 'Tegur secara baik dan tenang', effects: { happiness: 2, health: 2 }, outcome: 'Jiran anda memohon maaf dan segera memperlahankan bunyi muzik.' },
+      { label: 'Pasang penyumbat telinga dan cuba tidur', effects: { health: -2, happiness: -2 }, outcome: 'Tidur anda terganggu sehingga pagi.' }
+    ]},
+    { id: 'pop_soc_viral', minAge: 14, maxAge: 80, icon: '📱', title: 'Klip Video Tular Secara Tak Sengaja', text: 'Reaksi spontan anda di latar belakang sebuah rakaman jalanan di {tempat} tiba-tiba tular di media sosial.', choices: [
+      { label: 'Layankan dengan humor santai', effects: { happiness: 5, fame: 4 }, outcome: 'Netizen menyukai sikap bersahaja anda dan pengikut baharu mula bertambah.' },
+      { label: 'Abaikan dan kekalkan privasi', effects: { happiness: 2 }, outcome: 'Tumpuan reda dalam beberapa hari dan hidup kembali tenang.' }
+    ]},
+    { id: 'pop_soc_volunteer', minAge: 14, maxAge: 85, icon: '🌱', title: 'Acara Sukarelawan Komuniti', text: 'Persatuan penduduk di {negara} menganjurkan gotong-royong membersihkan taman awam hujung minggu ini.', choices: [
+      { label: 'Sertai sebagai sukarelawan', effects: { health: 3, karma: 6, happiness: 4 }, outcome: 'Taman kembali bersih dan anda berkenalan dengan ramai jiran mesra.' },
+      { label: 'Berehat di rumah hujung minggu ini', effects: { health: 2 }, outcome: 'Anda menikmati hujung minggu yang santai.' }
+    ]},
+    { id: 'pop_soc_stranger', minAge: 18, maxAge: 85, icon: '💬', title: 'Perbualan Tak Dijangka di {tempat}', text: 'Sementara menunggu hujan reda di {tempat}, anda berbual rancak dengan seorang asing yang rupa-rupanya pengarah industri berpengaruh.', choices: [
+      { label: 'Kongsi pandangan bernas tentang {jawatan}', effects: { smarts: 3, happiness: 4 }, outcome: 'Beliau kagum dengan kematangan fikiran anda dan berkongsi nasihat bernilai.' },
+      { label: 'Berbual kosong tentang cuaca sahaja', effects: { happiness: 2 }, outcome: 'Masa menunggu berlalu pantas dengan perbualan ringan.' }
+    ]},
+    { id: 'pop_soc_weather', minAge: 14, maxAge: 85, icon: '🌧️', title: 'Hujan Lebat Mengejut', text: 'Hujan turun mencurah-curah ketika anda berjalan pulang berhampiran {tempat} tanpa membawa payung.', choices: [
+      { label: 'Berteduh sambil menikmati minuman panas', effects: { moneyUsd: -15, happiness: 4, health: 1 }, outcome: 'Suasana hujan yang damai memberi ruang untuk anda bertenang.' },
+      { label: 'Redah hujan untuk cepat sampai rumah', effects: { health: -3, happiness: 1 }, outcome: 'Anda basah kuyup tetapi sempat sampai sebelum malam.' }
+    ]}
+  );
+}
