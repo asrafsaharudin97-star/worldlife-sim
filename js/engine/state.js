@@ -1633,17 +1633,22 @@ window.GameState = {
   _cloudSyncInFlight: false,
   _cloudSyncQueued: false,
   _cloudSyncWaiters: [],
+  _isSyncing: false,
+  _isDeleting: false,
 
   async _drainCloudSyncQueue() {
+    if (this._isDeleting) return;
     if (this._cloudSyncInFlight) {
       this._cloudSyncQueued = true;
       return;
     }
     this._cloudSyncInFlight = true;
+    this._isSyncing = true;
     let lastRes = { ok: false, msg: 'Tiada watak aktif.' };
     try {
       do {
         this._cloudSyncQueued = false;
+        if (this._isDeleting) break;
         if (this.isGuestMode) {
           lastRes = { ok: false, guest: true, msg: 'Mod Tetamu — progres tidak disimpan.' };
         } else if (!this.current) {
@@ -1655,13 +1660,14 @@ window.GameState = {
           const latestPayload = this.buildSlotPayload(slotId, this.current);
           lastRes = await this.syncSlotToCloud(slotId, latestPayload);
         }
-      } while (this._cloudSyncQueued);
+      } while (this._cloudSyncQueued && !this._isDeleting);
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
       console.error('[State] syncActiveSlotToCloud error:', err);
       lastRes = { ok: false, msg: `Ralat Cloud Save (${detail}). Simpanan tempatan kekal selamat.` };
     } finally {
       this._cloudSyncInFlight = false;
+      this._isSyncing = false;
       if (lastRes && !lastRes.ok && !lastRes.offline && !lastRes.guest && window.App && App.toast) {
         App.toast(`⚠️ ${lastRes.msg || 'Gagal menyegerak ke Cloud.'}`, 'error');
       }
@@ -1671,7 +1677,7 @@ window.GameState = {
   },
 
   flushPendingCloudSync() {
-    if (this.isGuestMode || !this.current) return;
+    if (this._isDeleting || this.isGuestMode || !this.current) return;
     if (!window.FirebaseService || !FirebaseService.isLoggedIn()) return;
     if (this._cloudSyncTimer) {
       clearTimeout(this._cloudSyncTimer);
@@ -1681,6 +1687,7 @@ window.GameState = {
   },
 
   async syncActiveSlotToCloud(reason = 'manual') {
+    if (this._isDeleting) return { ok: false, busy: true, msg: 'Sedang memadam slot...' };
     if (this.isGuestMode) return { ok: false, guest: true, msg: 'Mod Tetamu — progres tidak disimpan.' };
     if (!this.current) return { ok: false, msg: 'Tiada watak aktif.' };
     const slotId = this.getActiveSlotId();
@@ -1710,7 +1717,7 @@ window.GameState = {
 
   _normalizeSavedAt(slot) {
     if (!slot) return 0;
-    const raw = slot.savedAt ?? slot.updatedAt ?? 0;
+    const raw = slot.deletedAt ?? slot.savedAt ?? slot.updatedAt ?? 0;
     if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
     if (raw && typeof raw.toMillis === 'function') return raw.toMillis();
     const parsed = Date.parse(raw);
@@ -1738,7 +1745,7 @@ window.GameState = {
       return rawExplicit;
     }
     const map = slotsMap || this.getLocalSlots();
-    const filled = this.SLOT_IDS.filter(id => Boolean(map && map[id]));
+    const filled = this.SLOT_IDS.filter(id => Boolean(map && map[id] && !map[id].deleted && map[id].gameState));
     if (filled.length === 0) {
       return this.setActiveSlotId(this.SLOT_IDS.includes(rawExplicit) ? rawExplicit : 'slot_1');
     }
@@ -1760,42 +1767,83 @@ window.GameState = {
   },
 
   async getMergedSlots() {
-    const localMap = this.getLocalSlots();
-    const isCloud = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
-    const cloudRes = isCloud ? await FirebaseService.listCloudSlots() : { slots: {}, cloudError: false };
-    const cloudError = Boolean(cloudRes && cloudRes.cloudError);
-    const cloudMap = (cloudRes && cloudRes.slots) ? cloudRes.slots : {};
-    const merged = {};
-    const localOnlyIds = [];
+    this._isSyncing = true;
+    try {
+      const localMap = this.getLocalSlots();
+      const isCloud = Boolean(window.FirebaseService && FirebaseService.isLoggedIn());
+      const cloudRes = isCloud ? await FirebaseService.listCloudSlots() : { slots: {}, cloudError: false };
+      const cloudError = Boolean(cloudRes && cloudRes.cloudError);
+      const cloudMap = (cloudRes && cloudRes.slots) ? cloudRes.slots : {};
+      const merged = {};
+      const localOnlyIds = [];
 
-    this.SLOT_IDS.forEach(id => {
-      const loc = localMap[id];
-      const cld = cloudMap[id];
-      if (cld && loc) {
-        const useCloud = this._isCloudSlotPreferred(cld, loc);
-        if (useCloud && !this.isGuestMode) {
-          this.saveLocalSlot(id, null, { ...cld, slotId: id });
-        }
-        merged[id] = { ...(useCloud ? cld : loc), slotId: id, source: useCloud ? 'cloud' : 'local', inCloud: true };
-      } else if (cld) {
-        if (!this.isGuestMode) {
-          this.saveLocalSlot(id, null, { ...cld, slotId: id });
-        }
-        merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
-      } else if (loc) {
-        merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
-        if (isCloud && !cloudError) localOnlyIds.push(id);
-      } else {
-        merged[id] = null;
-      }
-    });
+      this.SLOT_IDS.forEach(id => {
+        const loc = localMap[id];
+        const cld = cloudMap[id];
+        const cldIsTombstone = Boolean(cld && cld.deleted === true);
+        const locIsTombstone = Boolean(loc && loc.deleted === true);
 
-    const activeSlotId = this.resolveDefaultActiveSlot(merged, { preserveExplicit: true });
-    return { slots: merged, localOnlyIds, isCloud, activeSlotId, cloudError };
+        // KES TOMBSTONE CLOUD: jika Cloud mempunyai deleted:true dan deletedAt >= local.updatedAt, padam tempatan serta-merta
+        if (cldIsTombstone) {
+          const cldDelTs = this._normalizeSavedAt(cld);
+          const locTs = loc ? this._normalizeSavedAt(loc) : 0;
+          if (!loc || locIsTombstone || cldDelTs >= locTs) {
+            if (!this.isGuestMode) {
+              this.deleteLocalSlot(id);
+            }
+            merged[id] = null;
+            return;
+          }
+          // Data tempatan jauh lebih baharu daripada tombstone Cloud
+          merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
+          if (isCloud && !cloudError) localOnlyIds.push(id);
+          return;
+        }
+
+        // KES TOMBSTONE TEMPATAN
+        if (locIsTombstone) {
+          const locDelTs = this._normalizeSavedAt(loc);
+          const cldTs = cld ? this._normalizeSavedAt(cld) : 0;
+          if (!cld || locDelTs >= cldTs) {
+            merged[id] = null;
+            return;
+          }
+          // Cloud mempunyai data baharu selepas pemadaman tempatan
+          if (!this.isGuestMode) {
+            this.saveLocalSlot(id, null, { ...cld, slotId: id });
+          }
+          merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
+          return;
+        }
+
+        if (cld && loc) {
+          const useCloud = this._isCloudSlotPreferred(cld, loc);
+          if (useCloud && !this.isGuestMode) {
+            this.saveLocalSlot(id, null, { ...cld, slotId: id });
+          }
+          merged[id] = { ...(useCloud ? cld : loc), slotId: id, source: useCloud ? 'cloud' : 'local', inCloud: true };
+        } else if (cld) {
+          if (!this.isGuestMode) {
+            this.saveLocalSlot(id, null, { ...cld, slotId: id });
+          }
+          merged[id] = { ...cld, slotId: id, source: 'cloud', inCloud: true };
+        } else if (loc && loc.gameState) {
+          merged[id] = { ...loc, slotId: id, source: 'local', inCloud: false };
+          if (isCloud && !cloudError) localOnlyIds.push(id);
+        } else {
+          merged[id] = null;
+        }
+      });
+
+      const activeSlotId = this.resolveDefaultActiveSlot(merged, { preserveExplicit: true });
+      return { slots: merged, localOnlyIds, isCloud, activeSlotId, cloudError };
+    } finally {
+      this._isSyncing = false;
+    }
   },
 
   async pullCloudAndRefreshActive() {
-    if (this.isGuestMode || !window.FirebaseService || !FirebaseService.isLoggedIn()) {
+    if (this._isDeleting || this.isGuestMode || !window.FirebaseService || !FirebaseService.isLoggedIn()) {
       return { ok: false, updated: false, cloudError: false };
     }
     const prevSlotId = this.getActiveSlotId();
@@ -1834,7 +1882,7 @@ window.GameState = {
       let lastErrMsg = null;
       for (const id of localOnlyIds) {
         const item = slots[id];
-        if (item && item.gameState) {
+        if (item && !item.deleted && item.gameState) {
           const res = await FirebaseService.saveCloudSlot(id, item);
           if (res && res.ok) uploaded += 1;
           else if (res && res.msg) lastErrMsg = res.msg;
@@ -1856,21 +1904,34 @@ window.GameState = {
 
   async deleteSlot(slotId) {
     const label = String(slotId || '').replace('slot_', '');
+    if (this._isDeleting) return { ok: false, msg: 'Operasi padam sedang berjalan...' };
+    this._isDeleting = true;
     try {
+      // Batalkan sebarang pemasa auto-save tertangguh supaya slot yang dipadam tidak tertulis semula
+      if (this._cloudSyncTimer) {
+        clearTimeout(this._cloudSyncTimer);
+        this._cloudSyncTimer = null;
+      }
+      this._cloudSyncQueued = false;
+
+      // Padam data tempatan & kosongkan sesi aktif serta-merta jika ini slot aktif
       this.deleteLocalSlot(slotId);
+      if (this.getActiveSlotId() === slotId) {
+        this.resetSessionState({ clearCurrent: true });
+      }
+
       if (window.FirebaseService && FirebaseService.isLoggedIn()) {
-        await Promise.race([
-          FirebaseService.deleteCloudSlot(slotId),
-          new Promise(resolve => setTimeout(() => resolve({ ok: true, timeout: true }), 8500))
-        ]);
+        const res = await FirebaseService.deleteCloudSlot(slotId);
+        if (!res || !res.ok) {
+          return { ok: false, msg: (res && res.msg) || `Gagal memadam Slot ${label} di Cloud.` };
+        }
       }
       return { ok: true, msg: `Slot ${label} telah dipadam.` };
     } catch (err) {
-      return { ok: false, msg: `Ralat semasa memadam Slot ${label}.` };
+      const detail = (err && (err.code || err.message)) || 'unknown';
+      return { ok: false, msg: `Ralat semasa memadam Slot ${label} (${detail}).` };
     } finally {
-      if (this.getActiveSlotId() === slotId && this.current) {
-        this.resetSessionState({ clearCurrent: true });
-      }
+      this._isDeleting = false;
     }
   },
 

@@ -299,20 +299,27 @@ const FirebaseService = {
     }
     this.setSyncState('syncing');
     try {
+      const now = Date.now();
       const ref = doc(db, 'users', this.user.uid, 'saves', slotId);
-      await this._withTimeout(deleteDoc(ref), 22000, 'timeout');
+      const tombstone = {
+        slotId,
+        deleted: true,
+        deletedAt: now,
+        updatedAt: now,
+        savedAt: now,
+        gameState: null
+      };
+      await this._withTimeout(setDoc(ref, tombstone), 22000, 'timeout');
       this.setSyncState('synced');
-      return { ok: true, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam dari Cloud.` };
+      return { ok: true, deletedAt: now, msg: `Slot ${slotId.replace('slot_', '')} telah dipadam dari Cloud.` };
     } catch (err) {
       const detail = (err && (err.code || err.message)) || 'unknown';
       console.error('[Firebase] deleteCloudSlot error:', detail, err);
-      this.setSyncState(detail === 'timeout' ? 'synced' : 'error', detail);
+      this.setSyncState('error', detail);
       return {
-        ok: detail === 'timeout',
+        ok: false,
         code: detail,
-        msg: detail === 'timeout'
-          ? `Slot ${slotId.replace('slot_', '')} telah dipadam.`
-          : `Gagal memadam slot di Cloud (${detail}).`
+        msg: `Gagal memadam slot di Cloud (${detail}).`
       };
     }
   }
