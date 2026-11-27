@@ -140,7 +140,7 @@ window.LegalInheritanceEngine = {
 
     const fmtCost = Utils.formatMoney(totalDeduct, s.countryId);
     GameState.addJournalEntry(
-      `⚖️ Perceraian sivil dengan ${partner.name} dimuktamadkan di Mahkamah Sivil. Kos guaman & penyelesaian harta: ${fmtCost}.${prev.alimonyAnnualLocal > 0 ? ` Nafkah tahunan: ${Utils.formatMoney(prev.alimonyAnnualLocal, s.countryId)}/thn selama ${prev.alimonyYears} tahun.` : ''}`,
+      `⚖️ Perceraian sivil dengan ${partner.name} dimuktamadkan di Mahkamah Sivil. Kos guaman & penyelesaian harta: ${fmtCost}.${prev.alimonyAnnualLocal > 0 ? ` Alimoni tahunan: ${Utils.formatMoney(prev.alimonyAnnualLocal, s.countryId)}/thn selama ${prev.alimonyYears} tahun.` : ''}`,
       'warning'
     );
     GameState.save();
@@ -701,7 +701,13 @@ window.LegalInheritanceEngine = {
     };
   },
 
+  isFundManagerActive(s) {
+    const fm = s && s.familyTrust && s.familyTrust.active && s.familyTrust.fundManager;
+    return Boolean(fm && fm.active !== false && Number(fm.yearsLeft) > 0);
+  },
+
   async generateYearlyFundReport(s, prevNetWorth) {
+    if (!this.isFundManagerActive(s)) return null;
     if (!s || !s.familyTrust || !s.familyTrust.active) return null;
     const ft = s.familyTrust;
     if (!ft.fundManager || (ft.fundManager.yearsLeft || 0) <= 0) return null;
@@ -1782,7 +1788,7 @@ window.LegalInheritanceEngine = {
     }
 
     // 2B. Jana Laporan Tahunan Pengurus Dana AI (Non-Blocking)
-    if (ft.fundManager && (ft.fundManager.yearsLeft || 0) > 0) {
+    if (this.isFundManagerActive(s)) {
       this.generateYearlyFundReport(s, valueBeforeYear);
     }
 

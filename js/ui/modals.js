@@ -2153,7 +2153,7 @@ window.Modals = {
               `;
             })()}
 
-            ${(ft.latestFundReport || ft.fundManager) ? (() => {
+            ${(LegalInheritanceEngine && LegalInheritanceEngine.isFundManagerActive && LegalInheritanceEngine.isFundManagerActive(s)) ? (() => {
               const rep = ft.latestFundReport;
               const isLoading = Boolean(LegalInheritanceEngine && LegalInheritanceEngine._fundReportLoading);
               if (isLoading) {
