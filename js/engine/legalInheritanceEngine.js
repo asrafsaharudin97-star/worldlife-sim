@@ -195,28 +195,42 @@ window.LegalInheritanceEngine = {
         active: false,
         balance: 0,
         assets: [],
+        investments: [],
         feeRate: 1.5,
         yearsActive: 0,
         fundManager: null,
         underAudit: false,
         lapsed: false,
-        lastPaidAge: null
+        lastPaidAge: null,
+        founderName: null,
+        founderGen: null,
+        foundedYear: null,
+        prevTotalValue: 0,
+        baselineValue: 0
       };
     }
     const ft = s.familyTrust;
     ft.active = Boolean(ft.active);
     ft.balance = Math.max(0, Math.round(Number(ft.balance) || 0));
     if (!Array.isArray(ft.assets)) ft.assets = [];
+    if (!Array.isArray(ft.investments)) ft.investments = [];
     ft.feeRate = 1.5;
     if (typeof ft.yearsActive !== 'number' || Number.isNaN(ft.yearsActive)) ft.yearsActive = 0;
     if (ft.fundManager && typeof ft.fundManager === 'object') {
-      if (typeof ft.fundManager.yearsLeft !== 'number') ft.fundManager.yearsLeft = 5;
+      if (typeof ft.fundManager.yearsLeft !== 'number') ft.fundManager.yearsLeft = 1;
     } else {
       ft.fundManager = null;
     }
     ft.underAudit = Boolean(ft.underAudit);
     ft.lapsed = Boolean(ft.lapsed);
     if (ft.lastPaidAge === undefined) ft.lastPaidAge = null;
+    if (ft.active && !ft.founderName) {
+      ft.founderName = s.name || 'Pengasas';
+      ft.founderGen = s.generation || 1;
+      ft.foundedYear = s.year || 2026;
+    }
+    if (typeof ft.prevTotalValue !== 'number' || Number.isNaN(ft.prevTotalValue)) ft.prevTotalValue = 0;
+    if (typeof ft.baselineValue !== 'number' || Number.isNaN(ft.baselineValue)) ft.baselineValue = 0;
 
     // Migrasi selamat untuk simpanan lama yang pernah memilih pewaris tunggal 100%
     if (s.legal && s.legal.wasiat && (s.legal.wasiat.mode === 'sole_heir' || s.legal.wasiat.mode === 'single_child' || s.legal.wasiat.willType === 'sole_heir' || s.legal.wasiat.willType === 'single_child')) {
@@ -228,15 +242,66 @@ window.LegalInheritanceEngine = {
     return ft;
   },
 
+  getCorporateTaxRate(s) {
+    const c = (s && window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
+    const raw = (c && typeof c.corporateTaxRate === 'number')
+      ? c.corporateTaxRate
+      : (c && typeof c.taxRate === 'number' ? c.taxRate : 0.20);
+    return Math.min(0.25, Math.max(0.15, Number(raw) || 0.20));
+  },
+
   getTrustAssetsValue(s) {
     if (!s || !s.familyTrust || !Array.isArray(s.familyTrust.assets)) return 0;
     return Math.round(s.familyTrust.assets.reduce((acc, a) => acc + Math.max(0, Number(a && a.value) || 0), 0));
   },
 
+  getTrustInvestmentUnitPrice(s, holding) {
+    if (!s || !holding) return 100;
+    const inst = (window.AssetsData && AssetsData.INVESTMENTS)
+      ? AssetsData.INVESTMENTS.find(x => x.id === holding.instId)
+      : null;
+    const marketInfo = s.assetMarket && s.assetMarket.invPrices && s.assetMarket.invPrices[holding.instId];
+    const fallback = (window.AssetsEngine && AssetsEngine._scaleUsdToLocal)
+      ? AssetsEngine._scaleUsdToLocal(inst ? inst.baseUnitUsd : 100, s.countryId, false)
+      : 100;
+    let price = (marketInfo && marketInfo.price) || fallback;
+    if (holding.instId === 'inv_fd_bank' && holding.units > 0) {
+      const avgBuy = Math.round((holding.totalCost || 0) / holding.units);
+      price = Math.max(price, avgBuy);
+    }
+    return Math.max(1, Math.round(price));
+  },
+
+  getTrustInvestmentsValue(s) {
+    if (!s || !s.familyTrust || !Array.isArray(s.familyTrust.investments)) return 0;
+    return Math.round(s.familyTrust.investments.reduce((acc, h) => {
+      if (!h || (h.units || 0) <= 0) return acc;
+      return acc + Math.round(h.units * this.getTrustInvestmentUnitPrice(s, h));
+    }, 0));
+  },
+
   getTrustNetWorth(s) {
     if (!s) return 0;
     this.ensureFamilyTrust(s);
-    return Math.max(0, Math.round((s.familyTrust.balance || 0) + this.getTrustAssetsValue(s)));
+    return Math.max(0, Math.round((s.familyTrust.balance || 0) + this.getTrustAssetsValue(s) + this.getTrustInvestmentsValue(s)));
+  },
+
+  getTrustPerformancePct(s) {
+    if (!s) return { pct: 0, hasBaseline: false };
+    this.ensureFamilyTrust(s);
+    const ft = s.familyTrust;
+    const currentVal = this.getTrustNetWorth(s);
+    const refVal = ft.prevTotalValue > 0 ? ft.prevTotalValue : ft.baselineValue;
+    if (!refVal || refVal <= 0) return { pct: 0, hasBaseline: false };
+    const pct = ((currentVal - refVal) / refVal) * 100;
+    return { pct: Number(pct.toFixed(1)), hasBaseline: true };
+  },
+
+  _adjustTrustBasis(s, delta) {
+    if (!s || !s.familyTrust) return;
+    const ft = s.familyTrust;
+    if (ft.prevTotalValue > 0) ft.prevTotalValue = Math.max(0, Math.round(ft.prevTotalValue + delta));
+    ft.baselineValue = Math.max(0, Math.round((ft.baselineValue || 0) + delta));
   },
 
   getTrustSetupFee(s) {
@@ -253,46 +318,59 @@ window.LegalInheritanceEngine = {
     return Math.max(baseFee, Math.round(trustWealth * 0.015));
   },
 
-  getFundManagerOffers(s) {
+  getFundManagerOffers(s, selectedYears = 1) {
     this.ensureFamilyTrust(s);
+    const yrs = [1, 2, 3, 5].includes(Number(selectedYears)) ? Number(selectedYears) : 1;
+    const disc = yrs === 5 ? 0.90 : yrs === 3 ? 0.94 : 1.0;
     const cid = (s && s.countryId) || 'MY';
     const trustWealth = this.getTrustNetWorth(s);
-    return [
+    const tiers = [
       {
         tier: 'junior',
         icon: '📋',
         title: 'Pengurus Dana Junior',
-        desc: 'Yuran lantikan murah; pengurusan asas tetapi terdedah kepada kesilapan audit dan risiko pecah amanah.',
-        cost: Utils.usdToLocal(1800, cid) + Math.round(trustWealth * 0.008)
+        desc: 'Yuran lantikan mampu milik; pengurusan asas tetapi terdedah kepada kesilapan audit dan risiko pecah amanah.',
+        annualCost: Utils.usdToLocal(600, cid) + Math.round(trustWealth * 0.003)
       },
       {
         tier: 'profesional',
         icon: '💼',
         title: 'Pengurus Korporat Profesional',
         desc: 'Yuran sederhana; pematuhan cukai lebih teratur dan risiko terkawal.',
-        cost: Utils.usdToLocal(6500, cid) + Math.round(trustWealth * 0.022)
+        annualCost: Utils.usdToLocal(2200, cid) + Math.round(trustWealth * 0.008)
       },
       {
         tier: 'elit',
         icon: '🏆',
         title: 'Pengurus Dana Elit (Padu)',
-        desc: 'Yuran lantikan sangat mahal; pengurusan aset mantap serta perlindungan kukuh terhadap audit cukai dan pecah amanah.',
-        cost: Utils.usdToLocal(18000, cid) + Math.round(trustWealth * 0.045)
+        desc: 'Yuran lantikan premium; pengurusan aset mantap serta perlindungan kukuh terhadap audit cukai dan pecah amanah.',
+        annualCost: Utils.usdToLocal(5500, cid) + Math.round(trustWealth * 0.015)
       }
     ];
+    return tiers.map(t => ({
+      ...t,
+      years: yrs,
+      cost: Math.max(1, Math.round(t.annualCost * yrs * disc))
+    }));
   },
 
-  hireFundManager(s, tier) {
+  hireFundManager(s, tier, selectedYears = 1) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh melantik pengurus dana semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
 
-    const offer = this.getFundManagerOffers(s).find(o => o.tier === tier);
+    const yrs = [1, 2, 3, 5].includes(Number(selectedYears)) ? Number(selectedYears) : 1;
+    const offer = this.getFundManagerOffers(s, yrs).find(o => o.tier === tier);
     if (!offer) return { ok: false, msg: 'Pilihan pengurus dana tidak sah.' };
-    if (s.money < offer.cost) {
-      return { ok: false, msg: `Baki tidak mencukupi — yuran lantikan ialah ${Utils.formatMoney(offer.cost, s.countryId)}.` };
+
+    if (s.money >= offer.cost) {
+      s.money -= offer.cost;
+    } else if (s.familyTrust.balance >= offer.cost) {
+      s.familyTrust.balance -= offer.cost;
+    } else {
+      return { ok: false, msg: `Baki tidak mencukupi — yuran lantikan (${yrs} tahun) ialah ${Utils.formatMoney(offer.cost, s.countryId)}.` };
     }
 
     const names = {
@@ -300,19 +378,18 @@ window.LegalInheritanceEngine = {
       profesional: ['Dato\' Farid', 'Puan Marisa', 'Encik Kenneth Tan', 'Puan Syafiqah'],
       elit: ['Tan Sri Dr. Iskandar', 'Puan Sri Evelyn Wong', 'Dato\' Seri Azlan', 'Dr. Marcus Vance']
     };
-    s.money -= offer.cost;
     const mgrName = Utils.pick(names[tier] || names.junior);
     s.familyTrust.fundManager = {
       tier,
       name: mgrName,
-      yearsLeft: 5
+      yearsLeft: yrs
     };
     GameState.addJournalEntry(
-      `👔 Anda melantik ${mgrName} (${offer.title}) sebagai Pengurus Dana Yayasan Keluarga untuk kontrak 5 tahun (${Utils.formatMoney(offer.cost, s.countryId)}).`,
+      `👔 Anda melantik ${mgrName} (${offer.title}) sebagai Pengurus Dana Yayasan Keluarga untuk kontrak ${yrs} tahun (${Utils.formatMoney(offer.cost, s.countryId)}).`,
       'milestone'
     );
     GameState.save();
-    return { ok: true, msg: `${mgrName} (${offer.title}) dilantik untuk kontrak 5 tahun!` };
+    return { ok: true, msg: `${mgrName} (${offer.title}) dilantik untuk kontrak ${yrs} tahun!` };
   },
 
   transferAssetToTrust(s, assetType, uid) {
@@ -332,6 +409,7 @@ window.LegalInheritanceEngine = {
       ...asset,
       trustAssetType: assetType
     });
+    this._adjustTrustBasis(s, Math.max(0, Math.round(asset.value || 0)));
     GameState.addJournalEntry(`🏛️ Aset ${asset.name} (${Utils.formatMoney(asset.value || 0, s.countryId)}) dipindahkan ke dalam Tabung Yayasan Keluarga.`);
     GameState.save();
     return { ok: true, msg: `${asset.name} berjaya dipindahkan ke Yayasan Keluarga!` };
@@ -353,10 +431,171 @@ window.LegalInheritanceEngine = {
     if (!s.assets) s.assets = { properties: [], vehicles: [] };
     if (!Array.isArray(s.assets[listKey])) s.assets[listKey] = [];
     s.assets[listKey].push(asset);
+    this._adjustTrustBasis(s, -Math.max(0, Math.round(asset.value || 0)));
 
     GameState.addJournalEntry(`📤 Aset ${asset.name} dikeluarkan daripada Tabung Yayasan Keluarga ke pemilikan peribadi.`);
     GameState.save();
     return { ok: true, msg: `${asset.name} dikeluarkan ke aset peribadi.` };
+  },
+
+  transferInvestmentToTrust(s, instId) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan pelaburan disekat semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+
+    const portfolio = s.assets && s.assets.portfolio;
+    if (!portfolio || !portfolio[instId] || portfolio[instId].units <= 0) {
+      return { ok: false, msg: 'Pegangan pelaburan tidak ditemui.' };
+    }
+    const pos = portfolio[instId];
+    const existing = s.familyTrust.investments.find(x => x && x.instId === instId);
+    const unitPrice = this.getTrustInvestmentUnitPrice(s, { instId, units: pos.units, totalCost: pos.totalCost });
+    const moveVal = Math.round(pos.units * unitPrice);
+
+    if (existing) {
+      existing.units += pos.units;
+      existing.totalCost = Math.round((existing.totalCost || 0) + (pos.totalCost || 0));
+    } else {
+      s.familyTrust.investments.push({
+        instId,
+        units: pos.units,
+        totalCost: Math.round(pos.totalCost || 0)
+      });
+    }
+    delete portfolio[instId];
+    this._adjustTrustBasis(s, moveVal);
+    const inst = (window.AssetsData && AssetsData.INVESTMENTS) ? AssetsData.INVESTMENTS.find(x => x.id === instId) : null;
+    GameState.addJournalEntry(`📈 Pelaburan ${inst ? inst.name : instId} (${Utils.formatMoney(moveVal, s.countryId)}) dipindahkan ke dalam Tabung Yayasan Keluarga.`);
+    GameState.save();
+    return { ok: true, msg: `${inst ? inst.name : instId} dipindahkan ke Yayasan Keluarga!` };
+  },
+
+  withdrawInvestmentFromTrust(s, instId) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pengeluaran pelaburan disekat semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
+
+    const idx = s.familyTrust.investments.findIndex(x => x && x.instId === instId);
+    if (idx === -1) return { ok: false, msg: 'Pelaburan yayasan tidak ditemui.' };
+    const [holding] = s.familyTrust.investments.splice(idx, 1);
+    const unitPrice = this.getTrustInvestmentUnitPrice(s, holding);
+    const moveVal = Math.round(holding.units * unitPrice);
+
+    if (!s.assets) s.assets = { properties: [], vehicles: [], portfolio: {} };
+    if (!s.assets.portfolio) s.assets.portfolio = {};
+    if (s.assets.portfolio[instId]) {
+      s.assets.portfolio[instId].units += holding.units;
+      s.assets.portfolio[instId].totalCost = Math.round((s.assets.portfolio[instId].totalCost || 0) + (holding.totalCost || 0));
+    } else {
+      s.assets.portfolio[instId] = { units: holding.units, totalCost: Math.round(holding.totalCost || 0) };
+    }
+    this._adjustTrustBasis(s, -moveVal);
+    const inst = (window.AssetsData && AssetsData.INVESTMENTS) ? AssetsData.INVESTMENTS.find(x => x.id === instId) : null;
+    GameState.addJournalEntry(`📤 Pelaburan ${inst ? inst.name : instId} dikeluarkan daripada Yayasan Keluarga ke portfolio peribadi.`);
+    GameState.save();
+    return { ok: true, msg: `${inst ? inst.name : instId} dikeluarkan ke portfolio peribadi.` };
+  },
+
+  toggleRentTrustProperty(s, uid) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menguruskan penyewaan semasa dalam tahanan.' };
+    const p = (s.familyTrust.assets || []).find(x => x && x.uid === uid && x.trustAssetType === 'property');
+    if (!p) return { ok: false, msg: 'Hartanah yayasan tidak ditemui.' };
+    if (!p.rented && (p.condition ?? 80) <= 50) {
+      return { ok: false, msg: 'Keadaan rumah terlalu daif (≤50%). Sila baik pulih dahulu sebelum disewakan.' };
+    }
+    p.rented = !p.rented;
+    const estRent = Math.round((p.value || 0) * ((p.yieldPct || 5.5) / 100));
+    GameState.addJournalEntry(
+      p.rented
+        ? `🔑 Hartanah Yayasan (${p.name}) kini disewakan (~${Utils.formatMoney(estRent, s.countryId)}/thn terus ke akaun Yayasan).`
+        : `🏠 Penyewaan hartanah Yayasan (${p.name}) ditamatkan.`
+    );
+    GameState.save();
+    return { ok: true, msg: p.rented ? `Hartanah yayasan disewakan (~${Utils.formatMoney(estRent, s.countryId)}/thn)!` : 'Penyewaan hartanah yayasan ditamatkan.' };
+  },
+
+  repairTrustProperty(s, uid) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh membaik pulih hartanah semasa dalam tahanan.' };
+    const p = (s.familyTrust.assets || []).find(x => x && x.uid === uid && x.trustAssetType === 'property');
+    if (!p) return { ok: false, msg: 'Hartanah yayasan tidak ditemui.' };
+    if ((p.condition ?? 80) >= 100) return { ok: false, msg: 'Hartanah yayasan sudah berada pada kondisi 100%.' };
+    const cost = (window.AssetsEngine && AssetsEngine.getPropertyRepairCost)
+      ? AssetsEngine.getPropertyRepairCost(s, p)
+      : Math.max(Utils.usdToLocal(200, s.countryId), Math.round((p.value || 0) * 0.04));
+
+    if (s.familyTrust.balance >= cost) {
+      s.familyTrust.balance -= cost;
+    } else if (s.money >= cost) {
+      s.money -= cost;
+    } else {
+      return { ok: false, msg: `Baki tidak mencukupi — kos baik pulih ialah ${Utils.formatMoney(cost, s.countryId)}.` };
+    }
+    p.condition = 100;
+    GameState.addJournalEntry(`🔧 Hartanah Yayasan (${p.name}) dibaik pulih sepenuhnya (100%) dengan kos ${Utils.formatMoney(cost, s.countryId)}.`);
+    GameState.save();
+    return { ok: true, msg: `${p.name} selesai dibaik pulih (Kondisi kini 100%)!` };
+  },
+
+  sellTrustAsset(s, uid) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Jualan aset yayasan disekat semasa dalam tahanan.' };
+    const idx = (s.familyTrust.assets || []).findIndex(x => x && x.uid === uid);
+    if (idx === -1) return { ok: false, msg: 'Aset yayasan tidak ditemui.' };
+    const asset = s.familyTrust.assets[idx];
+    const gross = (asset.trustAssetType === 'property' && window.AssetsEngine && AssetsEngine.getPropertyResalePrice)
+      ? AssetsEngine.getPropertyResalePrice(asset)
+      : Math.max(0, Math.round(asset.value || 0));
+    const corpRate = this.getCorporateTaxRate(s);
+    const corpTax = Math.round(gross * corpRate);
+    const net = Math.max(0, gross - corpTax);
+
+    s.familyTrust.assets.splice(idx, 1);
+    s.familyTrust.balance += net;
+    GameState.addJournalEntry(
+      `💵 Jualan Terus Aset Yayasan (${asset.name}): Kasar ${Utils.formatMoney(gross, s.countryId)} — Cukai Korporat (${Math.round(corpRate * 100)}%: -${Utils.formatMoney(corpTax, s.countryId)}) → Bersih ${Utils.formatMoney(net, s.countryId)} dikreditkan ke Tabung Yayasan.`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: `${asset.name} terjual! ${Utils.formatMoney(net, s.countryId)} dikreditkan ke Yayasan (selepas Cukai Korporat ${Math.round(corpRate * 100)}%).` };
+  },
+
+  sellTrustInvestment(s, instId, fraction = 1) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Jualan pelaburan yayasan disekat semasa dalam tahanan.' };
+    const idx = (s.familyTrust.investments || []).findIndex(x => x && x.instId === instId);
+    if (idx === -1) return { ok: false, msg: 'Pelaburan yayasan tidak ditemui.' };
+    const holding = s.familyTrust.investments[idx];
+    const frac = Math.min(1, Math.max(0.1, Number(fraction) || 1));
+    const sellUnits = frac >= 0.99 ? holding.units : Math.max(0.01, holding.units * frac);
+    const unitPrice = this.getTrustInvestmentUnitPrice(s, holding);
+    const gross = Math.round(sellUnits * unitPrice);
+    const corpRate = this.getCorporateTaxRate(s);
+    const corpTax = Math.round(gross * corpRate);
+    const net = Math.max(0, gross - corpTax);
+
+    if (frac >= 0.99 || sellUnits >= holding.units) {
+      s.familyTrust.investments.splice(idx, 1);
+    } else {
+      holding.units = Math.max(0, holding.units - sellUnits);
+      holding.totalCost = Math.round((holding.totalCost || 0) * (1 - frac));
+    }
+    s.familyTrust.balance += net;
+    const inst = (window.AssetsData && AssetsData.INVESTMENTS) ? AssetsData.INVESTMENTS.find(x => x.id === instId) : null;
+    GameState.addJournalEntry(
+      `📈💵 Jualan Pelaburan Yayasan (${inst ? inst.name : instId} ${Math.round(frac * 100)}%): Kasar ${Utils.formatMoney(gross, s.countryId)} — Cukai Korporat (${Math.round(corpRate * 100)}%: -${Utils.formatMoney(corpTax, s.countryId)}) → Bersih ${Utils.formatMoney(net, s.countryId)} dikreditkan ke Yayasan.`
+    );
+    GameState.save();
+    return { ok: true, msg: `Terjual! ${Utils.formatMoney(net, s.countryId)} dikreditkan ke Tabung Yayasan (Cukai Korporat ${Math.round(corpRate * 100)}%).` };
   },
 
   setupFamilyTrust(s) {
@@ -374,7 +613,13 @@ window.LegalInheritanceEngine = {
     s.familyTrust.active = true;
     s.familyTrust.lapsed = false;
     s.familyTrust.lastPaidAge = s.age;
-    if (!s.familyTrust.feeRate || s.familyTrust.feeRate < 2.0) s.familyTrust.feeRate = 2.0;
+    s.familyTrust.feeRate = 1.5;
+    s.familyTrust.yearsActive = 0;
+    s.familyTrust.founderName = s.name || 'Pengasas';
+    s.familyTrust.founderGen = s.generation || 1;
+    s.familyTrust.foundedYear = s.year || 2026;
+    s.familyTrust.prevTotalValue = 0;
+    s.familyTrust.baselineValue = 0;
     GameState.addJournalEntry(
       `🏛️ Anda menubuhkan Tabung Yayasan Keluarga dengan yuran pendaftaran ${Utils.formatMoney(fee, s.countryId)}. Harta dalam yayasan kini dilindungi bebas cukai pusaka untuk pewaris pemain!`,
       'milestone'
@@ -394,6 +639,7 @@ window.LegalInheritanceEngine = {
     if (s.money < amt) return { ok: false, msg: 'Baki bank tidak mencukupi.' };
     s.money -= amt;
     s.familyTrust.balance += amt;
+    this._adjustTrustBasis(s, amt);
     GameState.addJournalEntry(`🏛️ Memasukkan ${Utils.formatMoney(amt, s.countryId)} ke dalam Tabung Yayasan Keluarga (Dana Yayasan: ${Utils.formatMoney(s.familyTrust.balance, s.countryId)}).`);
     GameState.save();
     return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dimasukkan ke Yayasan Keluarga.` };
@@ -410,6 +656,7 @@ window.LegalInheritanceEngine = {
     if (s.familyTrust.balance < amt) return { ok: false, msg: 'Dana dalam Yayasan Keluarga tidak mencukupi.' };
     s.familyTrust.balance -= amt;
     s.money += amt;
+    this._adjustTrustBasis(s, -amt);
     GameState.addJournalEntry(`💵 Mengeluarkan ${Utils.formatMoney(amt, s.countryId)} daripada Tabung Yayasan Keluarga ke akaun bank.`);
     GameState.save();
     return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dikeluarkan ke akaun bank.` };
@@ -442,26 +689,43 @@ window.LegalInheritanceEngine = {
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
     const returned = Math.max(0, Math.round(s.familyTrust.balance || 0));
     s.money += returned;
-    // Pulangkan semua aset yayasan ke aset peribadi
-    if (!s.assets) s.assets = { properties: [], vehicles: [] };
+    if (!s.assets) s.assets = { properties: [], vehicles: [], portfolio: {} };
     if (!Array.isArray(s.assets.properties)) s.assets.properties = [];
     if (!Array.isArray(s.assets.vehicles)) s.assets.vehicles = [];
+    if (!s.assets.portfolio) s.assets.portfolio = {};
     (s.familyTrust.assets || []).forEach(a => {
       const listKey = a.trustAssetType === 'property' ? 'properties' : 'vehicles';
       const copy = { ...a };
       delete copy.trustAssetType;
       s.assets[listKey].push(copy);
     });
+    (s.familyTrust.investments || []).forEach(h => {
+      if (!h || (h.units || 0) <= 0) return;
+      if (s.assets.portfolio[h.instId]) {
+        s.assets.portfolio[h.instId].units += h.units;
+        s.assets.portfolio[h.instId].totalCost = Math.round((s.assets.portfolio[h.instId].totalCost || 0) + (h.totalCost || 0));
+      } else {
+        s.assets.portfolio[h.instId] = { units: h.units, totalCost: Math.round(h.totalCost || 0) };
+      }
+    });
     s.familyTrust.assets = [];
+    s.familyTrust.investments = [];
     s.familyTrust.balance = 0;
     s.familyTrust.active = false;
     s.familyTrust.lapsed = false;
     s.familyTrust.underAudit = false;
     s.familyTrust.fundManager = null;
     s.familyTrust.lastPaidAge = null;
-    GameState.addJournalEntry(`❌ Tabung Yayasan Keluarga dibubarkan. Dana ${Utils.formatMoney(returned, s.countryId)} serta semua aset dikembalikan ke pemilikan peribadi.`, 'warning');
+    s.familyTrust.founderName = null;
+    s.familyTrust.founderGen = null;
+    s.familyTrust.foundedYear = null;
+    s.familyTrust.yearsActive = 0;
+    s.familyTrust.feeRate = 1.5;
+    s.familyTrust.prevTotalValue = 0;
+    s.familyTrust.baselineValue = 0;
+    GameState.addJournalEntry(`❌ Tabung Yayasan Keluarga dibubarkan. Dana ${Utils.formatMoney(returned, s.countryId)}, aset & pelaburan dikembalikan ke pemilikan peribadi.`, 'warning');
     GameState.save();
-    return { ok: true, msg: `Yayasan Keluarga dibubarkan. ${Utils.formatMoney(returned, s.countryId)} dan semua aset dikembalikan.` };
+    return { ok: true, msg: `Yayasan Keluarga dibubarkan. ${Utils.formatMoney(returned, s.countryId)} serta semua aset & pelaburan dikembalikan.` };
   },
 
   tickYearlyFamilyTrust(s) {
@@ -470,7 +734,45 @@ window.LegalInheritanceEngine = {
     const ft = s.familyTrust;
     if (!ft.active) return null;
 
-    // 1. Yuran pengurusan tahunan tetap 1.5% setahun
+    // 0. Simpan nilai tahun sebelumnya untuk kiraan prestasi
+    const valueBeforeYear = this.getTrustNetWorth(s);
+    if (valueBeforeYear > 0) ft.prevTotalValue = valueBeforeYear;
+
+    // 1. Pengasingan Aliran Tunai Ketat: semua sewa hartanah yayasan & dividen/faedah pelaburan masuk ke ft.balance
+    let trustRentNet = 0;
+    let trustDivIncome = 0;
+    for (const a of ft.assets) {
+      if (!a || a.trustAssetType !== 'property') continue;
+      const wear = a.rented ? Utils.randInt(6, 12) : Utils.randInt(4, 9);
+      a.condition = Utils.clamp((typeof a.condition === 'number' ? a.condition : 80) - wear, 0, 100);
+      if (a.rented && a.condition <= 50) {
+        a.rented = false;
+        GameState.addJournalEntry(`🏠⚠️ Penyewa di hartanah Yayasan (${a.name}) mengadu keadaan rumah terlalu uzur dan terus keluar berpindah!`, 'warning');
+      }
+      const tax = Math.round((a.value || 0) * 0.005);
+      const upkeep = a.upkeep || 0;
+      const rent = a.rented ? Math.round((a.value || 0) * ((a.yieldPct || 5.5) / 100)) : 0;
+      trustRentNet += (rent - tax - upkeep);
+    }
+
+    for (const h of ft.investments) {
+      if (!h || (h.units || 0) <= 0) continue;
+      const inst = (window.AssetsData && AssetsData.INVESTMENTS) ? AssetsData.INVESTMENTS.find(x => x.id === h.instId) : null;
+      if (inst && inst.divPct > 0) {
+        const curVal = Math.round(h.units * this.getTrustInvestmentUnitPrice(s, h));
+        trustDivIncome += Math.round(curVal * inst.divPct);
+      }
+    }
+
+    const totalTrustYield = trustRentNet + trustDivIncome;
+    if (totalTrustYield !== 0) {
+      ft.balance = Math.max(0, Math.round(ft.balance + totalTrustYield));
+      if (totalTrustYield > 0) {
+        GameState.addJournalEntry(`🏛️ Pendapatan Pasif Yayasan: +${Utils.formatMoney(totalTrustYield, s.countryId)} (Sewa Bersih & Dividen/Faedah) dikreditkan terus ke Tabung Yayasan Keluarga.`);
+      }
+    }
+
+    // 2. Yuran pengurusan tahunan tetap 1.5% setahun
     ft.yearsActive = (ft.yearsActive || 0) + 1;
     ft.feeRate = 1.5;
 
@@ -479,12 +781,12 @@ window.LegalInheritanceEngine = {
       s.money -= fee;
       ft.lapsed = false;
       ft.lastPaidAge = s.age;
-      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (${ft.feeRate}% setahun) telah ditolak (-${Utils.formatMoney(fee, s.countryId)}).`);
+      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (1.5% setahun) telah ditolak (-${Utils.formatMoney(fee, s.countryId)}).`);
     } else if (ft.balance >= fee) {
       ft.balance -= fee;
       ft.lapsed = false;
       ft.lastPaidAge = s.age;
-      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (${ft.feeRate}% setahun) telah ditolak daripada dana yayasan (-${Utils.formatMoney(fee, s.countryId)}).`);
+      GameState.addJournalEntry(`🏛️ Yuran pengurusan tahunan Tabung Yayasan Keluarga (1.5% setahun) telah ditolak daripada dana yayasan (-${Utils.formatMoney(fee, s.countryId)}).`);
     } else {
       ft.lapsed = true;
       GameState.addJournalEntry(
@@ -493,26 +795,26 @@ window.LegalInheritanceEngine = {
       );
     }
 
-    // 2. Kontrak 5 tahun Pengurus Dana
+    // 3. Kontrak Pengurus Dana
     if (ft.fundManager) {
       ft.fundManager.yearsLeft = (ft.fundManager.yearsLeft || 1) - 1;
       if (ft.fundManager.yearsLeft <= 0) {
         ft.fundManager = null;
         GameState.addJournalEntry(
-          '⚠️ Kontrak Pengurus Dana Yayasan Keluarga telah tamat (tempoh 5 tahun). Sila lantik pengurus baharu segera untuk mengelakkan risiko pecah amanah dan pemantauan kerajaan!',
+          '⚠️ Kontrak Pengurus Dana Yayasan Keluarga telah tamat. Sila lantik pengurus baharu segera untuk mengelakkan risiko pecah amanah dan pemantauan kerajaan!',
           'warning'
         );
       }
     }
 
-    // 3. Risiko Tadbir Urus (Pecah Amanah & Audit Lari Cukai) — hanya di luar penjara
+    // 4. Risiko Tadbir Urus (Pecah Amanah & Audit Lari Cukai — 2 pilihan sahaja)
     const trustNet = this.getTrustNetWorth(s);
     if ((s.prison && s.prison.inPrison) || trustNet <= 0 || s.age < 18) return null;
 
     const tier = ft.fundManager ? ft.fundManager.tier : 'none';
     const heat = (s.alignment && s.alignment.notoriety) || 0;
-    const embezzleChance = tier === 'none' ? 0.22 : tier === 'junior' ? 0.14 : tier === 'profesional' ? 0.04 : 0.01;
-    const auditChance = Math.min(0.42, (tier === 'none' ? 0.20 : tier === 'junior' ? 0.13 : tier === 'profesional' ? 0.05 : 0.015) + (heat * 0.002) + (ft.feeRate >= 15 ? 0.05 : 0));
+    const embezzleChance = tier === 'none' ? 0.20 : tier === 'junior' ? 0.13 : tier === 'profesional' ? 0.04 : 0.01;
+    const auditChance = Math.min(0.38, (tier === 'none' ? 0.18 : tier === 'junior' ? 0.12 : tier === 'profesional' ? 0.05 : 0.015) + (heat * 0.002));
 
     // Peristiwa A: Skandal Pecah Amanah Yayasan
     if (ft.balance > 0 && Utils.chance(embezzleChance)) {
@@ -529,8 +831,8 @@ window.LegalInheritanceEngine = {
           {
             label: `⚖️ Bawa ke Mahkamah & Bekukan Akaun (${Utils.formatMoney(legalFee, s.countryId)})`,
             action: () => {
-              if (s.money >= legalFee) s.money -= legalFee;
-              else ft.balance = Math.max(0, ft.balance - legalFee);
+              if (ft.balance >= legalFee) ft.balance -= legalFee;
+              else s.money -= legalFee;
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 14 });
               if (Utils.chance(0.58)) {
                 const recovered = Math.round(stolen * 0.65);
@@ -556,11 +858,11 @@ window.LegalInheritanceEngine = {
       };
     }
 
-    // Peristiwa B: Pemantauan Kerajaan & Siasatan Lari Cukai
+    // Peristiwa B: Pemantauan Kerajaan & Siasatan Lari Cukai (2 PILIHAN SAHAJA)
     if (Utils.chance(auditChance)) {
       ft.underAudit = true;
       const penalty = Math.max(Utils.usdToLocal(4000, s.countryId), Math.round(trustNet * 0.18));
-      const lawyerFee = Utils.usdToLocal(5000, s.countryId);
+      const hideSuccessChance = tier === 'elit' ? 0.55 : tier === 'profesional' ? 0.40 : tier === 'junior' ? 0.25 : 0.15;
       return {
         id: 'trust_tax_audit_' + s.year,
         icon: '🏛️',
@@ -568,57 +870,42 @@ window.LegalInheritanceEngine = {
         text: `Pihak berkuasa hasil mengesyaki Tabung Yayasan Keluarga anda digunakan untuk mengelak cukai secara haram. Siasatan rasmi telah dibuka!`,
         choices: [
           {
-            label: `💵 Bayar Penalti Cukai & Denda Penuh (${Utils.formatMoney(penalty, s.countryId)})`,
+            label: `💵 Bayar Denda (${Utils.formatMoney(penalty, s.countryId)})`,
             action: () => {
               ft.underAudit = false;
-              if (s.money >= penalty) s.money -= penalty;
-              else {
-                const rem = penalty - Math.max(0, s.money);
-                s.money = Math.min(0, s.money);
-                ft.balance = Math.max(0, ft.balance - rem);
+              if (ft.balance >= penalty) {
+                ft.balance -= penalty;
+              } else {
+                const rem = penalty - ft.balance;
+                ft.balance = 0;
+                s.money -= rem;
               }
-              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 12 });
-              return `Anda melangsaikan penalti cukai ${Utils.formatMoney(penalty, s.countryId)} dan siasatan kerajaan ditutup secara rasmi.`;
+              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
+              return `Anda melangsaikan denda cukai ${Utils.formatMoney(penalty, s.countryId)} dan siasatan kerajaan ditutup secara rasmi.`;
             }
           },
           {
-            label: `⚖️ Lantik Peguam Korporat Pertahankan Yayasan (${Utils.formatMoney(lawyerFee, s.countryId)})`,
+            label: '🕶️ Sorokkan Dokumen',
             action: () => {
               ft.underAudit = false;
-              if (s.money >= lawyerFee) s.money -= lawyerFee;
-              else ft.balance = Math.max(0, ft.balance - lawyerFee);
-              const smarts = (s.stats && s.stats.smarts) || 50;
-              const winProb = (tier === 'elit' ? 0.80 : tier === 'profesional' ? 0.62 : tier === 'junior' ? 0.35 : 0.20) + (smarts >= 75 ? 0.10 : 0);
-              if (Utils.chance(Math.min(0.92, winProb))) {
-                return 'Peguam korporat membuktikan struktur Tabung Yayasan Keluarga anda mematuhi undang-undang! Tiada denda dikenakan.';
+              if (Utils.chance(hideSuccessChance)) {
+                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 10, stress: 12 });
+                return 'Anda berjaya menyembunyikan rekod kewangan dan melepasi audit tanpa dikenakan denda!';
               }
-              const fine = Math.round(penalty * 1.25);
-              if (s.money >= fine) s.money -= fine;
-              else ft.balance = Math.max(0, ft.balance - fine);
-              if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 22, stress: 22 });
-              if (Utils.chance(0.35) && window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
-                PrisonFugitive.enterPrisonState(s, 'Pengelakan Cukai & Penipuan Kewangan Yayasan', Utils.randInt(3, 6), 'medium');
-                return 'Pembelaan gagal! Mahkamah menjatuhkan hukuman penjara dan denda berat atas kesalahan pengelakan cukai.';
+              const heavyFine = Math.round(penalty * 1.45);
+              if (ft.balance >= heavyFine) {
+                ft.balance -= heavyFine;
+              } else {
+                const rem = heavyFine - ft.balance;
+                ft.balance = 0;
+                s.money -= rem;
               }
-              return `Pembelaan gagal! Anda dikenakan denda berat ${Utils.formatMoney(fine, s.countryId)} dan rekod anda kini dipantau ketat pihak berkuasa.`;
-            }
-          },
-          {
-            label: '🕶️ Sorok Dokumen & Nafikan Dakwaan',
-            action: () => {
-              ft.underAudit = false;
-              if (Utils.chance(0.18)) {
-                if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 14, stress: 16 });
-                return 'Anda berjaya mengelirukan juruaudit buat sementara waktu, namun nama anda kekal dalam senarai pemantauan.';
-              }
-              const fine = Math.round(penalty * 1.4);
-              ft.balance = Math.max(0, ft.balance - fine);
               ft.lapsed = true;
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ notoriety: 35, stress: 28, karma: -18 });
               if (window.PrisonFugitive && PrisonFugitive.enterPrisonState) {
-                PrisonFugitive.enterPrisonState(s, 'Penipuan Kewangan & Pengelakan Cukai Yayasan', Utils.randInt(4, 8), 'maximum');
+                PrisonFugitive.enterPrisonState(s, 'Pengelakan Cukai & Pemalsuan Dokumen Yayasan', 5, 'maximum');
               }
-              return `BONGKAR! Dokumen palsu anda dikesan pihak berkuasa. Yayasan digantung, denda ${Utils.formatMoney(fine, s.countryId)} dikenakan, dan anda dijatuhi hukuman penjara!`;
+              return `KANTOI! Dokumen yang disorokkan terbongkar oleh juruaudit kerajaan. Penalti berat ${Utils.formatMoney(heavyFine, s.countryId)} dikenakan, yayasan digantung, dan anda dijatuhi hukuman PENJARA 5 TAHUN!`;
             }
           }
         ]

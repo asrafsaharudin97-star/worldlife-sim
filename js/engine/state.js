@@ -743,23 +743,35 @@ window.GameState = {
         ...JSON.parse(JSON.stringify(a)),
         value: Math.max(0, Math.round(Utils.convertMoney(a.value || 0, parent.countryId, cId)))
       }));
+      const transferredInvs = (parent.familyTrust.investments || []).map(h => ({
+        ...JSON.parse(JSON.stringify(h)),
+        totalCost: Math.max(0, Math.round(Utils.convertMoney(h.totalCost || 0, parent.countryId, cId)))
+      }));
+      const prevValLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.prevTotalValue || 0, parent.countryId, cId)));
+      const baseValLocal = Math.max(0, Math.round(Utils.convertMoney(parent.familyTrust.baselineValue || 0, parent.countryId, cId)));
       state.familyTrust = {
         active: true,
         balance: trustCashLocal,
         assets: transferredAssets,
-        feeRate: parent.familyTrust.feeRate || 2.0,
+        investments: transferredInvs,
+        feeRate: 1.5,
         yearsActive: parent.familyTrust.yearsActive || 0,
         fundManager: parent.familyTrust.fundManager ? { ...parent.familyTrust.fundManager } : null,
         underAudit: false,
         lapsed: false,
-        lastPaidAge: null
+        lastPaidAge: null,
+        founderName: parent.familyTrust.founderName || parent.name,
+        founderGen: parent.familyTrust.founderGen || parent.generation || 1,
+        foundedYear: parent.familyTrust.foundedYear || parent.year,
+        prevTotalValue: prevValLocal,
+        baselineValue: baseValLocal
       };
       this.addJournalEntry(
-        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)} & ${transferredAssets.length} aset yayasan dipindahkan terus ke Generasi ${state.generation} (Kadar Yuran: ${state.familyTrust.feeRate.toFixed(1)}%/thn)!`,
+        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)}, ${transferredAssets.length} aset & ${transferredInvs.length} pelaburan yayasan dipindahkan terus ke Generasi ${state.generation}!`,
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], investments: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null, founderName: null, founderGen: null, foundedYear: null, prevTotalValue: 0, baselineValue: 0 };
     }
 
     if (window.Dynasty) {
@@ -1228,23 +1240,30 @@ window.GameState = {
     if (parent.familyTrust && parent.familyTrust.active && !parent.familyTrust.lapsed) {
       const trustCashLocal = Math.max(0, Math.round(parent.familyTrust.balance || 0));
       const transferredAssets = (parent.familyTrust.assets || []).map(a => JSON.parse(JSON.stringify(a)));
+      const transferredInvs = (parent.familyTrust.investments || []).map(h => JSON.parse(JSON.stringify(h)));
       state.familyTrust = {
         active: true,
         balance: trustCashLocal,
         assets: transferredAssets,
-        feeRate: parent.familyTrust.feeRate || 2.0,
+        investments: transferredInvs,
+        feeRate: 1.5,
         yearsActive: parent.familyTrust.yearsActive || 0,
         fundManager: parent.familyTrust.fundManager ? { ...parent.familyTrust.fundManager } : null,
         underAudit: false,
         lapsed: false,
-        lastPaidAge: null
+        lastPaidAge: null,
+        founderName: parent.familyTrust.founderName || parent.name,
+        founderGen: parent.familyTrust.founderGen || parent.generation || 1,
+        foundedYear: parent.familyTrust.foundedYear || parent.year,
+        prevTotalValue: Math.max(0, Math.round(parent.familyTrust.prevTotalValue || 0)),
+        baselineValue: Math.max(0, Math.round(parent.familyTrust.baselineValue || 0))
       };
       this.addJournalEntry(
-        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)} & ${transferredAssets.length} aset yayasan dipindahkan terus ke Generasi ${newGen} (Kadar Yuran: ${state.familyTrust.feeRate.toFixed(1)}%/thn)!`,
+        `🏛️ Pemindahan Eksklusif Tabung Yayasan Keluarga (0% Cukai Pusaka): Dana ${Utils.formatMoney(trustCashLocal, cId)}, ${transferredAssets.length} aset & ${transferredInvs.length} pelaburan yayasan dipindahkan terus ke Generasi ${newGen}!`,
         'milestone'
       );
     } else {
-      state.familyTrust = { active: false, balance: 0, assets: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null };
+      state.familyTrust = { active: false, balance: 0, assets: [], investments: [], feeRate: 1.5, yearsActive: 0, fundManager: null, underAudit: false, lapsed: false, lastPaidAge: null, founderName: null, founderGen: null, foundedYear: null, prevTotalValue: 0, baselineValue: 0 };
     }
     if (window.Dynasty) {
       const bonuses = Dynasty.getBloodlineBonuses();
