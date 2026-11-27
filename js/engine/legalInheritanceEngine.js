@@ -247,7 +247,52 @@ window.LegalInheritanceEngine = {
       s.legal.wasiat.soleHeirId = null;
       s.legal.wasiat.soleBeneficiaryId = null;
     }
+    this.deduplicateTrustAssets(s);
     return ft;
+  },
+
+  _isTrustFlagged(x) {
+    return !!(x && (x.inTrust || x.isInTrust || x.inFoundation || x.owner === 'trust'));
+  },
+
+  // Sanitasi save lama: pastikan aset/pelaburan Yayasan tidak wujud serentak dalam inventori peribadi
+  deduplicateTrustAssets(s) {
+    if (!s || !s.familyTrust || !s.assets) return 0;
+    const ft = s.familyTrust;
+    const trustAssets = Array.isArray(ft.assets) ? ft.assets : [];
+    const uidSet = new Set();
+    const sigSet = new Set();
+    const sig = (a, type) => `${type}|${a.name || ''}|${Math.round(a.value || 0)}`;
+    trustAssets.forEach(a => {
+      if (!a) return;
+      const type = a.trustAssetType || 'vehicle';
+      if (a.uid != null) uidSet.add(String(a.uid));
+      if (a.id != null) uidSet.add('id:' + String(a.id));
+      if (a.uid == null && a.id == null) sigSet.add(sig(a, type));
+    });
+    let removed = 0;
+    [['properties', 'property'], ['vehicles', 'vehicle'], ['collectibles', 'collectible']].forEach(([key, type]) => {
+      const list = s.assets[key];
+      if (!Array.isArray(list)) return;
+      s.assets[key] = list.filter(x => {
+        if (!x) return false;
+        const dup = this._isTrustFlagged(x)
+          || (x.uid != null && uidSet.has(String(x.uid)))
+          || (x.id != null && uidSet.has('id:' + String(x.id)))
+          || (x.uid == null && x.id == null && sigSet.has(sig(x, type)));
+        if (dup) removed++;
+        return !dup;
+      });
+    });
+    // Portfolio: buang pegangan peribadi yang bertanda milik Yayasan
+    // (pegangan instId sama tanpa tanda adalah sah — dibeli semula selepas pemindahan)
+    const pf = s.assets.portfolio;
+    if (pf && typeof pf === 'object') {
+      Object.keys(pf).forEach(k => {
+        if (this._isTrustFlagged(pf[k])) { delete pf[k]; removed++; }
+      });
+    }
+    return removed;
   },
 
   TRUST_MAX_ARREARS_USD: 100000000, // Had maksimum tunggakan: $100M USD
@@ -500,6 +545,7 @@ window.LegalInheritanceEngine = {
     const [asset] = s.familyTrust.assets.splice(idx, 1);
     const listKey = asset.trustAssetType === 'property' ? 'properties' : asset.trustAssetType === 'collectible' ? 'collectibles' : 'vehicles';
     delete asset.trustAssetType;
+    delete asset.inTrust; delete asset.isInTrust; delete asset.inFoundation; if (asset.owner === 'trust') delete asset.owner;
     if (!s.assets) s.assets = { properties: [], vehicles: [], collectibles: [] };
     if (!Array.isArray(s.assets[listKey])) s.assets[listKey] = [];
     s.assets[listKey].push(asset);
@@ -908,6 +954,7 @@ window.LegalInheritanceEngine = {
       const listKey = a.trustAssetType === 'property' ? 'properties' : a.trustAssetType === 'collectible' ? 'collectibles' : 'vehicles';
       const copy = { ...a };
       delete copy.trustAssetType;
+      delete copy.inTrust; delete copy.isInTrust; delete copy.inFoundation; if (copy.owner === 'trust') delete copy.owner;
       s.assets[listKey].push(copy);
     });
     (s.familyTrust.investments || []).forEach(h => {
