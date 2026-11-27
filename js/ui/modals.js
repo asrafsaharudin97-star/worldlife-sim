@@ -1687,6 +1687,49 @@ window.Modals = {
     if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
   },
 
+  showBulkTransferToTrustModal(onBack = null) {
+    const s = GameState.current;
+    if (!s || !window.LegalInheritanceEngine) return;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const bp = LegalInheritanceEngine.getBulkTransferPreview(s);
+    const propVehCount = bp.propCount + bp.vehCount;
+
+    this.open({
+      icon: '📦',
+      title: 'Sahkan Pindah Semua Harta ke Yayasan',
+      subtitle: 'Pemindahan pukal semua harta peribadi layak',
+      bodyHtml: `
+        <div class="info-banner highlight" style="margin-bottom:10px;font-size:12px;line-height:1.6;">
+          <strong>Senarai Harta Peribadi Yang Akan Dipindahkan:</strong><br/>
+          • Baki Tunai Peribadi: <strong>${fmt(bp.cash)}</strong><br/>
+          • Pelaburan (Saham, Bon &amp; FD): <strong>${bp.invCount} item</strong><br/>
+          • Hartanah &amp; Kenderaan: <strong>${propVehCount} item</strong><br/>
+          • Koleksi &amp; Pusaka Peribadi: <strong>${bp.colCount} item</strong>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;margin-bottom:10px;cursor:pointer;">
+          <input type="checkbox" id="chk-bulk-keep-10" />
+          <span>Kekalkan sedikit tunai kecemasan di poket (10%)</span>
+        </label>
+        <div style="font-size:11.5px;color:#64748b;line-height:1.5;margin-bottom:12px;">
+          Aset yang dipindahkan menjadi milik Tabung Yayasan Keluarga sepenuhnya. Perniagaan aktif dan hutang peribadi kekal pada akaun peribadi.
+        </div>
+        <button type="button" class="btn-sm primary" id="btn-bulk-confirm-go" style="width:100%;">✅ Sahkan Pindah Semua ke Yayasan</button>
+      `,
+      footerHtml: `<button type="button" class="btn-sm secondary" id="btn-bulk-back">← Kembali ke Yayasan</button>`
+    });
+
+    const btnGo = document.getElementById('btn-bulk-confirm-go');
+    if (btnGo) btnGo.addEventListener('click', () => {
+      const keep10 = Boolean(document.getElementById('chk-bulk-keep-10') && document.getElementById('chk-bulk-keep-10').checked);
+      const res = LegalInheritanceEngine.transferAllPersonalWealthToTrust(s, { keepEmergency10: keep10 });
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+    const btnBack = document.getElementById('btn-bulk-back');
+    if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
+  },
+
   showWasiatModal(onBack = null) {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
@@ -1847,13 +1890,27 @@ window.Modals = {
                 💳 Langsaikan Tunggakan Yuran (${fmt(unpaidFees)})
               </button>
             ` : ''}
-            <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
               <input type="number" id="input-trust-amount" class="form-input" min="1" placeholder="${hasArrears ? 'Jumlah bayaran tunggakan (kosong = bayar penuh)' : `Jumlah (${Utils.getCountry(s.countryId).currency.symbol})`}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);" />
             </div>
-            <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <button type="button" class="tab-pill" id="btn-trust-fill-50" style="font-size:11px;padding:3px 10px;" ${(hasArrears || (s.money || 0) <= 0) ? 'disabled' : ''}>50% Tunai</button>
+              <button type="button" class="tab-pill" id="btn-trust-fill-100" style="font-size:11px;padding:3px 10px;" ${(hasArrears || (s.money || 0) <= 0) ? 'disabled' : ''}>Semua Tunai</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
               <button type="button" class="btn-sm primary" id="btn-trust-deposit" style="flex:1;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Masukkan Dana' : '💰 Masukkan Dana ke Yayasan'}</button>
               <button type="button" class="btn-sm secondary" id="btn-trust-withdraw" style="flex:1;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Keluarkan Dana' : '💵 Keluarkan Dana Yayasan'}</button>
             </div>
+            ${(() => {
+              const bp = LegalInheritanceEngine.getBulkTransferPreview ? LegalInheritanceEngine.getBulkTransferPreview(s) : { hasAny: false };
+              const bulkDisabled = hasArrears || !bp.hasAny || isOffshore;
+              return `
+                <button type="button" class="btn-sm secondary" id="btn-trust-bulk-all" style="width:100%;margin-bottom:${isOffshore ? '4px' : '10px'};border:1px dashed #94a3b8;" ${bulkDisabled ? 'disabled' : ''}>
+                  📦 Pindah Semua Harta Peribadi ke Yayasan
+                </button>
+                ${isOffshore ? `<div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.4;">Pemindahan pukal semua harta hanya dibenarkan di negara domisil Yayasan. Untuk pemindahan tunai dari luar negara, gunakan saluran Proksi di atas.</div>` : ''}
+              `;
+            })()}
 
             <div class="section-heading" style="margin-top:6px;">👔 Pengurus Dana Yayasan</div>
             <div class="info-banner" style="font-size:11.5px;margin-bottom:8px;background:${ft.fundManager ? '#f0fdf4' : '#fef2f2'};border-color:${ft.fundManager ? '#86efac' : '#fca5a5'};color:${ft.fundManager ? '#166534' : '#991b1b'};">
@@ -2057,6 +2114,23 @@ window.Modals = {
       App.toast(res.msg, res.ok ? 'success' : 'error');
       App.renderAll();
       this.showWasiatModal(onBack);
+    });
+
+    const fill50Btn = document.getElementById('btn-trust-fill-50');
+    if (fill50Btn) fill50Btn.addEventListener('click', () => {
+      const inp = document.getElementById('input-trust-amount');
+      if (inp && (s.money || 0) > 0) inp.value = Math.floor(s.money * 0.5);
+    });
+
+    const fill100Btn = document.getElementById('btn-trust-fill-100');
+    if (fill100Btn) fill100Btn.addEventListener('click', () => {
+      const inp = document.getElementById('input-trust-amount');
+      if (inp && (s.money || 0) > 0) inp.value = Math.floor(s.money);
+    });
+
+    const bulkBtn = document.getElementById('btn-trust-bulk-all');
+    if (bulkBtn) bulkBtn.addEventListener('click', () => {
+      this.showBulkTransferToTrustModal(onBack);
     });
 
     const depBtn = document.getElementById('btn-trust-deposit');

@@ -1025,6 +1025,88 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `Dana ${Utils.formatMoney(amt, s.countryId)} dikeluarkan ke akaun bank.` };
   },
 
+  getBulkTransferPreview(s) {
+    if (!s) return { cash: 0, invCount: 0, propCount: 0, vehCount: 0, colCount: 0, hasAny: false };
+    const cash = Math.max(0, Math.floor(s.money || 0));
+    const pf = (s.assets && s.assets.portfolio) || {};
+    const invCount = Object.values(pf).filter(p => p && p.units > 0 && !this._isTrustFlagged(p)).length;
+    const propCount = ((s.assets && s.assets.properties) || []).filter(x => x && !this._isTrustFlagged(x)).length;
+    const vehCount = ((s.assets && s.assets.vehicles) || []).filter(x => x && !this._isTrustFlagged(x)).length;
+    const colCount = ((s.assets && s.assets.collectibles) || []).filter(x => x && !this._isTrustFlagged(x)).length;
+    return {
+      cash,
+      invCount,
+      propCount,
+      vehCount,
+      colCount,
+      hasAny: cash > 0 || (invCount + propCount + vehCount + colCount) > 0
+    };
+  },
+
+  transferAllPersonalWealthToTrust(s, opts = {}) {
+    if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
+    this.ensureFamilyTrust(s);
+    if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
+    if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan aset disekat semasa dalam tahanan.' };
+    if (!s.familyTrust.active) return { ok: false, msg: 'Sila tubuhkan Tabung Yayasan Keluarga dahulu.' };
+    if ((s.familyTrust.unpaidFees || 0) > 0) {
+      return { ok: false, msg: `Pemindahan pukal dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+    }
+    if (this.isTrustOffshore(s)) {
+      return { ok: false, msg: 'Pemindahan pukal semua harta hanya dibenarkan di negara domisil Yayasan. Untuk pemindahan tunai dari luar negara, gunakan saluran Proksi di atas.' };
+    }
+    const preview = this.getBulkTransferPreview(s);
+    if (!preview.hasAny) {
+      return { ok: false, msg: 'Tiada harta peribadi yang layak untuk dipindahkan.' };
+    }
+
+    let totalBasisDelta = 0;
+    const keepPct = opts && opts.keepEmergency10 ? 0.10 : 0;
+    if (preview.cash > 0) {
+      const moveCash = keepPct > 0 ? Math.floor(preview.cash * (1 - keepPct)) : preview.cash;
+      if (moveCash > 0) {
+        s.money = Math.max(0, Math.round((s.money || 0) - moveCash));
+        s.familyTrust.balance = Math.round((s.familyTrust.balance || 0) + moveCash);
+        totalBasisDelta += moveCash;
+      }
+    }
+
+    const pf = s.assets && s.assets.portfolio;
+    if (pf && typeof pf === 'object') {
+      Object.keys(pf).forEach(instId => {
+        const pos = pf[instId];
+        if (!pos || pos.units <= 0 || this._isTrustFlagged(pos)) return;
+        const unitPrice = this.getTrustInvestmentUnitPrice(s, { instId, units: pos.units, totalCost: pos.totalCost });
+        totalBasisDelta += Math.round(pos.units * unitPrice);
+        const existing = s.familyTrust.investments.find(x => x && x.instId === instId);
+        if (existing) {
+          existing.units += pos.units;
+          existing.totalCost = Math.round((existing.totalCost || 0) + (pos.totalCost || 0));
+        } else {
+          s.familyTrust.investments.push({ instId, units: pos.units, totalCost: Math.round(pos.totalCost || 0) });
+        }
+        delete pf[instId];
+      });
+    }
+
+    [['properties', 'property'], ['vehicles', 'vehicle'], ['collectibles', 'collectible']].forEach(([listKey, assetType]) => {
+      const list = s.assets && Array.isArray(s.assets[listKey]) ? s.assets[listKey] : null;
+      if (!list || list.length === 0) return;
+      list.forEach(item => {
+        if (!item || this._isTrustFlagged(item)) return;
+        s.familyTrust.assets.push({ ...item, trustAssetType: assetType });
+        totalBasisDelta += Math.max(0, Math.round(item.value || 0));
+      });
+      s.assets[listKey] = [];
+    });
+
+    this.deduplicateTrustAssets(s);
+    if (totalBasisDelta > 0) this._adjustTrustBasis(s, totalBasisDelta);
+    GameState.addJournalEntry('📦 Semua harta peribadi layak telah dipindahkan serentak ke dalam Tabung Yayasan Keluarga.', 'milestone');
+    GameState.save();
+    return { ok: true, msg: 'Semua harta peribadi layak berjaya dipindahkan ke Tabung Yayasan Keluarga!' };
+  },
+
   payTrustUnpaidFees(s, amount = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
