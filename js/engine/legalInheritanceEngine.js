@@ -373,9 +373,26 @@ window.LegalInheritanceEngine = {
     return this.getTrustCountryRates(c).corporateTaxRate;
   },
 
+  getTrustSetupCost(s, targetCountryId = null) {
+    const cid = (s && s.countryId) || 'MY';
+    const base = this.getTrustSetupFee(s);
+    const destId = targetCountryId || cid;
+    if (destId === cid) {
+      return { total: base, base, proxyFee: 0, isOffshore: false, rates: this.getTrustCountryRates(cid) };
+    }
+    const rates = this.getTrustCountryRates(destId);
+    const proxyUsd = rates.isTaxHaven ? 250000 : 100000;
+    const proxyFee = Utils.usdToLocal(proxyUsd, cid);
+    return { total: base + proxyFee, base, proxyFee, isOffshore: true, rates };
+  },
+
   getTrustRelocateFee(s) {
     if (!s) return 0;
-    return Utils.usdToLocal(2500, s.countryId || 'MY');
+    const cid = s.countryId || 'MY';
+    const raw = Math.round(this.getTrustNetWorth(s) * 0.005);
+    const minFee = Utils.usdToLocal(150000, cid);
+    const maxFee = Utils.usdToLocal(5000000, cid);
+    return Math.min(maxFee, Math.max(minFee, raw));
   },
 
   toggleTrustDomicileLock(s) {
@@ -399,37 +416,52 @@ window.LegalInheritanceEngine = {
     };
   },
 
-  relocateTrustDomicile(s) {
+  relocateTrustDomicile(s, targetCountryId = null, paySource = 'auto') {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Hanya dibuka untuk umur 18 tahun ke atas.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Pemindahan pendaftaran disekat semasa dalam tahanan.' };
     if (!s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga tidak aktif.' };
     if ((s.familyTrust.unpaidFees || 0) > 0) {
-      return { ok: false, msg: `Pemindahan pendaftaran dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
+      return { ok: false, msg: `Pemindahan domisil dikunci selagi tunggakan yuran (${Utils.formatMoney(s.familyTrust.unpaidFees, s.countryId)}) belum dilangsaikan.` };
     }
-    if (s.familyTrust.domicileCountry === s.countryId) {
-      return { ok: false, msg: 'Yayasan sudah pun didaftarkan di negara semasa anda.' };
+    const destId = targetCountryId || s.countryId;
+    if (s.familyTrust.domicileCountry === destId) {
+      return { ok: false, msg: 'Yayasan sudah pun didaftarkan di negara tersebut.' };
     }
     const fee = this.getTrustRelocateFee(s);
-    if (s.familyTrust.balance >= fee) {
+    const trustBal = Math.max(0, Math.round(s.familyTrust.balance || 0));
+    const persBal = Math.max(0, Math.round(s.money || 0));
+    if (paySource === 'trust') {
+      if (trustBal < fee) return { ok: false, msg: `Baki tunai Yayasan tidak mencukupi (Yuran Proksi: ${Utils.formatMoney(fee, s.countryId)}).` };
       s.familyTrust.balance -= fee;
-    } else if (s.money >= fee) {
+    } else if (paySource === 'personal') {
+      if (persBal < fee) return { ok: false, msg: `Baki tunai peribadi tidak mencukupi (Yuran Proksi: ${Utils.formatMoney(fee, s.countryId)}).` };
       s.money -= fee;
     } else {
-      return { ok: false, msg: `Baki tidak mencukupi — yuran pentadbiran pemindahan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+      if (trustBal >= fee) {
+        s.familyTrust.balance -= fee;
+      } else if (persBal >= fee) {
+        s.money -= fee;
+      } else if (trustBal + persBal >= fee) {
+        const rem = fee - trustBal;
+        s.familyTrust.balance = 0;
+        s.money -= rem;
+      } else {
+        return { ok: false, msg: `Baki tidak mencukupi — yuran penstrukturan proksi ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+      }
     }
-    const oldC = this.getTrustDomicileCountry(s);
-    const newC = (window.Utils && Utils.getCountry) ? Utils.getCountry(s.countryId) : null;
-    s.familyTrust.domicileCountry = s.countryId;
+    const newC = (window.Utils && Utils.getCountry) ? Utils.getCountry(destId) : null;
+    s.familyTrust.domicileCountry = destId;
+    s.familyTrust.isDomicileLocked = true;
     const newRates = this.getTrustCountryRates(newC);
     s.familyTrust.feeRate = Number((newRates.annualFeeRate * 100).toFixed(2));
     GameState.addJournalEntry(
-      `🏛️ Pendaftaran Tabung Yayasan Keluarga dipindahkan dari ${oldC ? oldC.name : 'negara lama'} ke ${newC ? `${newC.flag} ${newC.name}` : s.countryId} (${newRates.categoryLabel} • Yuran ${s.familyTrust.feeRate}%/thn) dengan yuran pentadbiran ${Utils.formatMoney(fee, s.countryId)}.`,
+      `🌐 Firma proksi berjaya memindahkan pendaftaran domisil Tabung Yayasan Keluarga ke ${newC ? `${newC.flag} ${newC.name}` : destId} (${newRates.categoryLabel} • Yuran ${s.familyTrust.feeRate}%/thn) dengan yuran penstrukturan ${Utils.formatMoney(fee, s.countryId)}.`,
       'milestone'
     );
     GameState.save();
-    return { ok: true, msg: `Domisil Yayasan berjaya dipindahkan ke ${newC ? newC.name : s.countryId}!` };
+    return { ok: true, msg: `Domisil Yayasan berjaya dipindahkan ke ${newC ? newC.name : destId}!` };
   },
 
   convertTrustCurrency(s, fromId, toId) {
@@ -454,9 +486,7 @@ window.LegalInheritanceEngine = {
         if (typeof h.totalCost === 'number') h.totalCost = Math.max(0, Utils.convertMoney(h.totalCost, fromId, toId));
       });
     }
-    if (ft.active && ft.isDomicileLocked === false) {
-      ft.domicileCountry = toId;
-    }
+    ft.isDomicileLocked = true;
   },
 
   getTrustAssetsValue(s) {
@@ -887,36 +917,43 @@ window.LegalInheritanceEngine = {
     return { ok: true, msg: `Terjual! ${Utils.formatMoney(net, s.countryId)} dikreditkan ke Tabung Yayasan (Cukai Korporat ${Math.round(corpRate * 100)}%).` };
   },
 
-  setupFamilyTrust(s) {
+  setupFamilyTrust(s, targetCountryId = null) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureLegalFields(s);
     this.ensureFamilyTrust(s);
     if (s.age < 18) return { ok: false, msg: 'Anda mesti berumur 18 tahun ke atas untuk menubuhkan Yayasan Keluarga.' };
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak boleh menubuhkan Yayasan Keluarga semasa dalam tahanan.' };
     if (s.familyTrust.active) return { ok: false, msg: 'Tabung Yayasan Keluarga sudah pun aktif.' };
-    const fee = this.getTrustSetupFee(s);
-    if (s.money < fee) {
-      return { ok: false, msg: `Baki tidak mencukupi — kos penubuhan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
+    const destId = targetCountryId || s.countryId || 'MY';
+    const costInfo = this.getTrustSetupCost(s, destId);
+    if (s.money < costInfo.total) {
+      return { ok: false, msg: `Baki tidak mencukupi — jumlah kos penubuhan ialah ${Utils.formatMoney(costInfo.total, s.countryId)}.` };
     }
-    s.money -= fee;
+    s.money -= costInfo.total;
     s.familyTrust.active = true;
     s.familyTrust.lapsed = false;
+    s.familyTrust.unpaidFees = 0;
+    s.familyTrust.unpaidStreakYears = 0;
     s.familyTrust.lastPaidAge = s.age;
-    s.familyTrust.feeRate = 1.5;
+    s.familyTrust.feeRate = Number((costInfo.rates.annualFeeRate * 100).toFixed(2));
     s.familyTrust.yearsActive = 0;
     s.familyTrust.founderName = s.name || 'Pengasas';
     s.familyTrust.founderGen = s.generation || 1;
     s.familyTrust.foundedYear = s.year || 2026;
     s.familyTrust.prevTotalValue = 0;
     s.familyTrust.baselineValue = 0;
-    s.familyTrust.domicileCountry = s.countryId || 'MY';
+    s.familyTrust.domicileCountry = destId;
     s.familyTrust.isDomicileLocked = true;
+    const destC = (window.Utils && Utils.getCountry) ? Utils.getCountry(destId) : null;
+    const destName = destC ? `${destC.flag} ${destC.name}` : destId;
     GameState.addJournalEntry(
-      `🏛️ Anda menubuhkan Tabung Yayasan Keluarga dengan yuran pendaftaran ${Utils.formatMoney(fee, s.countryId)}. Harta dalam yayasan kini dilindungi bebas cukai pusaka untuk pewaris pemain!`,
+      costInfo.isOffshore
+        ? `🌐 Anda menubuhkan Tabung Yayasan Keluarga Luar Pesisir di ${destName} melalui Proksi Guaman (Jumlah kos: ${Utils.formatMoney(costInfo.total, s.countryId)}).`
+        : `🏛️ Anda menubuhkan Tabung Yayasan Keluarga di ${destName} dengan yuran pendaftaran ${Utils.formatMoney(costInfo.total, s.countryId)}. Harta dalam yayasan kini dilindungi bebas cukai pusaka untuk pewaris pemain!`,
       'milestone'
     );
     GameState.save();
-    return { ok: true, msg: 'Tabung Yayasan Keluarga berjaya ditubuhkan!' };
+    return { ok: true, msg: `Tabung Yayasan Keluarga berjaya ditubuhkan di ${destC ? destC.name : destId}!` };
   },
 
   OFFSHORE_PROXY_RATES: {

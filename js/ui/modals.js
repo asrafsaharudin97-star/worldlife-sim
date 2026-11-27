@@ -1766,6 +1766,170 @@ window.Modals = {
     if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
   },
 
+  _buildTrustCountryOptionsHtml(excludeId = null) {
+    const all = (window.COUNTRIES && typeof window.COUNTRIES === 'object') ? Object.values(window.COUNTRIES) : [];
+    const havens = [];
+    const others = [];
+    all.forEach(c => {
+      if (!c || !c.id || c.id === excludeId) return;
+      const r = LegalInheritanceEngine.getTrustCountryRates(c);
+      const feeStr = r.annualFeeRate === 0 ? '0%' : `${Number((r.annualFeeRate * 100).toFixed(2))}%`;
+      const corpStr = `${Math.round(r.corporateTaxRate * 100)}%`;
+      const opt = { id: c.id, name: c.name, label: `${c.flag || ''} ${c.name} — Yuran ${feeStr}/thn • Cukai ${corpStr}` };
+      if (r.isTaxHaven) havens.push(opt);
+      else others.push(opt);
+    });
+    havens.sort((a, b) => a.name.localeCompare(b.name, 'ms'));
+    others.sort((a, b) => a.name.localeCompare(b.name, 'ms'));
+    return `
+      <optgroup label="🏝️ Negara Pulau Bebas Cukai (0% Yuran • 0% Cukai)">
+        ${havens.map(o => `<option value="${o.id}">${Utils.escapeHtml(o.label)}</option>`).join('')}
+      </optgroup>
+      <optgroup label="🌍 Negara Lain">
+        ${others.map(o => `<option value="${o.id}">${Utils.escapeHtml(o.label)}</option>`).join('')}
+      </optgroup>
+    `;
+  },
+
+  showOffshoreSetupTrustModal(onBack = null) {
+    const s = GameState.current;
+    if (!s || !window.LegalInheritanceEngine) return;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const optsHtml = this._buildTrustCountryOptionsHtml(s.countryId);
+
+    this.open({
+      icon: '🌐',
+      title: 'Daftar Yayasan Luar Pesisir (Proksi)',
+      subtitle: 'Tubuhkan Tabung Yayasan di luar negara tanpa perlu berhijrah',
+      bodyHtml: `
+        <div style="font-size:12px;color:#475569;margin-bottom:8px;line-height:1.5;">
+          Pilih negara pendaftaran domisil Yayasan anda. Domisil akan dikunci secara automatik walaupun anda berhijrah atau menyambung generasi.
+        </div>
+        <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:4px;">Negara Domisil Sasaran:</label>
+        <select id="sel-offshore-setup-country" class="form-input" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);margin-bottom:10px;">
+          ${optsHtml}
+        </select>
+        <div id="offshore-setup-preview" class="info-banner highlight" style="font-size:12px;line-height:1.6;margin-bottom:10px;"></div>
+        <button type="button" class="primary-btn" id="btn-confirm-offshore-setup" style="width:100%;">✅ Sahkan &amp; Tubuhkan Yayasan Luar Pesisir</button>
+      `,
+      footerHtml: `<button type="button" class="btn-sm secondary" id="btn-offshore-setup-back">← Kembali ke Yayasan</button>`
+    });
+
+    const sel = document.getElementById('sel-offshore-setup-country');
+    const prev = document.getElementById('offshore-setup-preview');
+    const btnGo = document.getElementById('btn-confirm-offshore-setup');
+    const updatePreview = () => {
+      const destId = sel ? sel.value : 'BS';
+      const destC = Utils.getCountry(destId);
+      const ci = LegalInheritanceEngine.getTrustSetupCost(s, destId);
+      const feeStr = ci.rates.annualFeeRate === 0 ? '0%/thn (Bebas Cukai)' : `${Number((ci.rates.annualFeeRate * 100).toFixed(2))}%/thn`;
+      const corpStr = `${Math.round(ci.rates.corporateTaxRate * 100)}%`;
+      const canAfford = (s.money || 0) >= ci.total;
+      if (prev) {
+        prev.innerHTML = `
+          <strong>${destC ? `${destC.flag} ${Utils.escapeHtml(destC.name)}` : destId}</strong> (${Utils.escapeHtml(ci.rates.categoryLabel)})<br/>
+          • Yuran Tahunan Yayasan: <strong>${feeStr}</strong> • Cukai Korporat: <strong>${corpStr}</strong><br/>
+          • Kos Penubuhan Asas: <strong>${fmt(ci.base)}</strong><br/>
+          • Caj Proksi Guaman (${ci.rates.isTaxHaven ? '$250K USD' : '$100K USD'}): <strong>${fmt(ci.proxyFee)}</strong><br/>
+          • Jumlah Bayaran: <strong style="color:${canAfford ? '#059669' : '#dc2626'};">${fmt(ci.total)}</strong>
+        `;
+      }
+      if (btnGo) {
+        btnGo.disabled = !canAfford;
+        btnGo.textContent = canAfford ? `✅ Sahkan & Tubuhkan (${fmt(ci.total)})` : '🔒 Baki Tunai Peribadi Tidak Mencukupi';
+      }
+    };
+    if (sel) sel.addEventListener('change', updatePreview);
+    updatePreview();
+
+    if (btnGo) btnGo.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.setupFamilyTrust(s, sel ? sel.value : null);
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+    const btnBack = document.getElementById('btn-offshore-setup-back');
+    if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
+  },
+
+  showRelocateDomicileModal(onBack = null) {
+    const s = GameState.current;
+    if (!s || !window.LegalInheritanceEngine) return;
+    LegalInheritanceEngine.ensureFamilyTrust(s);
+    const ft = s.familyTrust;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const oldDomC = LegalInheritanceEngine.getTrustDomicileCountry(s);
+    const oldRates = LegalInheritanceEngine.getTrustCountryRates(oldDomC);
+    const fee = LegalInheritanceEngine.getTrustRelocateFee(s);
+    const feeUsd = Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(fee, s.countryId) : '';
+    const optsHtml = this._buildTrustCountryOptionsHtml(ft.domicileCountry);
+
+    this.open({
+      icon: '🌐',
+      title: 'Pindah Domisil Yayasan (Proksi Guaman)',
+      subtitle: 'Pindahkan pendaftaran Yayasan ke mana-mana negara tanpa membubarkannya',
+      bodyHtml: `
+        <div style="font-size:12px;color:#475569;margin-bottom:8px;line-height:1.5;">
+          Semua aset, pelaburan, pusaka, Pengasas, dan tempoh aktif Yayasan kekal 100% utuh.
+        </div>
+        <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:4px;">Negara Domisil Baharu:</label>
+        <select id="sel-relocate-domicile-country" class="form-input" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);margin-bottom:8px;">
+          ${optsHtml}
+        </select>
+        <label style="font-size:11.5px;font-weight:700;display:block;margin-bottom:4px;">Sumber Bayaran Yuran Proksi:</label>
+        <select id="sel-relocate-pay-source" class="form-input" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);margin-bottom:10px;">
+          <option value="auto">Gabungan Automatik (Tunai Yayasan dahulu, baki Tunai Peribadi)</option>
+          <option value="trust">Baki Tunai Yayasan (${fmt(ft.balance || 0)})</option>
+          <option value="personal">Baki Tunai Peribadi (${fmt(Math.max(0, s.money || 0))})</option>
+        </select>
+        <div id="relocate-domicile-preview" class="info-banner highlight" style="font-size:12px;line-height:1.6;margin-bottom:10px;"></div>
+        <button type="button" class="primary-btn" id="btn-confirm-relocate-domicile" style="width:100%;">✅ Sahkan Pindah Domisil Yayasan</button>
+      `,
+      footerHtml: `<button type="button" class="btn-sm secondary" id="btn-relocate-domicile-back">← Kembali ke Yayasan</button>`
+    });
+
+    const selC = document.getElementById('sel-relocate-domicile-country');
+    const selPay = document.getElementById('sel-relocate-pay-source');
+    const prev = document.getElementById('relocate-domicile-preview');
+    const btnGo = document.getElementById('btn-confirm-relocate-domicile');
+
+    const updatePreview = () => {
+      const destId = selC ? selC.value : 'BS';
+      const destC = Utils.getCountry(destId);
+      const newRates = LegalInheritanceEngine.getTrustCountryRates(destC);
+      const oldFeeStr = oldRates.annualFeeRate === 0 ? '0%' : `${Number((oldRates.annualFeeRate * 100).toFixed(2))}%`;
+      const newFeeStr = newRates.annualFeeRate === 0 ? '0%' : `${Number((newRates.annualFeeRate * 100).toFixed(2))}%`;
+      const paySrc = selPay ? selPay.value : 'auto';
+      const tBal = Math.max(0, Math.round(ft.balance || 0));
+      const pBal = Math.max(0, Math.round(s.money || 0));
+      const canPay = paySrc === 'trust' ? tBal >= fee : paySrc === 'personal' ? pBal >= fee : (tBal + pBal) >= fee;
+
+      if (prev) {
+        prev.innerHTML = `
+          <strong>Domisil Semasa:</strong> ${oldDomC ? `${oldDomC.flag} ${Utils.escapeHtml(oldDomC.name)}` : ft.domicileCountry} (${oldFeeStr}/thn • Cukai ${Math.round(oldRates.corporateTaxRate * 100)}%)<br/>
+          <strong>Domisil Baharu:</strong> ${destC ? `${destC.flag} ${Utils.escapeHtml(destC.name)}` : destId} (${newFeeStr}/thn • Cukai ${Math.round(newRates.corporateTaxRate * 100)}%)<br/>
+          <strong>Yuran Penstrukturan Proksi (0.5%, Min $150K – Maks $5M USD):</strong> <strong style="color:${canPay ? '#059669' : '#dc2626'};">${fmt(fee)}</strong>${feeUsd ? ` <span style="color:#64748b;">(${feeUsd})</span>` : ''}
+        `;
+      }
+      if (btnGo) {
+        btnGo.disabled = !canPay;
+        btnGo.textContent = canPay ? `✅ Sahkan Pindah ke ${destC ? destC.name : destId}` : '🔒 Baki Sumber Bayaran Tidak Mencukupi';
+      }
+    };
+    if (selC) selC.addEventListener('change', updatePreview);
+    if (selPay) selPay.addEventListener('change', updatePreview);
+    updatePreview();
+
+    if (btnGo) btnGo.addEventListener('click', () => {
+      const res = LegalInheritanceEngine.relocateTrustDomicile(s, selC ? selC.value : null, selPay ? selPay.value : 'auto');
+      App.toast(res.msg, res.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showWasiatModal(onBack);
+    });
+    const btnBack = document.getElementById('btn-relocate-domicile-back');
+    if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
+  },
+
   showWasiatModal(onBack = null) {
     const s = GameState.current;
     if (!s || !window.LegalInheritanceEngine) return;
@@ -1876,8 +2040,7 @@ window.Modals = {
                 🏝️ Kategori Domisil: <strong>${Utils.escapeHtml(trustRates.categoryLabel)}</strong>${trustRates.isTaxHaven ? ' <span class="cat-badge synergy">Bebas Cukai</span>' : ''}
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                <button class="btn-sm secondary" id="btn-toggle-trust-domicile-lock" style="font-size:11px;padding:4px 8px;">${ft.isDomicileLocked !== false ? '🔒 Domisil Dikunci (Kekal Semasa Hijrah)' : '🔓 Domisil Tidak Dikunci (Ikut Hijrah)'}</button>
-                ${(isOffshore && !hasArrears) ? `<button class="btn-sm primary" id="btn-relocate-trust-domicile" style="font-size:11px;padding:4px 8px;">🏛️ Pindah Pendaftaran ke ${Utils.escapeHtml(curC ? curC.name : s.countryId)} (${fmt(relocateFee)})</button>` : ''}
+                <button type="button" class="btn-sm secondary" id="btn-open-relocate-domicile" style="font-size:11px;padding:4px 10px;" ${hasArrears ? 'disabled' : ''}>${hasArrears ? '🔒 Pindah Domisil (Langsaikan Tunggakan Dahulu)' : '🌐 Pindah Domisil (Proksi)'}</button>
               </div>
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:6px;">
                 <div>
@@ -1912,8 +2075,11 @@ window.Modals = {
               🔒 Pengurusan Tabung Yayasan Keluarga hanya dibenarkan untuk umur 18+ dan di luar tahanan.
             </div>
           ` : !ft.active ? `
-            <button type="button" class="primary-btn" id="btn-trust-setup" style="width:100%;">
-              🏛️ Tubuhkan Yayasan Keluarga (${fmt(setupFee)})
+            <button type="button" class="primary-btn" id="btn-trust-setup" style="width:100%;margin-bottom:6px;">
+              🏛️ Daftar Domestik — ${Utils.escapeHtml((Utils.getCountry(s.countryId) || {}).name || s.countryId)} (${fmt(setupFee)})
+            </button>
+            <button type="button" class="btn-sm secondary" id="btn-trust-setup-offshore" style="width:100%;">
+              🌐 Daftar Luar Pesisir (Melalui Proksi Guaman)
             </button>
           ` : `
             ${hasArrears ? `
@@ -2126,20 +2292,14 @@ window.Modals = {
       this.showWasiatModal(onBack);
     });
 
-    const lockDomBtn = document.getElementById('btn-toggle-trust-domicile-lock');
-    if (lockDomBtn) lockDomBtn.addEventListener('click', () => {
-      const res = LegalInheritanceEngine.toggleTrustDomicileLock(s);
-      App.toast(res.msg, res.ok ? 'success' : 'error');
-      App.renderAll();
-      this.showWasiatModal(onBack);
+    const setupOffBtn = document.getElementById('btn-trust-setup-offshore');
+    if (setupOffBtn) setupOffBtn.addEventListener('click', () => {
+      this.showOffshoreSetupTrustModal(onBack);
     });
 
-    const relocDomBtn = document.getElementById('btn-relocate-trust-domicile');
-    if (relocDomBtn) relocDomBtn.addEventListener('click', () => {
-      const res = LegalInheritanceEngine.relocateTrustDomicile(s);
-      App.toast(res.msg, res.ok ? 'success' : 'error');
-      App.renderAll();
-      this.showWasiatModal(onBack);
+    const openRelocBtn = document.getElementById('btn-open-relocate-domicile');
+    if (openRelocBtn) openRelocBtn.addEventListener('click', () => {
+      this.showRelocateDomicileModal(onBack);
     });
 
     const reactBtn = document.getElementById('btn-trust-reactivate');

@@ -821,10 +821,8 @@ window.GameState = {
       const prevValLocal = Math.max(0, Math.round(Utils.convertMoney(pft.prevTotalValue || 0, parent.countryId, cId)));
       const baseValLocal = Math.max(0, Math.round(Utils.convertMoney(pft.baselineValue || 0, parent.countryId, cId)));
       const unpaidFeesLocal = Math.max(0, Math.round(Utils.convertMoney(pft.unpaidFees || 0, parent.countryId, cId)));
-      const isLocked = pft.isDomicileLocked !== false;
-      const inheritedDomicile = isLocked
-        ? (pft.domicileCountry || parent.countryId || cId)
-        : cId;
+      const isLocked = true;
+      const inheritedDomicile = pft.domicileCountry || parent.countryId || cId;
       state.familyTrust = {
         active: true,
         balance: trustCashLocal,
