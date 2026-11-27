@@ -1618,19 +1618,38 @@ window.Modals = {
             <div class="mig-title">🏛️ Tabung Yayasan Keluarga</div>
             <span class="cat-badge" style="background:${trustStatusBg};color:${trustStatusColor};">${trustStatusLabel}</span>
           </div>
-          ${ft.active ? `
+          ${ft.active ? (() => {
+            const curC = Utils.getCountry(s.countryId);
+            const isUsd = !curC || (curC.currency && curC.currency.code === 'USD') || Number(curC.usdRate) === 1;
+            const rateStr = curC && typeof curC.usdRate === 'number'
+              ? (curC.usdRate >= 10 ? curC.usdRate.toLocaleString('en-US', { maximumFractionDigits: 2 }) : curC.usdRate.toFixed(2))
+              : '1';
+            const rateLabel = isUsd
+              ? 'Mata Wang Semasa: <strong>USD (Asas)</strong>'
+              : `Kadar Tukaran: <strong>1 USD = ${rateStr} ${Utils.escapeHtml((curC.currency && curC.currency.code) || '')}</strong>`;
+            const netUsdEq = Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(trustNetWorth, s.countryId) : null;
+            const cashUsdEq = Utils.formatUsdEquivalent ? Utils.formatUsdEquivalent(ft.balance, s.countryId) : null;
+            return `
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.58;">
               <div>👑 <strong>Pengasas:</strong> ${Utils.escapeHtml(ft.founderName || s.name)} (Gen ${ft.founderGen || s.generation || 1}) • <strong>Aktif: ${ft.yearsActive || 0} tahun</strong></div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:3px;">
-                <span>💰 <strong>Jumlah Nilai Yayasan:</strong> <strong style="color:#059669;">${fmt(trustNetWorth)}</strong></span>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">💱 ${rateLabel}</div>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:5px;">
+                <div>
+                  <span>💰 <strong>Jumlah Nilai Bersih Yayasan:</strong> <strong style="color:#059669;">${fmt(trustNetWorth)}</strong></span>
+                  ${netUsdEq ? `<div style="font-size:11px;color:#64748b;line-height:1.3;">${netUsdEq}</div>` : ''}
+                </div>
                 <span>Prestasi: ${perfBadge}</span>
               </div>
-              <div style="font-size:11.5px;color:#475569;margin-top:3px;">
-                Tunai: <strong>${fmt(ft.balance)}</strong> • Pelaburan (${trustInvs.length}): <strong>${fmt(trustInvsVal)}</strong> • Aset (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
+              <div style="font-size:11.5px;color:#475569;margin-top:5px;">
+                <div>
+                  Baki Tunai Yayasan: <strong>${fmt(ft.balance)}</strong>
+                  ${cashUsdEq ? `<span style="font-size:10.5px;color:#64748b;margin-left:4px;">(${cashUsdEq})</span>` : ''}
+                </div>
+                Pelaburan (${trustInvs.length}): <strong>${fmt(trustInvsVal)}</strong> • Aset (${trustAssets.length}): <strong>${fmt(trustAssetsVal)}</strong><br/>
                 Kadar Yuran Tetap: <strong>1.5% setahun</strong> (${fmt(annualFee)}/thn) • Cukai Korporat Jualan: <strong>${corpTaxPct}%</strong>
               </div>
-            </div>
-          ` : `
+            </div>`;
+          })() : `
             <div style="font-size:12px;color:#475569;line-height:1.55;margin-bottom:10px;">
               Tubuhkan Tabung Yayasan Keluarga untuk melindungi tunai, hartanah, kenderaan &amp; pelaburan agar 100% diwarisi eksklusif oleh watak pemain generasi seterusnya (0% cukai pusaka &amp; 0% bahagian NPC).
             </div>

@@ -62,6 +62,14 @@ window.Utils = {
     return `\u2066${neg ? '-' : ''}${safeSymbol}${formatted}\u2069`;
   },
 
+  formatUsdEquivalent(localAmount, countryId) {
+    const c = this.getCountry(countryId);
+    if (!c || (c.currency && c.currency.code === 'USD') || Number(c.usdRate) === 1) return null;
+    const usdVal = this.localToUsd(Number(localAmount) || 0, countryId);
+    const compact = Math.abs(usdVal) >= 1000000;
+    return `≈ ${this.formatMoney(usdVal, 'US', compact)} USD`;
+  },
+
   generateName(countryId, gender, heritageId = null) {
     const c = this.getCountry(countryId);
     const hKey = heritageId && c.names[heritageId] ? heritageId : Object.keys(c.names)[0];
