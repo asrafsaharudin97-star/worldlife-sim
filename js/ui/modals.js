@@ -3517,23 +3517,46 @@ window.Modals = {
         <div class="action-list" style="margin-bottom:10px;">
           ${mafiaCardHtml}
         </div>
-        ${s.age >= 14 ? `
-          <div class="section-heading">Pilihan Aktiviti Gelap Tahun Ini (Percubaan: ${usedAttempts}/${maxAttempts})</div>
-          <div class="action-list">
-            ${crimeOpts.map(cr => {
-              const isDone = doneIds.includes(cr.id) || usedAttempts >= maxAttempts;
-              return `
-                <button class="action-item crime-btn" data-crime="${cr.id}" ${isDone ? 'disabled' : ''}>
-                  <span class="ai-icon">${cr.icon}</span>
-                  <span class="ai-content">
-                    <span class="ai-title">${Utils.escapeHtml(cr.title)}</span>
-                    <span class="ai-desc">${Utils.escapeHtml(cr.desc)}</span>
-                  </span>
-                </button>
-              `;
-            }).join('')}
-          </div>
-        ` : `<div class="info-banner">Aktiviti jenayah jalanan dibuka pada umur 14+, manakala Sindiket Mafia terbuka pada umur 18+.</div>`}
+        ${(() => {
+          const rawDarkList = (s.age >= 7 && window.Sim && Sim.getYearlyDarkActivities) ? Sim.getYearlyDarkActivities(s) : [];
+          const hasCyberScam = crimeOpts.some(cr => /siber|penipuan|scam/i.test(`${cr.id} ${cr.title}`));
+          const darkList = rawDarkList.filter(act => !(hasCyberScam && /penipuan dalam talian|scam|siber/i.test(`${act.id} ${act.title}`)));
+          const doneDark = Array.isArray(s.yearlyActions.darkDoneIds) ? s.yearlyActions.darkDoneIds : [];
+          const totalUsed = (usedAttempts || 0) + (s.yearlyActions.darkCount || 0);
+          const canShowDark = s.age >= 14 || darkList.length > 0;
+          if (!canShowDark) {
+            return `<div class="info-banner">Aktiviti jenayah jalanan dibuka pada umur 14+, manakala Sindiket Mafia terbuka pada umur 18+.</div>`;
+          }
+          return `
+            <div class="section-heading">Pilihan Aktiviti Gelap Tahun Ini (Percubaan: ${Math.min(maxAttempts, totalUsed)}/${maxAttempts})</div>
+            <div class="action-list">
+              ${s.age >= 14 ? crimeOpts.map(cr => {
+                const isDone = doneIds.includes(cr.id) || totalUsed >= maxAttempts;
+                return `
+                  <button class="action-item crime-btn" data-crime="${cr.id}" ${isDone ? 'disabled' : ''}>
+                    <span class="ai-icon">${cr.icon}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(cr.title)}</span>
+                      <span class="ai-desc">${Utils.escapeHtml(cr.desc)}</span>
+                    </span>
+                  </button>
+                `;
+              }).join('') : ''}
+              ${darkList.map(act => {
+                const isDone = doneDark.includes(act.id) || totalUsed >= maxAttempts || Boolean(s.prison && s.prison.inPrison);
+                return `
+                  <button type="button" class="action-item dark-deck-btn ${doneDark.includes(act.id) ? 'act-done-card' : ''}" data-dark-id="${act.id}" ${isDone ? 'disabled' : ''}>
+                    <span class="ai-icon">${act.icon}</span>
+                    <span class="ai-content">
+                      <span class="ai-title">${Utils.escapeHtml(act.title)}</span>
+                      <span class="ai-desc">${Utils.escapeHtml(act.desc)}</span>
+                    </span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          `;
+        })()}
       `;
     }
 
@@ -3548,8 +3571,8 @@ window.Modals = {
       pill.addEventListener('click', () => this.showActivities(pill.dataset.sub));
     });
 
-    if (activeSubTab === 'deck' && window.LegacyModals && LegacyModals.bindDynamicActivities) {
-      LegacyModals.bindDynamicActivities(() => this.showActivities('deck'));
+    if ((activeSubTab === 'deck' || activeSubTab === 'crime') && window.LegacyModals && LegacyModals.bindDynamicActivities) {
+      LegacyModals.bindDynamicActivities(() => this.showActivities(activeSubTab));
     }
 
     document.querySelectorAll('.culture-act-btn').forEach(btn => {

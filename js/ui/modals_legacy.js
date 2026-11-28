@@ -335,7 +335,6 @@ window.LegacyModals = {
 
         ${licShortcutHtml}
         <div class="action-list">${cardsHtml || emptyMsg}</div>
-        ${darkSectionHtml}
       `;
     },
 

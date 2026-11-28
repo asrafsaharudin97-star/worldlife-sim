@@ -384,6 +384,14 @@ window.App = {
       }
       Modals.showActivities('passport');
     });
+    const wealthBox = document.getElementById('char-wealth-box') || document.querySelector('.char-wealth');
+    if (wealthBox) {
+      wealthBox.addEventListener('click', () => {
+        if (window.Modals && Modals.showCashFlowStatementModal) {
+          Modals.showCashFlowStatementModal('all');
+        }
+      });
+    }
     document.getElementById('btn-open-legacy').addEventListener('click', () => {
       if (this._isToddlerLocked()) return;
       if (GameState.current && GameState.current.alive && window.LegacyModals) LegacyModals.showFamilyLegacy();
