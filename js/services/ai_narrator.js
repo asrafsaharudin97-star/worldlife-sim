@@ -189,14 +189,27 @@ window.AINarrator = {
     const hasOffshoreTrust = Boolean(window.LegalInheritanceEngine && LegalInheritanceEngine.isTrustOffshore && LegalInheritanceEngine.isTrustOffshore(s));
     const wealthTier = this._getWealthTier(s);
 
-    const sceneAngle = this._pickSceneAngle({
-      age: Number(s.age) || 0,
-      isInPrison,
-      hasLivingFamily: fam.hasLivingFamily,
-      isRoyal,
-      isFamous,
-      hasOffshoreTrust
-    });
+    const ageNum = Number(s.age) || 0;
+    const looksVal = Math.max(0, Math.min(100, Math.round(Number(stats.looks ?? s.looks ?? 50) || 50)));
+    const isEmployed = Boolean((s.job && s.job.title) || (s.partTimeJob && s.partTimeJob.title));
+    const isStudent = Boolean(
+      (s.education && s.education.activeStudy && s.education.activeStudy.title) ||
+      (ageNum >= 7 && ageNum <= 17 && s.education && s.education.stage && s.education.stage !== 'none' && s.education.stage !== 'done')
+    );
+    const isRetired = Boolean(s.retired || (s.job && s.job.isRetired));
+    const isUnemployedAdult = ageNum >= 18 && !isEmployed && !isStudent && !isRetired;
+    const jobName = isEmployed ? String(kerja).slice(0, 70) : '';
+
+    const sceneAngle = (ageNum <= 6 || isUnemployedAdult)
+      ? ''
+      : this._pickSceneAngle({
+          age: ageNum,
+          isInPrison,
+          hasLivingFamily: fam.hasLivingFamily,
+          isRoyal,
+          isFamous,
+          hasOffshoreTrust
+        });
 
     const cleanLogs = (Array.isArray(latestYearLogs) ? latestYearLogs : [])
       .map(entry => this._stripHtml(typeof entry === 'string' ? entry : (entry && entry.text) || ''))
@@ -213,11 +226,17 @@ window.AINarrator = {
 
     return {
       nama: String(s.name || 'Watak').slice(0, 60),
-      umur: Number(s.age) || 0,
+      age: ageNum,
+      umur: ageNum,
+      looks: looksVal,
       generasi: Number(s.generation) || 1,
       negara: String(c.name || s.countryId || 'Dunia').slice(0, 50),
       bandar: String(s.city || '').slice(0, 50),
+      job: jobName,
       kerja: String(kerja).slice(0, 70),
+      isEmployed,
+      isStudent,
+      isRetired,
       pendidikan: String(pendidikan).slice(0, 70),
       wealthTier,
       stressLevel: this._band(stress),
@@ -227,7 +246,10 @@ window.AINarrator = {
         isRoyal,
         isFamous,
         isMafia,
-        hasOffshoreTrust
+        hasOffshoreTrust,
+        isEmployed,
+        isStudent,
+        isRetired
       },
       livingFamily: {
         livingParents: fam.livingParents,
@@ -235,7 +257,7 @@ window.AINarrator = {
         livingChildren: fam.livingChildren,
         livingSiblings: fam.livingSiblings
       },
-      sceneAngle,
+      ...(sceneAngle ? { sceneAngle } : {}),
       recentLines: this._recentAiHistory.slice(-5),
       systemPrompt,
       generationConfig: {
@@ -265,7 +287,7 @@ window.AINarrator = {
   async generateDialogue(s, latestYearLogs = []) {
     try {
       if (!this.isEnabled()) return null;
-      if (!s || !s.alive || (Number(s.age) || 0) < 5) return null;
+      if (!s || !s.alive) return null;
 
       const now = Date.now();
       if (now - this._lastCallTime < this.COOLDOWN_MS) return null;
