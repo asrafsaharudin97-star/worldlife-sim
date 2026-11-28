@@ -2036,6 +2036,7 @@ window.Modals = {
     const netFlow = totIn - totOut;
 
     const catLabels = {
+      aset: 'Aset & Koleksi',
       guaman: 'Guaman & Saman',
       yayasan: 'Yayasan & Proksi',
       gaya_hidup: 'Gaya Hidup & Acara',

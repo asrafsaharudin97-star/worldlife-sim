@@ -64,6 +64,7 @@ window.Sim = {
     s.scholarshipIvUsedThisYear = false;
     s.hospitalVisitedThisYear = false;
     if (window.GameState && GameState.resetAnnualCashFlow) GameState.resetAnnualCashFlow(s);
+    s.collectibleAcquisitionsThisYear = 0;
     if (window.SecurityThreats && SecurityThreats.tickYearlySecurity) SecurityThreats.tickYearlySecurity(s);
     s._pendingImmigrationEnforcement = null;
     if (s.countryBans && typeof s.countryBans === 'object') {

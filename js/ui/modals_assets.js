@@ -422,22 +422,91 @@ window.AssetModals = {
   // --------------------------------------------------------------------------
   _renderCollectiblesTab(s, c) {
     const list = s.assetMarket.collectibles || [];
-    if (list.length === 0) return `<div class="info-banner">Semua koleksi tahun ini sudah dibeli! Klik <strong>🔄 Segarkan Pasaran</strong>.</div>`;
+    const used = Number(s.collectibleAcquisitionsThisYear) || 0;
+    const maxYr = AssetsEngine.MAX_COLLECTIBLE_ACQUISITIONS_PER_YEAR || 2;
+    const quotaBanner = `<div class="info-banner" style="font-size:11.5px;margin-bottom:8px;">🏛️ Had Perolehan Koleksi Tahun Ini: <strong>${used}/${maxYr}</strong>${used >= maxYr ? ' — Pendaftaran transaksi tahun ini telah ditutup.' : ''}</div>`;
+    if (list.length === 0) return quotaBanner + `<div class="info-banner">Tiada koleksi lagi dalam katalog tahun ini. Tunggu tahun hadapan untuk lelongan baharu.</div>`;
 
-    return list.map(col => `
-      <div class="migration-card ${col.isMystery ? 'rare-activity' : ''}">
+    return quotaBanner + list.map(col => {
+      const tier = col.tier || (col.isMystery || (col.prestige || 0) >= 6 ? 'rare' : 'standard');
+      const isAuction = Boolean(col.isAuction || tier !== 'standard');
+      const badge = col.isMystery
+        ? '<span class="rare-gold-tag">🎁 LELONGAN MISTERI</span>'
+        : tier === 'legendary'
+          ? '<span class="rare-gold-tag">👑 LEGENDA • LELONGAN TERTUTUP</span>'
+          : tier === 'rare'
+            ? '<span class="rare-gold-tag">🔨 EKSKLUSIF • LELONGAN TERTUTUP</span>'
+            : '';
+      return `
+      <div class="migration-card ${isAuction ? 'rare-activity' : ''}">
         <div class="mig-head">
-          <div class="mig-title">${col.icon} ${Utils.escapeHtml(col.name)} ${col.isMystery ? '<span class="rare-gold-tag">🎁 LELONGAN EKSKLUSIF</span>' : ''}</div>
-          <strong>${Utils.formatMoney(col.price, s.countryId, true)}</strong>
+          <div class="mig-title">${col.icon} ${Utils.escapeHtml(col.name)} ${badge}</div>
+          <strong>${isAuction ? 'Anggaran ' : ''}${Utils.formatMoney(col.price, s.countryId, true)}</strong>
         </div>
         <div style="font-size:11.5px;color:#475569;margin-bottom:6px;">
-          ${col.isMystery ? 'Peti misteri tertutup — potensi untung 2x–4x ATAU risiko barang tiruan!' : `Kenaikan nilai ~${Math.round(col.appRate * 100)}%/thn • Prestij Keluarga +${col.prestige}`}
+          ${col.isMystery ? 'Peti misteri tertutup — berpotensi artifak tulen bernilai tinggi atau replika tiruan.' : `Kenaikan nilai ~${Math.round(col.appRate * 100)}%/thn • Prestij Keluarga +${col.prestige}`}
+          ${tier === 'legendary' ? '<br/><span style="color:#92400e;">Syarat: Profil bersih &amp; pengumpul berpengalaman / prestij tinggi / Tabung Yayasan aktif.</span>' : tier === 'rare' ? '<br/><span style="color:#92400e;">Syarat: Profil bersih tanpa rekod kontroversi.</span>' : ''}
         </div>
         <div class="mig-actions" style="grid-template-columns:1fr;">
-          <button type="button" class="btn-sm primary col-buy-btn" data-lid="${col.lid}">💎 Beli (${Utils.formatMoney(col.price, s.countryId, true)})</button>
+          <button type="button" class="btn-sm primary col-buy-btn" data-lid="${col.lid}" ${used >= maxYr ? 'disabled' : ''}>
+            ${used >= maxYr ? '🔒 Had Tahunan Dicapai' : isAuction ? `🔨 Sertai Lelongan Tertutup` : `💎 Beli (${Utils.formatMoney(col.price, s.countryId, true)})`}
+          </button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
+  },
+
+  showCollectibleAuctionModal(listingId) {
+    const s = GameState.current;
+    if (!s) return;
+    AssetsEngine.ensureFields(s);
+    const item = (s.assetMarket.collectibles || []).find(x => x.lid === listingId);
+    if (!item) return;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const stdBid = Math.round(item.price * 1.25);
+    const stdTotal = stdBid + Math.round(stdBid * 0.05);
+    const aggBid = Math.round(item.price * 1.85);
+    const aggTotal = aggBid + Math.round(aggBid * 0.05);
+
+    Modals.open({
+      icon: '🔨',
+      title: 'Sesi Lelongan Tertutup',
+      subtitle: `${item.name} • Anggaran ${fmt(item.price)}`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="font-size:12px;line-height:1.6;margin-bottom:10px;">
+          <strong>${item.icon} ${Utils.escapeHtml(item.name)}</strong><br/>
+          Harga Anggaran: <strong>${fmt(item.price)}</strong><br/>
+          Pembida lawan daripada kalangan pengumpul persendirian, konsortium seni, dan muzium turut bersaing. Komisen rumah lelongan ialah <strong>5%</strong> jika bidaan anda menang.
+        </div>
+        <div class="action-list">
+          <button type="button" class="choice-btn" id="btn-auc-std">
+            <span class="choice-title">🏷️ Tawaran Standard (${fmt(stdBid)} + 5% komisen = ${fmt(stdTotal)})</span>
+          </button>
+          <button type="button" class="choice-btn" id="btn-auc-agg">
+            <span class="choice-title">🔥 Tawaran Agresif (${fmt(aggBid)} + 5% komisen = ${fmt(aggTotal)})</span>
+          </button>
+          <button type="button" class="choice-btn" id="btn-auc-withdraw">
+            <span class="choice-title">🚪 Tarik Diri</span>
+          </button>
+        </div>
+      `,
+      footerHtml: ''
+    });
+
+    const runBid = (level) => {
+      const r = AssetsEngine.resolveCollectibleAuction(listingId, level);
+      Modals.close();
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showHub('collectibles');
+    };
+    const bStd = document.getElementById('btn-auc-std');
+    const bAgg = document.getElementById('btn-auc-agg');
+    const bWith = document.getElementById('btn-auc-withdraw');
+    if (bStd) bStd.addEventListener('click', () => runBid('standard'));
+    if (bAgg) bAgg.addEventListener('click', () => runBid('aggressive'));
+    if (bWith) bWith.addEventListener('click', () => { Modals.close(); this.showHub('collectibles'); });
   },
 
   // --------------------------------------------------------------------------
@@ -1003,7 +1072,18 @@ window.AssetModals = {
       }));
     } else if (tab === 'collectibles') {
       document.querySelectorAll('.col-buy-btn').forEach(b => b.addEventListener('click', () => {
-        const r = AssetsEngine.buyCollectible(b.dataset.lid);
+        const lid = b.dataset.lid;
+        const item = (s.assetMarket && s.assetMarket.collectibles || []).find(x => x.lid === lid);
+        if (item && (item.isAuction || (item.tier && item.tier !== 'standard'))) {
+          const elig = AssetsEngine.checkCollectibleEligibility(s, item);
+          if (!elig.ok) {
+            App.toast(elig.msg, 'error');
+            return;
+          }
+          this.showCollectibleAuctionModal(lid);
+          return;
+        }
+        const r = AssetsEngine.buyCollectible(lid);
         App.toast(r.msg, r.ok ? 'success' : 'error'); App.renderAll(); this.showHub('collectibles');
       }));
     }

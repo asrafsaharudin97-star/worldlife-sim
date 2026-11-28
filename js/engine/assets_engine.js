@@ -28,6 +28,9 @@ window.AssetsEngine = {
     if (!Array.isArray(s.assets.properties)) s.assets.properties = [];
     if (!Array.isArray(s.assets.vehicles)) s.assets.vehicles = [];
     if (!Array.isArray(s.assets.collectibles)) s.assets.collectibles = [];
+    if (typeof s.collectibleAcquisitionsThisYear !== 'number' || Number.isNaN(s.collectibleAcquisitionsThisYear)) {
+      s.collectibleAcquisitionsThisYear = 0;
+    }
     if (!s.assets.portfolio || typeof s.assets.portfolio !== 'object') s.assets.portfolio = {};
     if (typeof s.assets.unpaidTaxDebt !== 'number') s.assets.unpaidTaxDebt = 0;
 
@@ -247,25 +250,43 @@ window.AssetsEngine = {
 
     if (!opts.isRefresh) { m.globalProperties = []; m.globalVehicles = []; this.ensureGlobalMarkets(s); }
 
-    // 4) Pasaran Lelongan Pusaka & Koleksi Tahunan Terhad (1–3 item unik setahun; tidak ditambah semasa refresh)
+    // 4) Pasaran Lelongan Pusaka & Koleksi Tahunan Terhad (kelangkaan gred tinggi & tidak ditambah semasa refresh)
     if (!opts.isRefresh) {
       const ownedSet = this._getOwnedCollectibleKeys(s);
-      const availCols = shuffle(AssetsData.COLLECTIBLES.filter(c => !c.isMystery && !ownedSet.has(c.id) && !ownedSet.has(c.name)));
-      const pickCount = Utils.randInt(1, 3);
+      const getTier = (tpl) => {
+        if (!tpl) return 'standard';
+        if (tpl.isMystery) return 'rare';
+        if ((tpl.prestige || 0) >= 9 || (tpl.baseUsd || 0) >= 250000) return 'legendary';
+        if ((tpl.prestige || 0) >= 6 || (tpl.baseUsd || 0) >= 50000) return 'rare';
+        return 'standard';
+      };
+      const availCols = shuffle(AssetsData.COLLECTIBLES.filter(c => {
+        if (c.isMystery || ownedSet.has(c.id) || ownedSet.has(c.name)) return false;
+        const t = getTier(c);
+        if (t === 'legendary') return Utils.chance(0.22);
+        if (t === 'rare') return Utils.chance(0.42);
+        return true;
+      }));
+      const pickCount = Utils.randInt(1, 2);
       const colList = availCols.slice(0, pickCount);
       const mysteryTpl = AssetsData.COLLECTIBLES.find(c => c.isMystery);
-      if (mysteryTpl && colList.length < 3 && Utils.chance(0.18)) colList.unshift(mysteryTpl);
+      if (mysteryTpl && colList.length < 2 && Utils.chance(0.15)) colList.unshift(mysteryTpl);
 
-      m.collectibles = colList.map((tpl, i) => ({
-        lid: `cl_${s.year}_${i}_${tpl.id}`,
-        tplId: tpl.id,
-        name: tpl.name,
-        icon: tpl.icon,
-        price: Math.round(this._scaleUsdToLocal(tpl.baseUsd, s.countryId, false) * (0.9 + Math.random() * 0.22)),
-        appRate: tpl.appRate,
-        prestige: tpl.prestige,
-        isMystery: Boolean(tpl.isMystery)
-      }));
+      m.collectibles = colList.map((tpl, i) => {
+        const tier = getTier(tpl);
+        return {
+          lid: `cl_${s.year}_${i}_${tpl.id}`,
+          tplId: tpl.id,
+          name: tpl.name,
+          icon: tpl.icon,
+          price: Math.round(this._scaleUsdToLocal(tpl.baseUsd, s.countryId, false) * (0.92 + Math.random() * 0.24)),
+          appRate: tpl.appRate,
+          prestige: tpl.prestige,
+          isMystery: Boolean(tpl.isMystery),
+          tier,
+          isAuction: tier !== 'standard'
+        };
+      });
     }
   },
 
@@ -1317,49 +1338,70 @@ window.AssetsEngine = {
     return set;
   },
 
-  buyCollectible(listingId) {
-    const s = GameState.current;
+  MAX_COLLECTIBLE_ACQUISITIONS_PER_YEAR: 2,
+
+  checkCollectibleEligibility(s, item) {
+    if (!s || !item) return { ok: false, msg: 'Item koleksi tidak ditemui.' };
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia ketika di penjara.' };
     if ((s.assets.collectibles || []).length >= this.MAX_PERSONAL_COLLECTIBLES) {
       return { ok: false, msg: `Peti besi koleksi peribadi penuh (${s.assets.collectibles.length}/${this.MAX_PERSONAL_COLLECTIBLES}). Jual atau lelong item lama dahulu.` };
     }
-    const item = s.assetMarket.collectibles.find(x => x.lid === listingId);
-    if (!item) return { ok: false, msg: 'Item koleksi tidak ditemui.' };
+    if ((s.collectibleAcquisitionsThisYear || 0) >= this.MAX_COLLECTIBLE_ACQUISITIONS_PER_YEAR) {
+      return { ok: false, msg: 'Rumah lelongan dan pengedar persendirian telah menutup pendaftaran transaksi anda bagi tahun ini.' };
+    }
     if (!item.isMystery) {
       const owned = this._getOwnedCollectibleKeys(s);
       if (owned.has(item.tplId) || owned.has(item.name)) {
         return { ok: false, msg: 'Anda sudah memiliki jenis koleksi ini (had 1 unit bagi setiap jenis).' };
       }
     }
+    const tier = item.tier || (item.isMystery || (item.prestige || 0) >= 6 ? 'rare' : 'standard');
+    if (tier === 'rare' || tier === 'legendary') {
+      const hasCriminal = (s.criminalRecord || 0) > 0;
+      const isFugitive = Boolean(s.prison && s.prison.isFugitive);
+      const highNotoriety = (s.alignment && (s.alignment.notoriety || 0) >= 45);
+      if (hasCriminal || isFugitive || highNotoriety) {
+        return { ok: false, msg: 'Penjual enggan melepaskan koleksi ini kepada pembeli yang mempunyai rekod kontroversi.' };
+      }
+    }
+    if (tier === 'legendary') {
+      const ownedCount = ((s.assets && s.assets.collectibles) || []).length
+        + ((s.familyTrust && s.familyTrust.assets) || []).filter(x => x && x.trustAssetType === 'collectible').length;
+      const highFame = (s.alignment && (s.alignment.fame || 0) >= 60);
+      const highDynasty = (window.Dynasty && Dynasty.getData && (Dynasty.getData().reputation || 0) >= 65);
+      const hasTrust = Boolean(s.familyTrust && s.familyTrust.active);
+      if (ownedCount < 2 && !highFame && !highDynasty && !hasTrust) {
+        return { ok: false, msg: 'Rumah lelongan hanya membuka penyertaan koleksi legenda kepada pengumpul berpengalaman (sekurang-kurangnya 2 koleksi), tokoh berprestij tinggi, atau pemegang Tabung Yayasan aktif.' };
+      }
+    }
+    return { ok: true };
+  },
+
+  buyCollectible(listingId) {
+    const s = GameState.current;
+    this.ensureFields(s);
+    const item = s.assetMarket.collectibles.find(x => x.lid === listingId);
+    const elig = this.checkCollectibleEligibility(s, item);
+    if (!elig.ok) return elig;
+    if (item.isAuction) {
+      return { ok: false, requiresAuction: true, msg: 'Item ini memerlukan penyertaan sesi lelongan tertutup.' };
+    }
     if (s.money < item.price) return { ok: false, msg: `Perlukan ${Utils.formatMoney(item.price, s.countryId)}.` };
 
     s.money -= item.price;
-    let finalValue = item.price;
-    let finalName = item.name;
-    let mysteryNote = '';
-
-    // Lelongan Misteri: peluang jackpot 2.5x–4x ATAU risiko barang tiruan (0.25x)!
-    if (item.isMystery) {
-      if (Utils.chance(0.62)) {
-        const mult = 2.2 + Math.random() * 1.8;
-        finalValue = Math.round(item.price * mult);
-        finalName = 'Khazanah Antik Tulen (Lelongan Misteri)';
-        mysteryNote = ` 🌟 JACKPOT LELONGAN! Penilai mengesahkan ia artifak tulen bernilai ${Utils.formatMoney(finalValue, s.countryId)}!`;
-      } else {
-        finalValue = Math.round(item.price * 0.25);
-        finalName = 'Replika Antik (Lelongan Misteri)';
-        mysteryNote = ` 💥 ALAMAK! Penilai mengesahkan ia replika tiruan bernilai hanya ${Utils.formatMoney(finalValue, s.countryId)}!`;
-      }
+    if (window.GameState && GameState.logCashFlow) {
+      GameState.logCashFlow(s, -item.price, `Pembelian Koleksi: ${item.name}`, 'aset');
     }
+    s.collectibleAcquisitionsThisYear = (s.collectibleAcquisitionsThisYear || 0) + 1;
 
     const col = {
       uid: `col_${Date.now()}_${Utils.randInt(10, 99)}`,
       tplId: item.tplId,
-      name: finalName,
+      name: item.name,
       icon: item.icon,
       purchasePrice: item.price,
-      value: finalValue,
+      value: item.price,
       appRate: item.appRate || 0.06,
       prestige: item.prestige || 4,
       isHeirloom: false,
@@ -1369,9 +1411,96 @@ window.AssetsEngine = {
     s.assetMarket.collectibles = s.assetMarket.collectibles.filter(x => x.lid !== listingId);
 
     GameState.adjustStats({ happiness: 9 });
-    GameState.addJournalEntry(`${col.icon} Anda memperoleh ${col.name} (${Utils.formatMoney(item.price, s.countryId)}).${mysteryNote}`, item.isMystery ? 'milestone' : 'culture');
+    GameState.addJournalEntry(`${col.icon} Anda memperoleh ${col.name} (${Utils.formatMoney(item.price, s.countryId)}).`, 'culture');
     GameState.save();
-    return { ok: true, msg: mysteryNote ? mysteryNote.trim() : `${col.name} ditambah ke koleksi anda!` };
+    return { ok: true, msg: `${col.name} ditambah ke koleksi anda!` };
+  },
+
+  resolveCollectibleAuction(listingId, bidLevel = 'standard') {
+    const s = GameState.current;
+    this.ensureFields(s);
+    const item = (s.assetMarket.collectibles || []).find(x => x.lid === listingId);
+    const elig = this.checkCollectibleEligibility(s, item);
+    if (!elig.ok) return elig;
+
+    const mult = bidLevel === 'aggressive' ? 1.85 : 1.25;
+    const playerBid = Math.round(item.price * mult);
+    const commission = Math.round(playerBid * 0.05);
+    const totalNeeded = playerBid + commission;
+    if (s.money < totalNeeded) {
+      return { ok: false, msg: `Baki tidak mencukupi — tawaran + komisen lelongan (5%) memerlukan ${Utils.formatMoney(totalNeeded, s.countryId)}.` };
+    }
+
+    // Kebarangkalian kecil secara senyap: pemilik asal membatalkan jualan saat akhir
+    if (Utils.chance(0.12)) {
+      s.assetMarket.collectibles = s.assetMarket.collectibles.filter(x => x.lid !== listingId);
+      GameState.addJournalEntry(`🏛️ Pemilik asal membatalkan lelongan ${item.name} pada saat akhir dan menarik keluar item daripada pasaran tahun ini.`, 'warning');
+      GameState.save();
+      return { ok: false, cancelled: true, msg: 'Pemilik asal membatalkan jualan pada saat akhir dan menarik keluar koleksi ini daripada pasaran tahun ini.' };
+    }
+
+    const isLeg = item.tier === 'legendary';
+    const rivalMin = isLeg ? 1.30 : 1.15;
+    const rivalMax = isLeg ? 2.85 : 2.35;
+    const rivalMult = rivalMin + Math.random() * (rivalMax - rivalMin);
+    const rivalBid = Math.round(item.price * rivalMult);
+    const rivalName = Utils.pick(['Pengumpul Persendirian', 'Konsortium Seni Antarabangsa', 'Kurator Muzium Swasta', 'Wakil Firma Lelongan Global']);
+
+    if (playerBid < rivalBid) {
+      s.assetMarket.collectibles = s.assetMarket.collectibles.filter(x => x.lid !== listingId);
+      GameState.addJournalEntry(
+        `🔨 Bidaan anda untuk ${item.name} (${Utils.formatMoney(playerBid, s.countryId)}) tewas kepada ${rivalName} yang membida ${Utils.formatMoney(rivalBid, s.countryId)}.`,
+        'warning'
+      );
+      GameState.save();
+      return { ok: false, outbid: true, msg: `Bidaan tewas! ${rivalName} memenangi ${item.name} pada harga ${Utils.formatMoney(rivalBid, s.countryId)}.` };
+    }
+
+    s.money -= totalNeeded;
+    s.collectibleAcquisitionsThisYear = (s.collectibleAcquisitionsThisYear || 0) + 1;
+
+    let finalValue = playerBid;
+    let finalName = item.name;
+    let mysteryNote = '';
+    if (item.isMystery) {
+      if (Utils.chance(0.62)) {
+        const mMult = 2.0 + Math.random() * 1.6;
+        finalValue = Math.round(item.price * mMult);
+        finalName = 'Khazanah Antik Tulen (Lelongan Misteri)';
+        mysteryNote = ` 🌟 JACKPOT LELONGAN! Penilai mengesahkan ia artifak tulen bernilai ${Utils.formatMoney(finalValue, s.countryId)}!`;
+      } else {
+        finalValue = Math.round(item.price * 0.25);
+        finalName = 'Replika Antik (Lelongan Misteri)';
+        mysteryNote = ` 💥 ALAMAK! Penilai mengesahkan ia replika tiruan bernilai hanya ${Utils.formatMoney(finalValue, s.countryId)}!`;
+      }
+    }
+
+    if (window.GameState && GameState.logCashFlow) {
+      GameState.logCashFlow(s, -totalNeeded, `Lelongan Koleksi: ${finalName}`, 'aset');
+    }
+
+    const col = {
+      uid: `col_${Date.now()}_${Utils.randInt(10, 99)}`,
+      tplId: item.tplId,
+      name: finalName,
+      icon: item.icon,
+      purchasePrice: totalNeeded,
+      value: finalValue,
+      appRate: item.appRate || 0.06,
+      prestige: item.prestige || 4,
+      isHeirloom: false,
+      ageInGenerations: 1
+    };
+    s.assets.collectibles.push(col);
+    s.assetMarket.collectibles = s.assetMarket.collectibles.filter(x => x.lid !== listingId);
+
+    GameState.adjustStats({ happiness: 11 });
+    GameState.addJournalEntry(
+      `🔨 ${col.icon} Anda memenangi lelongan tertutup ${col.name} dengan jumlah ${Utils.formatMoney(totalNeeded, s.countryId)} (termasuk komisen 5%).${mysteryNote}`,
+      'milestone'
+    );
+    GameState.save();
+    return { ok: true, msg: mysteryNote ? mysteryNote.trim() : `Tahniah! Anda memenangi lelongan ${col.name}!` };
   },
 
   toggleHeirloom(uid) {
