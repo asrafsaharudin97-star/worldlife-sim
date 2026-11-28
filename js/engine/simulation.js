@@ -1674,6 +1674,8 @@ window.Sim = {
       if (relPool.length > 0) {
         const picked = Utils.pick(relPool);
         s.seenEventIds.push(picked.id);
+        if (!Array.isArray(s.recentPopupIds)) s.recentPopupIds = [];
+        s.recentPopupIds = [picked.id, ...s.recentPopupIds.filter(id => id !== picked.id)].slice(0, 20);
         return this._hydrateDynamicEvent(picked, s, c);
       }
     }
@@ -1736,12 +1738,14 @@ window.Sim = {
       return recordRecent(picked);
     }
 
-    // Jika dek ageUpRandomPool habis dipusing, kosongkan ID kategori ini sahaja & mula pusingan baharu
+    // Jika dek ageUpRandomPool habis dipusing, kosongkan ID lama kategori ini TETAPI kekalkan 2 ID terakhir supaya tidak berulang berturut-turut
     if (customRandomPool.length === 0 && Array.isArray(GAME_EVENTS.ageUpRandomPool)) {
+      const lastFew = new Set(s.recentPopupIds.slice(0, 2));
       const poolIds = new Set(GAME_EVENTS.ageUpRandomPool.map(x => x && x.id));
-      s.recentPopupIds = s.recentPopupIds.filter(id => !poolIds.has(id));
+      s.recentPopupIds = s.recentPopupIds.filter(id => !poolIds.has(id) || lastFew.has(id));
       s.recentRandomEventIds = s.recentPopupIds.slice(0, 20);
-      const freshPool = GAME_EVENTS.ageUpRandomPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge);
+      let freshPool = GAME_EVENTS.ageUpRandomPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge && !lastFew.has(e.id));
+      if (freshPool.length === 0) freshPool = GAME_EVENTS.ageUpRandomPool.filter(e => s.age >= e.minAge && s.age <= e.maxAge);
       if (freshPool.length > 0) return recordRecent(Utils.pick(freshPool));
     }
 

@@ -1839,3 +1839,41 @@ if (window.GAME_EVENTS) {
     }
   ];
 }
+
+// 8 Variasi Tambahan Kanak-Kanak & Sekolah Rendah (Umur 3–11)
+if (window.GAME_EVENTS && Array.isArray(window.GAME_EVENTS.ageUpRandomPool)) {
+  window.GAME_EVENTS.ageUpRandomPool.push(
+    { id: 'pop_kid_blocks', minAge: 3, maxAge: 7, icon: '🧱', title: 'Menara Blok Kayu', text: 'Anda sedang membina menara blok kayu setinggi lutut apabila seekor kucing jiran melompat lalu meruntuhkannya.', choices: [
+      { label: 'Bina semula dengan tapak lebih kukuh', effects: { smarts: 2, happiness: 2 }, outcome: 'Menara baharu anda jauh lebih stabil dan membuatkan anda tersenyum bangga.' },
+      { label: 'Kejar dan bermain dengan kucing itu', effects: { happiness: 4, health: 1 }, outcome: 'Anda ketawa riang bermain bersama kucing comel tersebut.' }
+    ]},
+    { id: 'pop_kid_crayon', minAge: 3, maxAge: 8, icon: '🖍️', title: 'Lukisan Dinding Ruang Tamu', text: 'Anda terjumpa sekotak krayon warna-warni yang terang dan dinding ruang tamu kelihatan kosong.', choices: [
+      { label: 'Lukis pada buku lukisan sahaja', effects: { smarts: 2, happiness: 3 }, outcome: 'Lukisan anda dipuji kemas dan ditampal pada peti sejuk!' },
+      { label: 'Lukis kapal angkasa di dinding', effects: { happiness: 3, karma: -2 }, outcome: 'Hasilnya meriah tetapi anda terpaksa membantu mengelap dinding semula.' }
+    ]},
+    { id: 'pop_kid_park', minAge: 4, maxAge: 10, icon: '🛝', title: 'Giliran Buaian di Taman', text: 'Seorang kanak-kanak kecil kelihatan sedih kerana sudah lama menunggu giliran bermain buaian di taman awam.', choices: [
+      { label: 'Beri giliran anda kepadanya', effects: { karma: 4, happiness: 3 }, outcome: 'Dia tersenyum lebar dan mengajak anda bermain bersama.' },
+      { label: 'Terus bermain sehingga puas', effects: { happiness: 2 }, outcome: 'Anda menikmati angin petang di atas buaian.' }
+    ]},
+    { id: 'pop_kid_rain', minAge: 4, maxAge: 10, icon: '☔', title: 'Lopakan Air Selepas Hujan', text: 'Selepas hujan reda, terdapat lopakan air jernih di halaman rumah yang sesuai untuk bermain perahu kertas.', choices: [
+      { label: 'Lipat perahu kertas dan lumba bersama kawan', effects: { smarts: 2, happiness: 4 }, outcome: 'Perahu kertas anda belayar paling jauh!' },
+      { label: 'Melompat masuk ke dalam lopakan air', effects: { happiness: 4, health: -1 }, outcome: 'Kasut anda basah kuyup tetapi petang itu penuh gelak tawa.' }
+    ]},
+    { id: 'pop_kid_tooth', minAge: 5, maxAge: 10, icon: '🦷', title: 'Gigi Susu Pertama Bergoyang', text: 'Gigi susu hadapan anda mula bergoyang ketika mengunyah buah epal.', choices: [
+      { label: 'Tunggu ia tanggal sendiri dengan sabar', effects: { health: 2, happiness: 2 }, outcome: 'Gigi itu tanggal tanpa sakit beberapa hari kemudian.' },
+      { label: 'Goyangkan perlahan-lahan hingga tercabut', effects: { happiness: 3 }, outcome: 'Anda ketawa melihat senyuman rongak baharu anda di cermin.' }
+    ]},
+    { id: 'pop_kid_bike', minAge: 5, maxAge: 11, icon: '🚲', title: 'Belajar Mengayuh Basikal', text: 'Roda imbangan basikal anda baru sahaja ditanggalkan untuk cubaan pertama di lorong taman.', choices: [
+      { label: 'Terus mencuba walaupun terjatuh sekali', effects: { health: 3, happiness: 4 }, outcome: 'Akhirnya anda berjaya mengayuh sendiri tanpa bantuan!' },
+      { label: 'Minta latihan perlahan di padang rumput', effects: { health: 2, smarts: 1 }, outcome: 'Pendekatan berhati-hati mengelakkan luka lutut.' }
+    ]},
+    { id: 'pop_kid_science', minAge: 6, maxAge: 12, icon: '🔬', title: 'Eksperimen Gunung Berapi Mini', text: 'Cikgu sains di sekolah di {negara} memberi tugasan membina model gunung berapi mini daripada soda penaik.', choices: [
+      { label: 'Buat kajian kecil dan hias dengan teliti', effects: { smarts: 4, happiness: 3 }, outcome: 'Model anda meletus paling cantik di hadapan seluruh kelas!' },
+      { label: 'Siapkan secara ringkas pada malam sebelum hantar', effects: { smarts: 1, happiness: 1 }, outcome: 'Eksperimen tetap berjaya walaupun rupanya agak ringkas.' }
+    ]},
+    { id: 'pop_kid_pet', minAge: 5, maxAge: 12, icon: '🐢', title: 'Kura-Kura Kecil di Tepi Parit', text: 'Anda ternampak seekor anak kura-kura tersesat di tepi jalan berhampiran {tempat}.', choices: [
+      { label: 'Alihkan dengan selamat ke kawasan kolam taman', effects: { karma: 5, happiness: 4 }, outcome: 'Kura-kura itu terus berenang laju ke dalam air dengan selamat.' },
+      { label: 'Perhatikan sahaja dari jauh', effects: { smarts: 1, happiness: 1 }, outcome: 'Anda belajar memerhati haiwan tanpa mengganggunya.' }
+    ]}
+  );
+}
