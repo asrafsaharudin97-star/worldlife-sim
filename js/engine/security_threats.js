@@ -107,6 +107,7 @@ window.SecurityThreats = {
       return { ok: false, msg: `Baki tidak mencukupi — yuran tahun pertama pengawal peribadi ialah ${Utils.formatMoney(firstYearFee, s.countryId)}.` };
     }
     s.money -= firstYearFee;
+    if (window.GameState && GameState.recordCashFlow) GameState.recordCashFlow(s, { type: 'out', category: 'Yuran/Perkhidmatan', label: 'Yuran Pengawal Peribadi (Kontrak 5 Thn)', amount: firstYearFee });
     s.bodyguard = {
       active: true,
       yearsLeft: plan.years,
@@ -143,6 +144,7 @@ window.SecurityThreats = {
       return { ok: false, msg: `Baki tidak mencukupi — yuran latihan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     }
     s.money -= fee;
+    if (window.GameState && GameState.recordCashFlow) GameState.recordCashFlow(s, { type: 'out', category: 'Yuran/Perkhidmatan', label: 'Latihan Seni Pertahankan Diri', amount: fee });
     s.martialArtsLevel += 1;
     s.martialArtsLastTrainedAge = s.age;
     GameState.adjustStats({ health: 4, happiness: 2 });
@@ -185,6 +187,7 @@ window.SecurityThreats = {
       return { ok: false, msg: `Baki tidak mencukupi — kos siasatan persendirian ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     }
     s.money -= fee;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fee, 'Yuran Siasatan Persendirian', 'guaman');
     thr.cluesFound = Math.min(thr.cluesRequired, (thr.cluesFound || 0) + 1);
     const clueText = Utils.pick(this.SUBTLE_CLUES);
     if (!Array.isArray(thr.cluesLog)) thr.cluesLog = [];
@@ -242,6 +245,7 @@ window.SecurityThreats = {
       if (s.bodyguard.yearsLeft > 0) {
         if ((s.money || 0) >= annualFee) {
           s.money -= annualFee;
+          if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -annualFee, 'Yuran Tahunan Pengawal Peribadi', 'gaya_hidup');
           if (s.bodyguard.yearsLeft === 1) {
             s.bodyguardReminder = 'expiring';
             GameState.addJournalEntry('🛡️⏳ Peringatan: Kontrak Pengawal Peribadi anda berbaki 1 tahun sahaja lagi. Sila bersedia untuk memperbaharui secara manual.', 'warning');

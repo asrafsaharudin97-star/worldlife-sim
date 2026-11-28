@@ -1119,6 +1119,7 @@ window.AssetsEngine = {
     prev.totalCost += netInvest;
     s.assets.portfolio[instId] = prev;
     s.money -= spend;
+    if (window.GameState && GameState.recordCashFlow) GameState.recordCashFlow(s, { type: 'out', category: 'Pembelian Aset/Pelaburan', label: `Pelaburan ${inst.name}`, amount: spend });
 
     GameState.addJournalEntry(`📈 Anda melabur ${Utils.formatMoney(spend, s.countryId)} dalam ${inst.icon} ${inst.name}.`);
     GameState.save();
@@ -1241,6 +1242,7 @@ window.AssetsEngine = {
       return { ok: false, msg: `Baki tidak mencukupi — jumlah kos (termasuk Duti Pembeli Asing & Broker 5%) ialah ${Utils.formatMoney(item.totalCost, s.countryId)}.` };
     }
     s.money -= item.totalCost;
+    if (window.GameState && GameState.recordCashFlow) GameState.recordCashFlow(s, { type: 'out', category: 'Pembelian Aset/Pelaburan', label: `Beli Hartanah ${item.name}`, amount: item.totalCost });
     s.assets.properties.push({
       uid: `prop_glb_${Date.now()}_${Utils.randInt(10, 99)}`,
       id: item.tplId,
@@ -1277,6 +1279,7 @@ window.AssetsEngine = {
       return { ok: false, msg: `Baki tidak mencukupi — jumlah kos (termasuk Caj Import & Penghantaran 12%) ialah ${Utils.formatMoney(item.totalCost, s.countryId)}.` };
     }
     s.money -= item.totalCost;
+    if (window.GameState && GameState.recordCashFlow) GameState.recordCashFlow(s, { type: 'out', category: 'Pembelian Aset/Pelaburan', label: `Import Kenderaan ${item.name}`, amount: item.totalCost });
     s.assets.vehicles.push({
       uid: `veh_glb_${Date.now()}_${Utils.randInt(10, 99)}`,
       id: item.tplId,

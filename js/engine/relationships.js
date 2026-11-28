@@ -15,6 +15,7 @@ window.Relationships = {
       return { ok: false, msg: `Baki tidak mencukupi — harga cincin ialah ${Utils.formatMoney(price, s.countryId)}.` };
     }
     s.money -= price;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -price, 'Pembelian Cincin Rasmi', 'gaya_hidup');
     s.ringCount = (s.ringCount || 0) + 1;
     GameState.addJournalEntry(`💍 Anda membeli sebentuk cincin rasmi dengan harga ${Utils.formatMoney(price, s.countryId)} (Jumlah cincin: ${s.ringCount}).`);
     GameState.save();
@@ -1428,6 +1429,7 @@ window.Relationships = {
         LegalInheritanceEngine.recordMarriageStart(s, rel, usePrenup);
       }
       s.money -= totalCost;
+      if (totalCost > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -totalCost, `Majlis Perkahwinan (${rel.name})`, 'gaya_hidup');
       s.ringCount = Math.max(0, (s.ringCount || 1) - 1);
       s.married = true;
       s.maritalStatus = null;
@@ -1454,6 +1456,7 @@ window.Relationships = {
       if (s.money < cost) return { ok: false, msg: `Perlukan ${Utils.formatMoney(cost, s.countryId)} untuk percutian keluarga.` };
       s.yearlyActions[key] = true;
       s.money -= cost;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -cost, `Percutian Keluarga (${rel.name})`, 'gaya_hidup');
       rel.closeness = Utils.clamp(rel.closeness + 18);
       rel.trust = Utils.clamp((rel.trust || 70) + 12);
       GameState.adjustStats({ happiness: 14, health: 4 });
@@ -1725,6 +1728,7 @@ window.Relationships = {
       if (wasMarried && s.money > 0) {
         const settle = Math.round(s.money * 0.15);
         s.money -= settle;
+        if (settle > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -settle, `Penyelesaian Perceraian (${rel.name})`, 'guaman');
       }
       GameState.adjustStats({ happiness: wasMarried ? -18 : -12 });
       GameState.recordCrisis('heartbreak');
@@ -1751,7 +1755,9 @@ window.Relationships = {
     partner.closeness = opts.keepZeroStats ? 0 : 5;
     partner.trust = opts.keepZeroStats ? 0 : 5;
     if (wasMarried && s.money > 0) {
-      s.money -= Math.round(s.money * 0.20);
+      const settle = Math.round(s.money * 0.20);
+      s.money -= settle;
+      if (settle > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -settle, `Pampasan Perceraian (${partner.name})`, 'guaman');
     }
     if (opts.lessDrama) {
       GameState.adjustStats({ happiness: wasMarried ? -12 : -8 });

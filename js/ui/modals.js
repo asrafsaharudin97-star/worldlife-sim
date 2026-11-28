@@ -2024,6 +2024,98 @@ window.Modals = {
     if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
   },
 
+  showCashFlowStatementModal(filter = 'all') {
+    const s = GameState.current;
+    if (!s) return;
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const acf = (s.annualCashFlow && typeof s.annualCashFlow === 'object') ? s.annualCashFlow : { in: {}, out: {} };
+    const inMap = acf.in || {};
+    const outMap = acf.out || {};
+    const totIn = Object.values(inMap).reduce((a, b) => a + (Number(b) || 0), 0);
+    const totOut = Object.values(outMap).reduce((a, b) => a + (Number(b) || 0), 0);
+    const netFlow = totIn - totOut;
+
+    const catLabels = {
+      guaman: 'Guaman & Saman',
+      yayasan: 'Yayasan & Proksi',
+      gaya_hidup: 'Gaya Hidup & Acara',
+      cukai: 'Cukai & Imigresen',
+      lain: 'Lain-lain'
+    };
+    const catName = (k) => catLabels[k] || k;
+    const baseInCats = ['Gaji & Bonus', 'Hasil Sewa', 'Pelaburan/Dividen', 'Jualan Aset/Pusaka', 'Lain-lain'];
+    const baseOutCats = ['Sara Hidup & Cukai', 'Penyelenggaraan Aset', 'Yuran/Perkhidmatan', 'Pembelian Aset/Pelaburan', 'Rawatan/Denda/Lain-lain'];
+    const inCats = [...new Set([...baseInCats, ...Object.keys(inMap).filter(k => (Number(inMap[k]) || 0) > 0)])];
+    const outCats = [...new Set([...baseOutCats, ...Object.keys(outMap).filter(k => (Number(outMap[k]) || 0) > 0)])];
+
+    const logs = Array.isArray(s.cashFlowLog) ? s.cashFlowLog : [];
+    const filteredLogs = filter === 'in' ? logs.filter(x => x && x.type === 'in')
+      : filter === 'out' ? logs.filter(x => x && x.type === 'out')
+      : logs;
+
+    this.open({
+      icon: '📒',
+      title: 'Penyata Aliran Tunai',
+      subtitle: `Ringkasan Tahun ${s.year || 2026} (Umur ${s.age || 0}) & Lejar Transaksi`,
+      bodyHtml: `
+        <div class="info-banner highlight" style="font-size:12px;line-height:1.6;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <span>📈 Jumlah Masuk: <strong style="color:#16a34a;">+${fmt(totIn)}</strong></span>
+            <span>📉 Jumlah Keluar: <strong style="color:#dc2626;">-${fmt(totOut)}</strong></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:4px;padding-top:4px;border-top:1px solid rgba(0,0,0,0.08);">
+            <span>⚖️ Aliran Bersih: <strong style="color:${netFlow >= 0 ? '#16a34a' : '#dc2626'};">${netFlow >= 0 ? '+' : '-'}${fmt(Math.abs(netFlow))}</strong></span>
+            <span>💰 Baki Semasa: <strong>${fmt(s.money || 0)}</strong></span>
+          </div>
+        </div>
+
+        <div class="section-heading">📊 Pecahan Kategori Tahun Semasa</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:10px;">
+          <div class="migration-card" style="padding:8px 10px;border-color:#86efac;">
+            <div style="font-size:11.5px;font-weight:700;color:#166534;margin-bottom:4px;">Aliran Masuk (+)</div>
+            ${inCats.map(k => `<div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;margin-bottom:2px;"><span>${Utils.escapeHtml(catName(k))}</span><strong>+${fmt(inMap[k] || 0)}</strong></div>`).join('')}
+          </div>
+          <div class="migration-card" style="padding:8px 10px;border-color:#fca5a5;">
+            <div style="font-size:11.5px;font-weight:700;color:#991b1b;margin-bottom:4px;">Aliran Keluar (-)</div>
+            ${outCats.map(k => `<div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;margin-bottom:2px;"><span>${Utils.escapeHtml(catName(k))}</span><strong>-${fmt(outMap[k] || 0)}</strong></div>`).join('')}
+          </div>
+        </div>
+
+        <div class="section-heading">🧾 Lejar Transaksi Terkini (${filteredLogs.length}/150)</div>
+        <div class="tab-pills" style="margin-bottom:8px;">
+          <button type="button" class="tab-pill cf-filter-btn ${filter === 'all' ? 'active' : ''}" data-cf="all">Semua</button>
+          <button type="button" class="tab-pill cf-filter-btn ${filter === 'in' ? 'active' : ''}" data-cf="in">Masuk (+)</button>
+          <button type="button" class="tab-pill cf-filter-btn ${filter === 'out' ? 'active' : ''}" data-cf="out">Keluar (-)</button>
+        </div>
+        ${filteredLogs.length === 0 ? `
+          <div class="info-banner" style="font-size:12px;">Belum ada rekod aliran tunai setakat ini.</div>
+        ` : `
+          <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;">
+            ${filteredLogs.map(tr => `
+              <div class="migration-card" style="padding:7px 9px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <div style="min-width:0;">
+                  <div style="font-size:11.5px;font-weight:700;color:#1e293b;">${Utils.escapeHtml(tr.label)}</div>
+                  <div style="font-size:10.5px;color:#64748b;">Umur ${tr.age} (${tr.year}) • ${Utils.escapeHtml(catName(tr.category))}</div>
+                </div>
+                <div style="text-align:right;white-space:nowrap;">
+                  <div style="font-size:12px;font-weight:800;color:${tr.type === 'in' ? '#16a34a' : '#dc2626'};">${tr.type === 'in' ? '+' : '-'}${fmt(tr.amount)}</div>
+                  <div style="font-size:10px;color:#64748b;">Baki: ${fmt(tr.balanceAfter)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      `,
+      footerHtml: `<button type="button" class="btn-sm secondary" id="btn-cf-close">Tutup</button>`
+    });
+
+    document.querySelectorAll('.cf-filter-btn').forEach(b => {
+      b.addEventListener('click', () => this.showCashFlowStatementModal(b.dataset.cf || 'all'));
+    });
+    const closeBtn = document.getElementById('btn-cf-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.close());
+  },
+
   showSecurityThreatsModal(onBack = null) {
     const s = GameState.current;
     if (!s || !window.SecurityThreats) return;

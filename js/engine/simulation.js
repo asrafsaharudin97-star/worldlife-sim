@@ -6,8 +6,37 @@
 window.Sim = {
   ageUp() {
     if (window.GameState && GameState.beginSaveBatch) GameState.beginSaveBatch();
+    const _s0 = GameState.current;
+    const _m0 = _s0 ? Math.round(_s0.money || 0) : 0;
     try {
-      return this._ageUpCore();
+      const _res = this._ageUpCore();
+      const _s1 = GameState.current;
+      if (_s1 && _s1.alive && window.GameState && GameState.recordCashFlow) {
+        const _aSum = (window.AssetsEngine && AssetsEngine.getAssetCashflowSummary) ? AssetsEngine.getAssetCashflowSummary(_s1) : null;
+        if (_s1.job && _s1.job.salary > 0) {
+          GameState.recordCashFlow(_s1, { type: 'in', category: 'Gaji & Bonus', label: `Gaji Tahunan (${_s1.job.title})`, amount: _s1.job.salary });
+        }
+        if (_aSum && _aSum.rentalGross > 0) {
+          GameState.recordCashFlow(_s1, { type: 'in', category: 'Hasil Sewa', label: 'Hasil Sewa Hartanah Tahunan', amount: _aSum.rentalGross });
+        }
+        if (_aSum && _aSum.dividendGross > 0) {
+          GameState.recordCashFlow(_s1, { type: 'in', category: 'Pelaburan/Dividen', label: 'Dividen & Faedah Pelaburan', amount: _aSum.dividendGross });
+        }
+        if (_aSum && (_aSum.maintenanceCost + _aSum.totalPropertyTaxAnnual) > 0) {
+          GameState.recordCashFlow(_s1, { type: 'out', category: 'Penyelenggaraan Aset', label: 'Penyelenggaraan & Cukai Aset', amount: _aSum.maintenanceCost + _aSum.totalPropertyTaxAnnual });
+        }
+        const _m1 = Math.round(_s1.money || 0);
+        const _netDiff = _m1 - _m0;
+        const _inTot = Object.values((_s1.annualCashFlow && _s1.annualCashFlow.in) || {}).reduce((a, b) => a + b, 0);
+        const _outTot = Object.values((_s1.annualCashFlow && _s1.annualCashFlow.out) || {}).reduce((a, b) => a + b, 0);
+        const _unexplained = _netDiff - (_inTot - _outTot);
+        if (_unexplained < -50) {
+          GameState.recordCashFlow(_s1, { type: 'out', category: 'Sara Hidup & Cukai', label: 'Sara Hidup, Cukai & Potongan Tahunan', amount: Math.abs(_unexplained) });
+        } else if (_unexplained > 50) {
+          GameState.recordCashFlow(_s1, { type: 'in', category: 'Lain-lain', label: 'Pendapatan & Pelarasan Tahunan', amount: _unexplained });
+        }
+      }
+      return _res;
     } finally {
       if (window.GameState && GameState.endSaveBatch) GameState.endSaveBatch();
     }
@@ -34,6 +63,7 @@ window.Sim = {
     s.cultureVisitedThisYear = false;
     s.scholarshipIvUsedThisYear = false;
     s.hospitalVisitedThisYear = false;
+    if (window.GameState && GameState.resetAnnualCashFlow) GameState.resetAnnualCashFlow(s);
     if (window.SecurityThreats && SecurityThreats.tickYearlySecurity) SecurityThreats.tickYearlySecurity(s);
     s._pendingImmigrationEnforcement = null;
     if (s.countryBans && typeof s.countryBans === 'object') {
@@ -1181,6 +1211,7 @@ window.Sim = {
       return { ok: false, msg: `Baki tunai tidak mencukupi untuk membayar denda ${Utils.formatMoney(info.fineLocal, s.countryId)}.` };
     }
     s.money -= info.fineLocal;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -info.fineLocal, `Denda Imigresen (${info.label})`, 'guaman');
     GameState.addJournalEntry(
       `🛂 Anda membayar denda imigresen sebanyak ${Utils.formatMoney(info.fineLocal, s.countryId)}. ${info.label} anda di ${info.countryName} diperbaharui dan anda dibenarkan kekal.`,
       'migration'
@@ -1218,6 +1249,7 @@ window.Sim = {
     if (info.type === 'Work Visa' || info.type === 'Investor Visa') {
       if (s.money >= info.feeLocal) {
         s.money -= info.feeLocal;
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -info.feeLocal, `Pembaharuan ${info.label}`, 'cukai');
         GameState.addJournalEntry(
           `🛂 Pembaharuan tahunan ${info.label} di ${c.name} (${Utils.formatMoney(info.feeLocal, s.countryId)}) telah ditolak secara automatik.`,
           'migration'
@@ -1234,6 +1266,7 @@ window.Sim = {
       if (dueByAge || s.prYearsSinceRenewal >= 3) {
         if (s.money >= info.feeLocal) {
           s.money -= info.feeLocal;
+          if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -info.feeLocal, 'Pembaharuan Penduduk Tetap (PR)', 'cukai');
           s.prNextRenewalAge = s.age + 3;
           s.prYearsSinceRenewal = 0;
           GameState.addJournalEntry(
@@ -2586,6 +2619,8 @@ window.Sim = {
     if (!s) return { outcome: '', nextEvent: null, toastType: 'culture' };
 
     const c = Utils.getCountry(s.countryId);
+    const _moneyBefore = Math.round(s.money || 0);
+    const _logLenBefore = Array.isArray(s.cashFlowLog) ? s.cashFlowLog.length : 0;
 
     if (choice.effects) GameState.adjustStats(choice.effects);
     if (choice.moneyUsd) {
@@ -2622,6 +2657,14 @@ window.Sim = {
       if (statSummary) {
         outcome = outcome ? `${outcome} (${statSummary})` : statSummary;
       }
+    }
+
+    const _moneyDelta = Math.round(s.money || 0) - _moneyBefore;
+    const _loggedInside = Array.isArray(s.cashFlowLog) && s.cashFlowLog.length !== _logLenBefore;
+    if (_moneyDelta !== 0 && !_loggedInside && window.GameState && GameState.logCashFlow) {
+      const _evTitle = (event && event.title) ? String(event.title) : 'Pilihan Peristiwa';
+      const _isLegalEv = /ugut|rahsia|saman|guaman|peguam|denda|mahkamah|polis|mafia|bayangan|rasuah|audit/i.test(_evTitle);
+      GameState.logCashFlow(s, _moneyDelta, _evTitle, _isLegalEv ? 'guaman' : 'gaya_hidup');
     }
 
     if (!nextEvent && outcome) {
@@ -2823,6 +2866,7 @@ window.Sim = {
       if (!Utils.chance(approvalChance)) {
         const appFee = Math.round(costLocal * 0.35);
         s.money -= appFee;
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -appFee, `Yuran Permohonan Visa (${toC.name})`, 'cukai');
         GameState.addJournalEntry(
           `🛂 Permohonan ${App._residencyLabel(statusLabel)} anda ke ${toC.name} ${toC.flag} ditolak. Anda kerugian ${Utils.formatMoney(appFee, s.countryId)} yuran permohonan.`,
           'warning'
@@ -2837,6 +2881,7 @@ window.Sim = {
     }
 
     s.money -= costLocal;
+    if (costLocal > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -costLocal, `Kos Hijrah ke ${toC.name}`, 'cukai');
 
     let liquidated = 0;
     for (const v of s.assets.vehicles) liquidated += v.value;
@@ -2851,6 +2896,7 @@ window.Sim = {
     s.retirementFund = Utils.convertMoney(s.retirementFund, fromC.id, toC.id);
     if (window.LegalInheritanceEngine && LegalInheritanceEngine.convertTrustCurrency) {
       LegalInheritanceEngine.convertTrustCurrency(s, fromC.id, toC.id);
+      if (window.GameState && GameState.convertCashFlowCurrency) GameState.convertCashFlowCurrency(s, fromC.id, toC.id);
     }
     const newMoneyFormatted = Utils.formatMoney(s.money, toC.id);
 
@@ -2987,6 +3033,7 @@ window.Sim = {
       const fee = Utils.usdToLocal(600, s.countryId);
       if (s.money < fee) return { ok: false, msg: `Yuran permohonan PR ialah ${Utils.formatMoney(fee, s.countryId)}.` };
       s.money -= fee;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fee, `Yuran Permohonan PR (${c.name})`, 'cukai');
       s.residencyStatus = 'PR';
       s.prNextRenewalAge = s.age + 3;
       s.prYearsSinceRenewal = 0;
@@ -3009,6 +3056,7 @@ window.Sim = {
     const fee = Utils.usdToLocal(900, s.countryId);
     if (s.money < fee) return { ok: false, msg: `Yuran kewarganegaraan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     s.money -= fee;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fee, `Yuran Kewarganegaraan (${c.name})`, 'cukai');
     s.residencyStatus = 'Citizen';
     s.prNextRenewalAge = null;
     s.prYearsSinceRenewal = 0;
@@ -3363,7 +3411,7 @@ window.Sim = {
     const heal = isPrivate ? Utils.randInt(14, 24) : Utils.randInt(9, 16);
     GameState.adjustStats({ health: heal, happiness: 3 });
     GameState.addJournalEntry(
-      (s.hospitalVisitedThisYear = true, `🏥 Mendapatkan rawatan di ${isPrivate ? 'hospital pakar swasta' : c.healthcare.type} di ${c.name} (${Utils.formatMoney(cost, s.countryId)}). Kesihatan meningkat +${heal}%!`)
+      (s.hospitalVisitedThisYear = true, (window.GameState && GameState.recordCashFlow && cost > 0 && GameState.recordCashFlow(s, { type: 'out', category: 'Rawatan/Denda/Lain-lain', label: isPrivate ? 'Rawatan Hospital Pakar Swasta' : 'Rawatan Klinik Awam', amount: cost })), `🏥 Mendapatkan rawatan di ${isPrivate ? 'hospital pakar swasta' : c.healthcare.type} di ${c.name} (${Utils.formatMoney(cost, s.countryId)}). Kesihatan meningkat +${heal}%!`)
     );
     GameState.save();
     return { ok: true, msg: `Kesihatan meningkat +${heal}%!` };
@@ -3605,6 +3653,7 @@ window.Sim = {
 
     if (sent.fineOnly || sent.years <= 0) {
       s.money = Math.max(0, s.money - fineLocal);
+      if (fineLocal > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fineLocal, `Denda Mahkamah (${crimeLabel})`, 'guaman');
       s.criminalRecord = (s.criminalRecord || 0) + 1;
       GameState.adjustStats({ happiness: -14 });
       const verdictText = `${sent.verdictSummary} Anda dikenakan denda ${Utils.formatMoney(fineLocal, s.countryId)} atas kesalahan "${crimeLabel}".`;

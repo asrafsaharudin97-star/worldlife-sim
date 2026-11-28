@@ -237,6 +237,8 @@ window.GameState = {
       bodyguard: null,
       martialArtsLevel: 0,
       ringCount: 0,
+      cashFlowLog: [],
+      annualCashFlow: { in: {}, out: {} },
 
       journal: [
         {
@@ -291,6 +293,63 @@ window.GameState = {
     });
   },
 
+  logCashFlow(state, amount, label = 'Transaksi', category = 'lain') {
+    const num = Number(amount);
+    if (!Number.isFinite(num) || num === 0) return;
+    this.recordCashFlow(state, {
+      type: num > 0 ? 'in' : 'out',
+      category,
+      label,
+      amount: Math.abs(num)
+    });
+  },
+
+  convertCashFlowCurrency(s, fromId, toId) {
+    if (!s || !Array.isArray(s.cashFlowLog) || !fromId || !toId || fromId === toId) return;
+    if (!window.Utils || !Utils.convertMoney) return;
+    s.cashFlowLog.forEach(tr => {
+      if (!tr) return;
+      if (typeof tr.amount === 'number' && Number.isFinite(tr.amount)) {
+        tr.amount = Math.max(0, Math.round(Utils.convertMoney(tr.amount, fromId, toId)));
+      }
+      if (typeof tr.balanceAfter === 'number' && Number.isFinite(tr.balanceAfter)) {
+        tr.balanceAfter = Math.round(Utils.convertMoney(tr.balanceAfter, fromId, toId));
+      }
+      tr.countryId = toId;
+    });
+    this.resetAnnualCashFlow(s);
+  },
+
+  resetAnnualCashFlow(s = this.current) {
+    if (!s) return;
+    s.annualCashFlow = { in: {}, out: {} };
+  },
+
+  recordCashFlow(state, { type = 'out', category = 'Lain-lain', label = 'Transaksi', amount = 0 } = {}) {
+    const s = state || this.current;
+    if (!s) return;
+    const amt = Math.round(Math.abs(Number(amount) || 0));
+    if (amt <= 0) return;
+    const dir = type === 'in' ? 'in' : 'out';
+    if (!Array.isArray(s.cashFlowLog)) s.cashFlowLog = [];
+    if (!s.annualCashFlow || typeof s.annualCashFlow !== 'object') s.annualCashFlow = { in: {}, out: {} };
+    if (!s.annualCashFlow[dir]) s.annualCashFlow[dir] = {};
+    s.annualCashFlow[dir][category] = Math.round((s.annualCashFlow[dir][category] || 0) + amt);
+    s.cashFlowLog.unshift({
+      age: Number(s.age) || 0,
+      year: Number(s.year) || 2026,
+      type: dir,
+      category: String(category),
+      label: String(label).slice(0, 90),
+      amount: amt,
+      balanceAfter: Math.round(Number(s.money) || 0),
+      countryId: s.countryId || 'MY'
+    });
+    if (s.cashFlowLog.length > 150) {
+      s.cashFlowLog = s.cashFlowLog.slice(0, 150);
+    }
+  },
+
   recordSecret(type, s = this.current) {
     if (!s || !type) return null;
     if (!Array.isArray(s.secrets)) s.secrets = [];
@@ -298,6 +357,10 @@ window.GameState = {
     if (!('bodyguard' in s)) s.bodyguard = null;
     if (typeof s.martialArtsLevel !== 'number') s.martialArtsLevel = 0;
     if (typeof s.ringCount !== 'number' || Number.isNaN(s.ringCount)) s.ringCount = 0;
+    if (!Array.isArray(s.cashFlowLog)) s.cashFlowLog = [];
+    if (!s.annualCashFlow || typeof s.annualCashFlow !== 'object') s.annualCashFlow = { in: {}, out: {} };
+    if (!s.annualCashFlow.in) s.annualCashFlow.in = {};
+    if (!s.annualCashFlow.out) s.annualCashFlow.out = {};
     if (s.secrets.some(x => x && x.type === type && x.yearCreated === s.year && !x.resolved && !x.exposed)) {
       return null;
     }
@@ -792,6 +855,8 @@ window.GameState = {
       bodyguard: null,
       martialArtsLevel: 0,
       ringCount: 0,
+      cashFlowLog: shareLocal > 0 ? [{ age: childAge, year: parent.year, type: 'in', category: 'pendapatan', label: 'Baki Awal / Warisan Tunai', amount: shareLocal, balanceAfter: shareLocal, countryId: cId }] : [],
+      annualCashFlow: { in: shareLocal > 0 ? { pendapatan: shareLocal } : {}, out: {} },
 
       journal: [
         {

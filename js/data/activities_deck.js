@@ -227,7 +227,10 @@ window.ActivitiesDeck = {
     }
 
     // Tolak kos & tenaga, tandakan sudah dilakukan
-    if (costLocal > 0) s.money -= costLocal;
+    if (costLocal > 0) {
+      s.money -= costLocal;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -costLocal, `Aktiviti: ${act.title}`, 'gaya_hidup');
+    }
     s.activityEnergyLeft = Math.max(0, (s.activityEnergyLeft || 0) - eCost);
     s.yearlyActions[doneKey] = true;
     if (!s.recentActivityIds.includes(act.id)) {

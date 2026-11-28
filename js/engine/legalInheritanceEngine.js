@@ -160,7 +160,10 @@ window.LegalInheritanceEngine = {
       s.legal.alimonyObligations = s.legal.alimonyObligations.filter(ob => {
         if (ob.yearsLeft <= 0) return false;
         const pay = Math.max(0, Math.round(ob.annualLocal || 0));
-        if (pay > 0) s.money = Math.round(s.money - pay);
+        if (pay > 0) {
+          s.money = Math.round(s.money - pay);
+          if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -pay, 'Bayaran Nafkah Tahunan', 'guaman');
+        }
         ob.yearsLeft -= 1;
         return ob.yearsLeft > 0;
       });
@@ -169,7 +172,10 @@ window.LegalInheritanceEngine = {
       s.legal.alimonyIncome = s.legal.alimonyIncome.filter(inc => {
         if (inc.yearsLeft <= 0) return false;
         const gain = Math.max(0, Math.round(inc.annualLocal || 0));
-        if (gain > 0) s.money = Math.round(s.money + gain);
+        if (gain > 0) {
+          s.money = Math.round(s.money + gain);
+          if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, gain, 'Terima Nafkah Tahunan', 'guaman');
+        }
         inc.yearsLeft -= 1;
         return inc.yearsLeft > 0;
       });
@@ -441,15 +447,18 @@ window.LegalInheritanceEngine = {
     } else if (paySource === 'personal') {
       if (persBal < fee) return { ok: false, msg: `Baki tunai peribadi tidak mencukupi (Yuran Proksi: ${Utils.formatMoney(fee, s.countryId)}).` };
       s.money -= fee;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fee, 'Yuran Proksi Penstrukturan Yayasan', 'yayasan');
     } else {
       if (trustBal >= fee) {
         s.familyTrust.balance -= fee;
       } else if (persBal >= fee) {
         s.money -= fee;
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fee, 'Yuran Proksi Penstrukturan Yayasan', 'yayasan');
       } else if (trustBal + persBal >= fee) {
         const rem = fee - trustBal;
         s.familyTrust.balance = 0;
         s.money -= rem;
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -rem, 'Yuran Proksi Penstrukturan Yayasan', 'yayasan');
       } else {
         return { ok: false, msg: `Baki tidak mencukupi — yuran penstrukturan proksi ialah ${Utils.formatMoney(fee, s.countryId)}.` };
       }
@@ -643,6 +652,7 @@ window.LegalInheritanceEngine = {
 
     if (s.money >= offer.cost) {
       s.money -= offer.cost;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -offer.cost, `Upah Pengurus Dana (${yrs} Thn)`, 'yayasan');
     } else if (s.familyTrust.balance >= offer.cost) {
       s.familyTrust.balance -= offer.cost;
     } else {
@@ -1028,6 +1038,7 @@ window.LegalInheritanceEngine = {
       s.familyTrust.balance -= cost;
     } else if (s.money >= cost) {
       s.money -= cost;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -cost, `Baik Pulih Hartanah Yayasan (${p.name})`, 'yayasan');
     } else {
       return { ok: false, msg: `Baki tidak mencukupi — kos baik pulih ialah ${Utils.formatMoney(cost, s.countryId)}.` };
     }
@@ -1104,6 +1115,7 @@ window.LegalInheritanceEngine = {
       return { ok: false, msg: `Baki tidak mencukupi — jumlah kos penubuhan ialah ${Utils.formatMoney(costInfo.total, s.countryId)}.` };
     }
     s.money -= costInfo.total;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -costInfo.total, 'Kos Penubuhan Yayasan Keluarga', 'yayasan');
     s.familyTrust.active = true;
     s.familyTrust.lapsed = false;
     s.familyTrust.unpaidFees = 0;
@@ -1191,11 +1203,13 @@ window.LegalInheritanceEngine = {
         return { ok: false, msg: `Tunai peribadi tidak cukup untuk yuran proksi (${Utils.formatMoney(proxyFee, s.countryId)}).` };
       }
       s.money -= proxyFee;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -proxyFee, 'Yuran Proksi Guaman Luar Pesisir', 'yayasan');
     } else {
       if ((s.familyTrust.balance || 0) >= proxyFee) {
         s.familyTrust.balance -= proxyFee;
       } else if ((s.money || 0) >= proxyFee) {
         s.money -= proxyFee;
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -proxyFee, 'Yuran Proksi Guaman Luar Pesisir', 'yayasan');
       } else {
         return { ok: false, msg: `Baki tunai Yayasan dan tunai peribadi tidak mencukupi untuk yuran proksi (${Utils.formatMoney(proxyFee, s.countryId)}).` };
       }
@@ -1265,12 +1279,14 @@ window.LegalInheritanceEngine = {
         const riskRes = this._applyShadowProxyRisk(s, amt);
         if (riskRes && riskRes.intercepted) {
           s.money = Math.max(0, Math.round((s.money || 0) - riskRes.seized));
+          if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -riskRes.seized, 'Sitaan Pihak Berkuasa (Proksi Bayangan)', 'guaman');
           s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
           GameState.save();
           return { ok: false, intercepted: true, msg: `🚨 Dipintas pihak berkuasa! ${Utils.formatMoney(riskRes.seized, s.countryId)} disita, baki ${Utils.formatMoney(riskRes.returned, s.countryId)} kekal di akaun anda.` };
         }
       }
       s.money -= amt;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -amt, `Suntikan Yayasan Luar Pesisir (${channelLabel})`, 'yayasan');
       s.familyTrust.balance += netAmt;
       s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
       this._adjustTrustBasis(s, netAmt);
@@ -1282,6 +1298,7 @@ window.LegalInheritanceEngine = {
     }
 
     s.money -= amt;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -amt, 'Suntikan Tunai ke Yayasan', 'yayasan');
     s.familyTrust.balance += amt;
     this._adjustTrustBasis(s, amt);
     GameState.addJournalEntry(`🏛️ Memasukkan ${Utils.formatMoney(amt, s.countryId)} ke dalam Tabung Yayasan Keluarga (Dana Yayasan: ${Utils.formatMoney(s.familyTrust.balance, s.countryId)}).`);
@@ -1322,6 +1339,7 @@ window.LegalInheritanceEngine = {
       }
       s.familyTrust.balance -= amt;
       s.money += netAmt;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, netAmt, `Pengeluaran Yayasan Luar Pesisir (${channelLabel})`, 'yayasan');
       s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
       this._adjustTrustBasis(s, -amt);
       GameState.addJournalEntry(
@@ -1333,6 +1351,7 @@ window.LegalInheritanceEngine = {
 
     s.familyTrust.balance -= amt;
     s.money += amt;
+    if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, amt, 'Pengeluaran Tunai dari Yayasan', 'yayasan');
     this._adjustTrustBasis(s, -amt);
     GameState.addJournalEntry(`💵 Mengeluarkan ${Utils.formatMoney(amt, s.countryId)} daripada Tabung Yayasan Keluarga ke akaun bank.`);
     GameState.save();
@@ -1401,6 +1420,7 @@ window.LegalInheritanceEngine = {
         return { ok: false, msg: `Tunai peribadi tidak mencukupi untuk menampung yuran Proksi Guaman Luar Pesisir (${Utils.formatMoney(offshoreProxyFee, s.countryId)}).` };
       }
       s.money -= offshoreProxyFee;
+      if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -offshoreProxyFee, 'Yuran Proksi Guaman (Pindah Pukal Aset)', 'yayasan');
     } else if (!preview.hasAny) {
       return { ok: false, msg: 'Tiada harta peribadi yang layak untuk dipindahkan.' };
     }
@@ -1412,6 +1432,7 @@ window.LegalInheritanceEngine = {
       const moveCash = keepPct > 0 ? Math.floor(preview.cash * (1 - keepPct)) : preview.cash;
       if (moveCash > 0) {
         s.money = Math.max(0, Math.round((s.money || 0) - moveCash));
+        if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -moveCash, 'Pindahan Pukal Tunai ke Yayasan', 'yayasan');
         s.familyTrust.balance = Math.round((s.familyTrust.balance || 0) + moveCash);
         totalBasisDelta += moveCash;
       }
@@ -1483,6 +1504,7 @@ window.LegalInheritanceEngine = {
     const fromPersonal = payAmt - fromTrust;
     ft.balance = Math.max(0, Math.round((ft.balance || 0) - fromTrust));
     s.money = Math.round((s.money || 0) - fromPersonal);
+    if (fromPersonal > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -fromPersonal, 'Bayaran Tunggakan Yuran Yayasan', 'yayasan');
     ft.unpaidFees = Math.max(0, due - payAmt);
 
     if (ft.unpaidFees <= 0) {
@@ -1568,6 +1590,7 @@ window.LegalInheritanceEngine = {
       // KES A: Nilai Yayasan mencukupi — langsaikan hutang dan pulangkan baki lebihan ke tunai peribadi
       surplus = Math.max(0, totalTrustValue - debtDue);
       state.money = Math.round((state.money || 0) + surplus);
+      if (surplus > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(state, surplus, 'Baki Pembubaran Paksa Yayasan', 'yayasan');
       GameState.addJournalEntry(
         `🚨🏛️ PEMBUBARAN PAKSA YAYASAN: Tunggakan yuran mencapai had maksimum $100M USD! Semua aset Yayasan dicairkan untuk melangsaikan hutang ${Utils.formatMoney(debtDue, countryId)}, dan baki lebihan ${Utils.formatMoney(surplus, countryId)} telah dipulangkan ke akaun tunai peribadi anda.`,
         'warning'
@@ -1628,6 +1651,7 @@ window.LegalInheritanceEngine = {
     }
     const returned = Math.max(0, Math.round(s.familyTrust.balance || 0));
     s.money += returned;
+    if (returned > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, returned, 'Pulangan Pembubaran Yayasan', 'yayasan');
     if (!s.assets) s.assets = { properties: [], vehicles: [], collectibles: [], portfolio: {} };
     if (!Array.isArray(s.assets.properties)) s.assets.properties = [];
     if (!Array.isArray(s.assets.vehicles)) s.assets.vehicles = [];
@@ -1886,7 +1910,10 @@ window.LegalInheritanceEngine = {
             label: `⚖️ Bawa ke Mahkamah & Bekukan Akaun (${Utils.formatMoney(legalFee, s.countryId)})`,
             action: () => {
               if (ft.balance >= legalFee) ft.balance -= legalFee;
-              else s.money -= legalFee;
+              else {
+                s.money -= legalFee;
+                if (window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -legalFee, 'Yuran Guaman Kes Pecah Amanah Yayasan', 'guaman');
+              }
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 14 });
               if (Utils.chance(0.58)) {
                 const recovered = Math.round(stolen * 0.65);
@@ -1947,6 +1974,7 @@ window.LegalInheritanceEngine = {
                 const rem = penalty - ft.balance;
                 ft.balance = 0;
                 s.money -= rem;
+                if (rem > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -rem, 'Denda Audit Cukai Yayasan', 'guaman');
               }
               if (window.KarmaEndings) KarmaEndings.adjustAlignment({ stress: 10 });
               return `Anda melangsaikan denda cukai ${Utils.formatMoney(penalty, s.countryId)} dan siasatan kerajaan ditutup secara rasmi.`;
@@ -1969,6 +1997,7 @@ window.LegalInheritanceEngine = {
                 const rem = heavyFine - ft.balance;
                 ft.balance = 0;
                 s.money -= rem;
+                if (rem > 0 && window.GameState && GameState.logCashFlow) GameState.logCashFlow(s, -rem, 'Penalti Berat Audit Cukai Yayasan', 'guaman');
               }
               ft.lapsed = true;
               ft.auditHeat = 1;
