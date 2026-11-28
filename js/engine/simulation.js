@@ -2296,10 +2296,13 @@ window.Sim = {
   buildBlackmailEvent(s) {
     if (!s || !s.alive || (s.prison && s.prison.inPrison)) return null;
     if (!Array.isArray(s.secrets) || s.secrets.length === 0) return null;
-    const eligible = s.secrets.filter(sec => sec && !sec.exposed && !sec.resolved && ((s.age || 0) - (sec.ageCreated || 0)) >= 3);
-    if (eligible.length === 0 || !Utils.chance(0.22)) return null;
-
-    const sec = Utils.pick(eligible);
+    const eligible = s.secrets.filter(sec => sec && !sec.exposed && !sec.resolved && ((s.age || 0) - (sec.ageCreated || 0)) >= 2);
+    if (eligible.length === 0) return null;
+    eligible.sort((a, b) => (a.ageCreated || 0) - (b.ageCreated || 0));
+    const sec = eligible[0];
+    const secretAge = Math.max(2, (s.age || 0) - (sec.ageCreated || 0));
+    const triggerChance = Math.min(0.85, Number((0.35 + (secretAge - 2) * 0.15).toFixed(2)));
+    if (!Utils.chance(triggerChance)) return null;
     const pnw = (window.GameState && GameState.getPersonalNetWorth) ? Math.max(0, GameState.getPersonalNetWorth(s)) : Math.max(0, s.money || 0);
     const minDem = Utils.usdToLocal(2500, s.countryId);
     const maxDem = Utils.usdToLocal(500000, s.countryId);

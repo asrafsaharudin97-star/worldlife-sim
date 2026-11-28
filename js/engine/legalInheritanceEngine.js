@@ -1209,22 +1209,34 @@ window.LegalInheritanceEngine = {
   _applyShadowProxyRisk(s, amt) {
     const ft = s.familyTrust;
     const usdVal = (window.Utils && Utils.localToUsd) ? Utils.localToUsd(amt, s.countryId) : (amt / 4.5);
-    let triggerProb = 0.16;
-    if (usdVal >= 1000000) triggerProb += 0.22;
-    else if (usdVal >= 100000) triggerProb += 0.10;
-    triggerProb = Math.min(0.45, triggerProb);
+    const usesBefore = Math.max(0, Math.floor(Number(ft.shadowUsesThisYear) || 0));
+    let interceptProb = 0.20;
+    if (usdVal >= 1000000) interceptProb += 0.25;
+    else if (usdVal >= 100000) interceptProb += 0.15;
+    interceptProb += usesBefore * 0.10;
+    interceptProb += Math.floor(ft.auditHeat || 0) * 0.05;
+    interceptProb = Math.min(0.65, Number(interceptProb.toFixed(2)));
 
-    ft.offshoreAuditRisk = Math.min(0.60, Number(((ft.offshoreAuditRisk || 0) + 0.08).toFixed(2)));
-    ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
+    ft.shadowUsesThisYear = usesBefore + 1;
     if (window.GameState && GameState.recordSecret) GameState.recordSecret('shadow_proxy', s);
-    if (window.Utils && Utils.chance && Utils.chance(triggerProb)) {
+
+    if (window.Utils && Utils.chance && Utils.chance(interceptProb)) {
+      const seizePct = 0.30 + Math.random() * 0.20;
+      const seized = Math.max(1, Math.round(amt * seizePct));
+      const returned = Math.max(0, amt - seized);
       ft.underAudit = true;
-      ft.offshoreAuditRisk = Math.min(0.85, Number(((ft.offshoreAuditRisk || 0) + 0.35).toFixed(2)));
+      ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 2.5).toFixed(2)));
+      ft.offshoreAuditRisk = Math.min(0.90, Number(((ft.offshoreAuditRisk || 0) + 0.45).toFixed(2)));
       GameState.addJournalEntry(
-        `⚠️ Pihak berkuasa cukai mengesan aliran dana rentas sempadan yang mencurigakan melalui ejen proksi bayangan. Tabung Yayasan Keluarga anda kini dalam pemerhatian audit!`,
+        `🚨 Pemindahan melalui proksi bayangan dipintas pihak berkuasa kewangan! Sebanyak ${Utils.formatMoney(seized, s.countryId)} disita sebagai denda, baki ${Utils.formatMoney(returned, s.countryId)} dipulangkan, dan akaun anda kini dalam pemantauan ketat.`,
         'warning'
       );
+      return { intercepted: true, seized, returned };
     }
+
+    ft.offshoreAuditRisk = Math.min(0.75, Number(((ft.offshoreAuditRisk || 0) + 0.10).toFixed(2)));
+    ft.auditHeat = Math.min(5, Number(((ft.auditHeat || 0) + 1).toFixed(2)));
+    return { intercepted: false, seized: 0, returned: 0 };
   },
 
   depositFamilyTrust(s, amount, proxyChannel = null) {
@@ -1249,6 +1261,15 @@ window.LegalInheritanceEngine = {
       const domC = this.getTrustDomicileCountry(s);
       const domName = domC ? domC.name : (s.familyTrust.domicileCountry || 'luar negara');
       const channelLabel = channel === 'shadow' ? 'Ejen Proksi Bayangan' : 'Firma Guaman Rasmi';
+      if (channel === 'shadow') {
+        const riskRes = this._applyShadowProxyRisk(s, amt);
+        if (riskRes && riskRes.intercepted) {
+          s.money = Math.max(0, Math.round((s.money || 0) - riskRes.seized));
+          s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
+          GameState.save();
+          return { ok: false, intercepted: true, msg: `🚨 Dipintas pihak berkuasa! ${Utils.formatMoney(riskRes.seized, s.countryId)} disita, baki ${Utils.formatMoney(riskRes.returned, s.countryId)} kekal di akaun anda.` };
+        }
+      }
       s.money -= amt;
       s.familyTrust.balance += netAmt;
       s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
@@ -1256,7 +1277,6 @@ window.LegalInheritanceEngine = {
       GameState.addJournalEntry(
         `🌐 Anda menyalurkan ${Utils.formatMoney(amt, s.countryId)} ke Yayasan di ${domName} melalui ${channelLabel} (Yuran proksi: -${Utils.formatMoney(proxyFee, s.countryId)} • Bersih diterima: ${Utils.formatMoney(netAmt, s.countryId)}).`
       );
-      if (channel === 'shadow') this._applyShadowProxyRisk(s, amt);
       GameState.save();
       return { ok: true, msg: `Dana bersih ${Utils.formatMoney(netAmt, s.countryId)} disalurkan ke Yayasan di ${domName} melalui ${channelLabel}.` };
     }
@@ -1291,6 +1311,15 @@ window.LegalInheritanceEngine = {
       const domC = this.getTrustDomicileCountry(s);
       const domName = domC ? domC.name : (s.familyTrust.domicileCountry || 'luar negara');
       const channelLabel = channel === 'shadow' ? 'Ejen Proksi Bayangan' : 'Firma Guaman Rasmi';
+      if (channel === 'shadow') {
+        const riskRes = this._applyShadowProxyRisk(s, amt);
+        if (riskRes && riskRes.intercepted) {
+          s.familyTrust.balance = Math.max(0, Math.round((s.familyTrust.balance || 0) - riskRes.seized));
+          s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
+          GameState.save();
+          return { ok: false, intercepted: true, msg: `🚨 Pengeluaran dipintas pihak berkuasa! ${Utils.formatMoney(riskRes.seized, s.countryId)} disita daripada Yayasan.` };
+        }
+      }
       s.familyTrust.balance -= amt;
       s.money += netAmt;
       s.familyTrust.proxyUsedUsdThisYear[channel] = Math.round((s.familyTrust.proxyUsedUsdThisYear[channel] || 0) + amountUsd);
@@ -1298,7 +1327,6 @@ window.LegalInheritanceEngine = {
       GameState.addJournalEntry(
         `🌐 Anda mengeluarkan ${Utils.formatMoney(amt, s.countryId)} daripada Yayasan di ${domName} melalui ${channelLabel} (Yuran proksi: -${Utils.formatMoney(proxyFee, s.countryId)} • Bersih diterima: ${Utils.formatMoney(netAmt, s.countryId)}).`
       );
-      if (channel === 'shadow') this._applyShadowProxyRisk(s, amt);
       GameState.save();
       return { ok: true, msg: `Dana bersih ${Utils.formatMoney(netAmt, s.countryId)} diterima ke akaun bank melalui ${channelLabel}.` };
     }
@@ -1648,6 +1676,7 @@ window.LegalInheritanceEngine = {
     this.ensureFamilyTrust(s);
     const ft = s.familyTrust;
     ft.proxyUsedUsdThisYear = { official: 0, shadow: 0 };
+    ft.shadowUsesThisYear = 0;
     if (!ft.active) return null;
 
     // 0. Simpan nilai tahun sebelumnya untuk kiraan prestasi

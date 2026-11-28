@@ -539,6 +539,20 @@ window.Modals = {
         </button>
       `;
     }
+    if (window.SecurityThreats) {
+      SecurityThreats.ensureFields(s);
+      const actThr = (s.threats || []).filter(x => x && !x.resolved).length;
+      html += `
+        <button class="action-item" id="btn-open-security-hub">
+          <span class="ai-icon">🛡️</span>
+          <span class="ai-content">
+            <span class="ai-title">Keselamatan &amp; Ancaman ${actThr > 0 ? `<span class="cat-badge" style="background:#fee2e2;color:#991b1b;">${actThr} Kes</span>` : ''}</span>
+            <span class="ai-desc">Pengawal Peribadi (Bodyguard), Seni Pertahankan Diri, Siasatan &amp; Lapor Polis</span>
+          </span>
+          <span class="ai-right">${actThr > 0 ? '⚠️ Urus' : 'Buka'}</span>
+        </button>
+      `;
+    }
     html += '</div>';
 
     const renderList = (items) => items.map(r => {
@@ -630,6 +644,10 @@ window.Modals = {
     const wasiatRelBtn = document.getElementById('btn-open-wasiat-rel');
     if (wasiatRelBtn) {
       wasiatRelBtn.addEventListener('click', () => this.showWasiatModal(() => this.showRelationships()));
+    }
+    const secHubBtn = document.getElementById('btn-open-security-hub');
+    if (secHubBtn) {
+      secHubBtn.addEventListener('click', () => this.showSecurityThreatsModal(() => this.showRelationships()));
     }
 
     const friendBtn = document.getElementById('btn-meet-friend');
@@ -890,7 +908,35 @@ window.Modals = {
         ` : ''}
 
         ${isPartner && !s.married && rel.stage !== 'engaged' ? `
-          <button class="action-item rel-act-btn" data-act="engage" ${inPrison ? 'disabled' : ''}>
+          ${(['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter', 'Anak (Dibuang)'].includes(rel.role) && window.SecurityThreats) ? `
+          <button class="action-item" id="btn-rel-disown-child" ${rel.disowned ? 'disabled' : ''}>
+            <span class="ai-icon">🚫</span>
+            <span class="ai-content">
+              <span class="ai-title">${rel.disowned ? 'Dibuang Keluarga' : 'Buang Anak'}</span>
+              <span class="ai-desc">${rel.disowned ? 'Anak ini telah digugurkan hak warisan &amp; terputus hubungan.' : 'Gugurkan hak warisan/wasiat peribadi dan putuskan hubungan keluarga.'}</span>
+            </span>
+            <span class="ai-right cost">${rel.disowned ? 'Dibuang' : 'Putus'}</span>
+          </button>
+        ` : ''}
+        ${(isPartner && !s.married && window.Relationships && Relationships.getRingPrice) ? `
+          <button class="action-item" id="btn-rel-buy-ring" ${inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">💍</span>
+            <span class="ai-content">
+              <span class="ai-title">Beli Cincin Rasmi (Dimiliki: ${s.ringCount || 0})</span>
+              <span class="ai-desc">Diperlukan sebelum bertunang atau berkahwin secara formal.</span>
+            </span>
+            <span class="ai-right cost">${Utils.formatMoney(Relationships.getRingPrice(s), s.countryId)}</span>
+          </button>
+          <button class="action-item rel-act-btn" data-act="elope" ${inPrison ? 'disabled' : ''}>
+            <span class="ai-icon">🏃</span>
+            <span class="ai-content">
+              <span class="ai-title">Kahwin Lompat (Percuma)</span>
+              <span class="ai-desc">Ajak berkahwin terus tanpa cincin atau majlis besar.</span>
+            </span>
+            <span class="ai-right">Percuma</span>
+          </button>
+        ` : ''}
+        <button class="action-item rel-act-btn" data-act="engage" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💐</span>
             <span class="ai-content">
               <span class="ai-title">Bertunang</span>
@@ -974,6 +1020,22 @@ window.Modals = {
     if (switchBtn) {
       switchBtn.addEventListener('click', () => this.showSwitchToChildModal(relId));
     }
+
+    const buyRingBtn = document.getElementById('btn-rel-buy-ring');
+    if (buyRingBtn) buyRingBtn.addEventListener('click', () => {
+      const r = Relationships.buyRing(s);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      App.renderAll();
+      this.showRelDetail(rel.id);
+    });
+    const disownBtn = document.getElementById('btn-rel-disown-child');
+    if (disownBtn) disownBtn.addEventListener('click', () => {
+      if (!confirm(`Pasti mahu membuang ${rel.name} daripada keluarga? Hak warisan akan digugurkan dan boleh mencetuskan dendam.`)) return;
+      const r = SecurityThreats.disownChild(s, rel.id);
+      App.toast(r.msg, r.ok ? 'warning' : 'error');
+      App.renderAll();
+      this.showRelDetail(rel.id);
+    });
 
     document.querySelectorAll('.rel-act-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1933,6 +1995,162 @@ window.Modals = {
     });
     const btnBack = document.getElementById('btn-relocate-domicile-back');
     if (btnBack) btnBack.addEventListener('click', () => this.showWasiatModal(onBack));
+  },
+
+  showSecurityThreatsModal(onBack = null) {
+    const s = GameState.current;
+    if (!s || !window.SecurityThreats) return;
+    SecurityThreats.ensureFields(s);
+    const fmt = (v) => Utils.formatMoney(v, s.countryId);
+    const bg = s.bodyguard;
+    const maLvl = s.martialArtsLevel || 0;
+    const maFee = Utils.usdToLocal(600 + (maLvl * 350), s.countryId || 'MY');
+    const allThreats = (s.threats || []).filter(x => x && !x.resolved);
+    const legacyPending = allThreats.filter(x => x.isLegacyCase && x.optInStatus === 'pending');
+    const activeThreats = allThreats.filter(x => !x.isLegacyCase || x.optInStatus !== 'pending');
+
+    const suspectPool = [...new Set([
+      ...activeThreats.map(x => x.targetName),
+      ...(s.relationships || []).filter(r => r && r.name).slice(0, 6).map(r => r.name),
+      'Bekas Kenalan Sindiket'
+    ])];
+
+    this.open({
+      icon: '🛡️',
+      title: 'Keselamatan Diri & Siasatan Ancaman',
+      subtitle: 'Bodyguard, Seni Pertahankan Diri, Siasatan & Laporan Polis',
+      bodyHtml: `
+        <div class="section-heading">🛡️ Perlindungan Diri</div>
+        <div class="migration-card" style="margin-bottom:10px;padding:10px;">
+          <div class="mig-head">
+            <div class="mig-title">🕶️ Pengawal Peribadi (Bodyguard)</div>
+            <span class="cat-badge" style="background:${bg && bg.active ? '#dcfce7' : '#f1f5f9'};color:${bg && bg.active ? '#166534' : '#475569'};">${bg && bg.active ? `Aktif (${bg.yearsLeft} Thn)` : 'Tiada'}</span>
+          </div>
+          ${bg && bg.active ? `
+            <div style="font-size:11.5px;color:#475569;margin:6px 0;">
+              Baki Kontrak: <strong>${bg.yearsLeft} tahun</strong> • Auto-Perbaharui: <strong>${bg.autoRenew ? 'Aktif' : 'Dimatikan'}</strong>
+            </div>
+            <button type="button" class="btn-sm secondary" id="btn-sec-toggle-autorenew" style="width:100%;margin-bottom:6px;">
+              ${bg.autoRenew ? '🔄 Matikan Auto-Perbaharui' : '🔄 Aktifkan Auto-Perbaharui'}
+            </button>
+          ` : `
+            <div style="font-size:11.5px;color:#475569;margin:6px 0;">Pilih kontrak berbilang tahun (auto-perbaharui selagi baki mencukupi):</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+              ${SecurityThreats.BODYGUARD_CONTRACTS.map(p => `
+                <button type="button" class="btn-sm primary btn-sec-hire-bg" data-years="${p.years}" style="flex:1;min-width:90px;">
+                  ${p.label}<br/><span style="font-size:10px;opacity:0.9;">${fmt(Utils.usdToLocal(p.annualFeeUsd, s.countryId))}/thn</span>
+                </button>
+              `).join('')}
+            </div>
+          `}
+          <div style="border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:12px;">🥋 <strong>Seni Pertahankan Diri:</strong> Tahap ${maLvl}/5</div>
+            <button type="button" class="btn-sm secondary" id="btn-sec-train-ma" ${maLvl >= 5 ? 'disabled' : ''}>
+              ${maLvl >= 5 ? '✓ Tahap Maksimum' : `🥋 Latih (${fmt(maFee)})`}
+            </button>
+          </div>
+        </div>
+
+        ${legacyPending.length > 0 ? `
+          <div class="section-heading">📁 Fail Kes Legasi (${legacyPending.length})</div>
+          ${legacyPending.map(t => `
+            <div class="migration-card" style="border-color:#f59e0b;margin-bottom:8px;padding:10px;">
+              <div class="mig-head">
+                <div class="mig-title">📁 Fail Kes Legasi (${Utils.escapeHtml(t.relationType)})</div>
+                <span class="cat-badge" style="background:#fef3c7;color:#92400e;">Pilihan Pewaris</span>
+              </div>
+              <div style="font-size:11.5px;color:#475569;margin:6px 0;">Motif: ${Utils.escapeHtml(t.motive)}</div>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn-sm primary btn-sec-leg-accept" data-tid="${t.id}" style="flex:1;">🔎 Teruskan Siasatan</button>
+                <button type="button" class="btn-sm secondary btn-sec-leg-archive" data-tid="${t.id}" style="flex:1;">🗄️ Tutup / Arkibkan</button>
+              </div>
+            </div>
+          `).join('')}
+        ` : ''}
+
+        <div class="section-heading">🚨 Ancaman Aktif &amp; Siasatan (${activeThreats.length})</div>
+        ${activeThreats.length === 0 ? `
+          <div class="info-banner" style="font-size:12px;">Tiada ancaman dendam aktif dikesan buat masa ini.</div>
+        ` : activeThreats.map(t => {
+          const compLabel = SecurityThreats.COMPLEXITY_LABELS[t.complexity] || 'Sederhana';
+          const stLabel = SecurityThreats.STATUS_LABELS[t.status] || 'Samar';
+          const isStrong = t.status === 'strong';
+          return `
+            <div class="migration-card" style="border-color:${isStrong ? '#16a34a' : '#f59e0b'};margin-bottom:8px;padding:10px;">
+              <div class="mig-head">
+                <div class="mig-title">👁️ Kes Ancaman (${Utils.escapeHtml(t.relationType)})</div>
+                <span class="cat-badge" style="background:${isStrong ? '#dcfce7' : '#fef3c7'};color:${isStrong ? '#166534' : '#92400e'};">${stLabel}</span>
+              </div>
+              <div style="font-size:11.5px;color:#475569;margin:5px 0;">
+                Kerumitan: <strong>${compLabel}</strong> • Petunjuk: <strong>${t.cluesFound || 0}/${t.cluesRequired}</strong>
+              </div>
+              ${(t.cluesLog && t.cluesLog.length > 0) ? `
+                <div style="font-size:11px;color:#334155;background:#f8fafc;border-radius:6px;padding:6px 8px;margin-bottom:6px;line-height:1.45;">
+                  ${t.cluesLog.slice(-3).map(c => `• ${Utils.escapeHtml(c)}`).join('<br/>')}
+                </div>
+              ` : ''}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="btn-sm secondary btn-sec-investigate" data-tid="${t.id}" style="flex:1;" ${isStrong ? 'disabled' : ''}>
+                  ${isStrong ? '✓ Bukti Kukuh' : `🔍 Siasat (${fmt(Utils.usdToLocal(1800, s.countryId))})`}
+                </button>
+                ${isStrong ? `
+                  <select class="form-input sel-sec-suspect" data-tid="${t.id}" style="flex:1;padding:6px;border-radius:6px;font-size:11.5px;">
+                    ${suspectPool.map(nm => `<option value="${Utils.escapeHtml(nm)}">${Utils.escapeHtml(nm)}</option>`).join('')}
+                  </select>
+                ` : ''}
+                <button type="button" class="btn-sm ${isStrong ? 'primary' : 'secondary'} btn-sec-report" data-tid="${t.id}" style="flex:1;">
+                  🚔 Lapor Polis
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      `,
+      footerHtml: `<button type="button" class="btn-sm secondary" id="btn-sec-back">← Kembali</button>`
+    });
+
+    const reopen = () => { App.renderAll(); this.showSecurityThreatsModal(onBack); };
+    document.querySelectorAll('.btn-sec-hire-bg').forEach(b => b.addEventListener('click', () => {
+      const r = SecurityThreats.hireBodyguard(s, Number(b.dataset.years), true);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    }));
+    const togBtn = document.getElementById('btn-sec-toggle-autorenew');
+    if (togBtn) togBtn.addEventListener('click', () => {
+      const r = SecurityThreats.toggleBodyguardAutoRenew(s);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    });
+    const maBtn = document.getElementById('btn-sec-train-ma');
+    if (maBtn) maBtn.addEventListener('click', () => {
+      const r = SecurityThreats.trainMartialArts(s);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    });
+    document.querySelectorAll('.btn-sec-leg-accept').forEach(b => b.addEventListener('click', () => {
+      const r = SecurityThreats.acceptLegacyCase(s, b.dataset.tid);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    }));
+    document.querySelectorAll('.btn-sec-leg-archive').forEach(b => b.addEventListener('click', () => {
+      const r = SecurityThreats.archiveLegacyCase(s, b.dataset.tid);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    }));
+    document.querySelectorAll('.btn-sec-investigate').forEach(b => b.addEventListener('click', () => {
+      const r = SecurityThreats.investigateThreat(s, b.dataset.tid);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    }));
+    document.querySelectorAll('.btn-sec-report').forEach(b => b.addEventListener('click', () => {
+      const sel = document.querySelector(`.sel-sec-suspect[data-tid="${b.dataset.tid}"]`);
+      const suspect = sel ? sel.value : '';
+      const r = SecurityThreats.reportThreatToPolice(s, b.dataset.tid, suspect);
+      App.toast(r.msg, r.ok ? 'success' : 'error');
+      reopen();
+    }));
+    const backBtn = document.getElementById('btn-sec-back');
+    if (backBtn) backBtn.addEventListener('click', () => { if (typeof onBack === 'function') onBack(); else this.close(); });
   },
 
   showWasiatModal(onBack = null) {
