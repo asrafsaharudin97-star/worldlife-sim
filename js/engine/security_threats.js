@@ -23,9 +23,7 @@ window.SecurityThreats = {
   },
 
   BODYGUARD_CONTRACTS: [
-    { years: 3,  annualFeeUsd: 18000, label: '3 Tahun' },
-    { years: 5,  annualFeeUsd: 16000, label: '5 Tahun' },
-    { years: 10, annualFeeUsd: 14000, label: '10 Tahun' }
+    { years: 5, annualFeeUsd: 16000, label: '5 Tahun' }
   ],
 
   SUBTLE_CLUES: [
@@ -99,11 +97,11 @@ window.SecurityThreats = {
     return { ok: true, msg: `${child.name} telah dibuang daripada keluarga dan hilang hak warisan.` };
   },
 
-  hireBodyguard(s, years = 3, autoRenew = true) {
+  hireBodyguard(s, years = 3) {
     if (!s) return { ok: false, msg: 'Keadaan watak tidak sah.' };
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia semasa dalam tahanan.' };
-    const plan = this.BODYGUARD_CONTRACTS.find(p => p.years === Number(years)) || this.BODYGUARD_CONTRACTS[0];
+    const plan = this.BODYGUARD_CONTRACTS[0]; // Dikunci 5 tahun sahaja
     const firstYearFee = Utils.usdToLocal(plan.annualFeeUsd, s.countryId || 'MY');
     if ((s.money || 0) < firstYearFee) {
       return { ok: false, msg: `Baki tidak mencukupi — yuran tahun pertama pengawal peribadi ialah ${Utils.formatMoney(firstYearFee, s.countryId)}.` };
@@ -114,10 +112,11 @@ window.SecurityThreats = {
       yearsLeft: plan.years,
       contractYears: plan.years,
       annualFeeUsd: plan.annualFeeUsd,
-      autoRenew: Boolean(autoRenew)
+      autoRenew: false
     };
+    s.bodyguardReminder = null;
     GameState.addJournalEntry(
-      `🛡️ Anda melantik Pengawal Peribadi (Kontrak ${plan.years} tahun, yuran ${Utils.formatMoney(firstYearFee, s.countryId)}/thn, Auto-Perbaharui: ${s.bodyguard.autoRenew ? 'Aktif' : 'Tidak Aktif'}).`,
+      `🛡️ Anda melantik Pengawal Peribadi (Kontrak ${plan.years} tahun, yuran ${Utils.formatMoney(firstYearFee, s.countryId)}/thn — pembaharuan manual apabila tamat).`,
       'milestone'
     );
     GameState.save();
@@ -136,12 +135,16 @@ window.SecurityThreats = {
     this.ensureFields(s);
     if (s.prison && s.prison.inPrison) return { ok: false, msg: 'Tidak tersedia semasa dalam tahanan.' };
     if (s.martialArtsLevel >= 5) return { ok: false, msg: 'Anda sudah mencapai tahap tertinggi Seni Pertahankan Diri (Tahap 5).' };
+    if (s.martialArtsLastTrainedAge === s.age) {
+      return { ok: false, msg: 'Anda sudah menjalani latihan seni pertahankan diri tahun ini. Cuba lagi tahun hadapan.' };
+    }
     const fee = Utils.usdToLocal(600 + (s.martialArtsLevel * 350), s.countryId || 'MY');
     if ((s.money || 0) < fee) {
       return { ok: false, msg: `Baki tidak mencukupi — yuran latihan ialah ${Utils.formatMoney(fee, s.countryId)}.` };
     }
     s.money -= fee;
     s.martialArtsLevel += 1;
+    s.martialArtsLastTrainedAge = s.age;
     GameState.adjustStats({ health: 4, happiness: 2 });
     GameState.addJournalEntry(`🥋 Anda menjalani latihan Seni Pertahankan Diri (kini Tahap ${s.martialArtsLevel}/5) dengan yuran ${Utils.formatMoney(fee, s.countryId)}.`);
     GameState.save();
@@ -231,29 +234,29 @@ window.SecurityThreats = {
     if (!s || !s.alive) return null;
     this.ensureFields(s);
 
-    // 1. Yuran & Auto-Perbaharui Kontrak Pengawal Peribadi
+    // 1. Yuran & Peringatan Tamat Tempoh Kontrak Pengawal Peribadi (tiada auto-renew)
     if (s.bodyguard && s.bodyguard.active) {
+      s.bodyguard.autoRenew = false;
       s.bodyguard.yearsLeft = (s.bodyguard.yearsLeft || 1) - 1;
       const annualFee = Utils.usdToLocal(s.bodyguard.annualFeeUsd || 18000, s.countryId || 'MY');
       if (s.bodyguard.yearsLeft > 0) {
         if ((s.money || 0) >= annualFee) {
           s.money -= annualFee;
+          if (s.bodyguard.yearsLeft === 1) {
+            s.bodyguardReminder = 'expiring';
+            GameState.addJournalEntry('🛡️⏳ Peringatan: Kontrak Pengawal Peribadi anda berbaki 1 tahun sahaja lagi. Sila bersedia untuk memperbaharui secara manual.', 'warning');
+          } else {
+            s.bodyguardReminder = null;
+          }
         } else {
           s.bodyguard = null;
+          s.bodyguardReminder = 'expired';
           GameState.addJournalEntry('🛡️⚠️ Kontrak Pengawal Peribadi ditamatkan awal kerana baki tunai tidak mencukupi untuk yuran tahunan.', 'warning');
-        }
-      } else if (s.bodyguard.autoRenew) {
-        if ((s.money || 0) >= annualFee) {
-          s.money -= annualFee;
-          s.bodyguard.yearsLeft = s.bodyguard.contractYears || 3;
-          GameState.addJournalEntry(`🛡️ Kontrak Pengawal Peribadi diperbaharui secara automatik untuk ${s.bodyguard.yearsLeft} tahun lagi (-${Utils.formatMoney(annualFee, s.countryId)}).`);
-        } else {
-          s.bodyguard = null;
-          GameState.addJournalEntry('🛡️⚠️ Auto-perbaharui Pengawal Peribadi gagal kerana baki tidak mencukupi. Anda kini tanpa pengawal peribadi.', 'warning');
         }
       } else {
         s.bodyguard = null;
-        GameState.addJournalEntry('🛡️ Kontrak Pengawal Peribadi anda telah tamat tempoh.');
+        s.bodyguardReminder = 'expired';
+        GameState.addJournalEntry('🛡️🚨 Kontrak Pengawal Peribadi anda telah tamat tempoh! Sila perbaharui secara manual di menu Keselamatan & Ancaman.', 'warning');
       }
     }
 

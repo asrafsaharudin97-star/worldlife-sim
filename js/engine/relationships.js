@@ -1237,7 +1237,43 @@ window.Relationships = {
     }
 
     // --- Lamar & Majlis Perkahwinan ---
+    if (action === 'elope') {
+      if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s) && !rel.isRoyal) {
+        return { ok: false, msg: 'Mengikut protokol istana, golongan diraja hanya dibenarkan berkahwin dengan kerabat diraja sahaja.' };
+      }
+      if (s.age < 18) return { ok: false, msg: 'Perkahwinan hanya dibuka untuk umur 18 tahun ke atas.' };
+      if (s.married) return { ok: false, msg: 'Anda sudah pun berkahwin.' };
+      const closeness = rel.closeness || 50;
+      const trust = rel.trust || 50;
+      const acceptChance = Utils.clamp(0.42 + ((closeness - 50) * 0.008) + ((trust - 50) * 0.006), 0.20, 0.88);
+      if (Utils.chance(acceptChance)) {
+        if (window.LegalInheritanceEngine && LegalInheritanceEngine.recordMarriageStart) {
+          LegalInheritanceEngine.recordMarriageStart(s, rel, false);
+        }
+        s.married = true;
+        s.maritalStatus = null;
+        rel.category = 'spouse';
+        rel.stage = 'married';
+        rel.role = rel.gender === 'female' ? 'Isteri' : 'Suami';
+        rel.closeness = Utils.clamp(closeness + 15, 0, 100);
+        rel.trust = Utils.clamp(trust + 10, 0, 100);
+        GameState.adjustStats({ happiness: 18 });
+        GameState.addJournalEntry(`🏃💍 Kahwin Lompat! Anda dan ${rel.name} bersetuju untuk berkahwin terus secara ringkas tanpa cincin atau majlis besar.`, 'romance');
+        GameState.save();
+        return { ok: true, msg: `Tahniah! ${rel.name} bersetuju untuk Kahwin Lompat bersama anda!` };
+      } else {
+        rel.closeness = Utils.clamp(closeness - 8, 0, 100);
+        GameState.adjustStats({ happiness: -5 });
+        GameState.addJournalEntry(`💔 ${rel.name} menolak cadangan Kahwin Lompat kerana masih mahukan ikatan yang lebih teratur dan cincin rasmi.`, 'warning');
+        GameState.save();
+        return { ok: false, rejected: true, msg: `${rel.name} menolak cadangan Kahwin Lompat — pasangan mahukan cincin dan persiapan lebih teratur.` };
+      }
+    }
+
     if (action === 'propose') {
+      if ((s.ringCount || 0) < 1) {
+        return { ok: false, needsRing: true, msg: 'Anda perlu membeli Cincin Rasmi terlebih dahulu sebelum bertunang atau berkahwin secara formal.' };
+      }
       if (window.SpecialModesEngine && SpecialModesEngine.isPlayerRoyal && SpecialModesEngine.isPlayerRoyal(s) && !rel.isRoyal) {
         return { ok: false, msg: 'Mengikut protokol istana, golongan diraja hanya dibenarkan berkahwin dengan kerabat diraja sahaja.' };
       }

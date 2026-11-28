@@ -542,11 +542,18 @@ window.Modals = {
     if (window.SecurityThreats) {
       SecurityThreats.ensureFields(s);
       const actThr = (s.threats || []).filter(x => x && !x.resolved).length;
+      const bgExp = Boolean((s.bodyguard && s.bodyguard.active && s.bodyguard.yearsLeft === 1) || s.bodyguardReminder === 'expiring');
+      const bgEnd = Boolean((!s.bodyguard || !s.bodyguard.active) && s.bodyguardReminder === 'expired');
+      const bgBadge = bgEnd
+        ? `<span class="cat-badge" style="background:#fee2e2;color:#991b1b;">🔴 Kontrak BG Tamat</span>`
+        : bgExp
+          ? `<span class="cat-badge" style="background:#fef3c7;color:#92400e;">⏳ BG Baki 1 Thn</span>`
+          : '';
       html += `
         <button class="action-item" id="btn-open-security-hub">
           <span class="ai-icon">🛡️</span>
           <span class="ai-content">
-            <span class="ai-title">Keselamatan &amp; Ancaman ${actThr > 0 ? `<span class="cat-badge" style="background:#fee2e2;color:#991b1b;">${actThr} Kes</span>` : ''}</span>
+            <span class="ai-title">Keselamatan &amp; Ancaman ${actThr > 0 ? `<span class="cat-badge" style="background:#fee2e2;color:#991b1b;">${actThr} Kes</span>` : ''} ${bgBadge}</span>
             <span class="ai-desc">Pengawal Peribadi (Bodyguard), Seni Pertahankan Diri, Siasatan &amp; Lapor Polis</span>
           </span>
           <span class="ai-right">${actThr > 0 ? '⚠️ Urus' : 'Buka'}</span>
@@ -563,7 +570,7 @@ window.Modals = {
         Relationships.ensureChildEducationFields(s, r);
       }
             const distLabel = r.countryId !== s.countryId ? ` • ${rc.flag} Luar Negara` : '';
-      const adoptTag = r.isAdopted ? ' • Anak Angkat' : '';
+      const adoptTag = isChildItem ? (r.isAdopted ? ' • <span class="cat-badge" style="background:#fef3c7;color:#92400e;font-size:10px;">Anak Angkat</span>' : ' • <span class="cat-badge synergy" style="font-size:10px;">Anak Kandung</span>') : '';
       const childSchoolTag = (isChildItem && r.schoolLabel)
         ? ` • 🏫 ${Utils.escapeHtml(r.schoolLabel)}${r.yearlySchoolFee > 0 ? ` (${Utils.formatMoney(r.yearlySchoolFee, s.countryId)}/thn)` : ''}`
         : '';
@@ -586,18 +593,30 @@ window.Modals = {
       `;
     }).join('');
 
-    if (partnerList.length > 0) {
-      html += `<div class="section-heading">${s.married ? '💍 Pasangan Hidup (Suami / Isteri)' : '💘 Sesi Date / Pasangan'}</div><div class="action-list">${renderList(partnerList)}</div>`;
+    const childRoles = ['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter'];
+    const ownChildrenList = familyList.filter(r => r && childRoles.includes(r.role) && !r.disowned);
+    const disownedList = familyList.filter(r => r && (r.disowned || r.role === 'Anak (Dibuang)'));
+    const originFamilyList = familyList.filter(r => r && !childRoles.includes(r.role) && !r.disowned && r.role !== 'Anak (Dibuang)');
+    const ownFamilyList = [...partnerList, ...ownChildrenList];
+    const socialAndOtherList = [...friendsList, ...disownedList];
+
+    if (ownFamilyList.length > 0) {
+      html += `<div class="section-heading">👨‍👩‍👧‍👦 Keluarga Sendiri (${ownFamilyList.length})</div><div class="action-list">${renderList(ownFamilyList)}</div>`;
     }
 
-    html += `<div class="section-heading">🤝 Rakan-Rakan (${friendsList.length})</div>`;
-    if (friendsList.length > 0) {
-      html += `<div class="action-list">${renderList(friendsList)}</div>`;
+    html += `<div class="section-heading">🏡 Keluarga Asal &amp; Adik-Beradik (${originFamilyList.length})</div>`;
+    if (originFamilyList.length > 0) {
+      html += `<div class="action-list">${renderList(originFamilyList)}</div>`;
+    } else {
+      html += `<div class="info-banner">Tiada ahli keluarga asal yang masih hidup.</div>`;
+    }
+
+    html += `<div class="section-heading">🤝 Rakan &amp; Kenalan / Bekas Pasangan (${socialAndOtherList.length})</div>`;
+    if (socialAndOtherList.length > 0) {
+      html += `<div class="action-list">${renderList(socialAndOtherList)}</div>`;
     } else {
       html += `<div class="info-banner">Belum ada rakan rapat. Tekan "Kenali Rakan Baru" untuk mula membina lingkaran sosial anda!</div>`;
     }
-
-    html += `<div class="section-heading">❤️ Keluarga (${familyList.length})</div><div class="action-list">${renderList(familyList)}</div>`;
 
     const deceasedList = Array.isArray(s.deceasedHistory) ? s.deceasedHistory : [];
     if (deceasedList.length > 0) {
@@ -907,17 +926,23 @@ window.Modals = {
           </button>
         ` : ''}
 
-        ${isPartner && !s.married && rel.stage !== 'engaged' ? `
-          ${(['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter', 'Anak (Dibuang)'].includes(rel.role) && window.SecurityThreats) ? `
-          <button class="action-item" id="btn-rel-disown-child" ${rel.disowned ? 'disabled' : ''}>
-            <span class="ai-icon">🚫</span>
-            <span class="ai-content">
-              <span class="ai-title">${rel.disowned ? 'Dibuang Keluarga' : 'Buang Anak'}</span>
-              <span class="ai-desc">${rel.disowned ? 'Anak ini telah digugurkan hak warisan &amp; terputus hubungan.' : 'Gugurkan hak warisan/wasiat peribadi dan putuskan hubungan keluarga.'}</span>
-            </span>
-            <span class="ai-right cost">${rel.disowned ? 'Dibuang' : 'Putus'}</span>
-          </button>
+        ${(['Anak Lelaki', 'Anak Perempuan', 'Son', 'Daughter', 'Anak (Dibuang)'].includes(rel.role)) ? `
+          <div style="margin:6px 0 4px;">
+            <span class="cat-badge ${rel.isAdopted ? '' : 'synergy'}" style="${rel.isAdopted ? 'background:#fef3c7;color:#92400e;' : ''}">${rel.isAdopted ? 'Anak Angkat' : 'Anak Kandung'}</span>
+            ${rel.disowned ? '<span class="cat-badge" style="background:#fee2e2;color:#991b1b;margin-left:4px;">Dibuang Keluarga</span>' : ''}
+          </div>
+          ${window.SecurityThreats ? `
+            <button class="action-item" id="btn-rel-disown-child" ${rel.disowned ? 'disabled' : ''}>
+              <span class="ai-icon">🚫</span>
+              <span class="ai-content">
+                <span class="ai-title">${rel.disowned ? 'Dibuang Keluarga' : 'Buang Anak'}</span>
+                <span class="ai-desc">${rel.disowned ? 'Anak ini telah digugurkan hak warisan &amp; terputus hubungan.' : 'Gugurkan hak warisan/wasiat peribadi dan putuskan hubungan keluarga.'}</span>
+              </span>
+              <span class="ai-right cost">${rel.disowned ? 'Dibuang' : 'Putus'}</span>
+            </button>
+          ` : ''}
         ` : ''}
+
         ${(isPartner && !s.married && window.Relationships && Relationships.getRingPrice) ? `
           <button class="action-item" id="btn-rel-buy-ring" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💍</span>
@@ -930,13 +955,15 @@ window.Modals = {
           <button class="action-item rel-act-btn" data-act="elope" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">🏃</span>
             <span class="ai-content">
-              <span class="ai-title">Kahwin Lompat (Percuma)</span>
+              <span class="ai-title">Kahwin Lompat</span>
               <span class="ai-desc">Ajak berkahwin terus tanpa cincin atau majlis besar.</span>
             </span>
             <span class="ai-right">Percuma</span>
           </button>
         ` : ''}
-        <button class="action-item rel-act-btn" data-act="engage" ${inPrison ? 'disabled' : ''}>
+
+        ${isPartner && !s.married && rel.stage !== 'engaged' ? `
+          <button class="action-item rel-act-btn" data-act="engage" ${inPrison ? 'disabled' : ''}>
             <span class="ai-icon">💐</span>
             <span class="ai-content">
               <span class="ai-title">Bertunang</span>
@@ -2022,32 +2049,39 @@ window.Modals = {
       bodyHtml: `
         <div class="section-heading">🛡️ Perlindungan Diri</div>
         <div class="migration-card" style="margin-bottom:10px;padding:10px;">
+          ${(() => {
+            const bgExpiring = Boolean((bg && bg.active && bg.yearsLeft === 1) || s.bodyguardReminder === 'expiring');
+            const bgExpired = Boolean((!bg || !bg.active) && s.bodyguardReminder === 'expired');
+            if (bgExpired) {
+              return `<div class="info-banner" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b;font-size:11.5px;margin-bottom:8px;">🚨 <strong>Peringatan:</strong> Kontrak Pengawal Peribadi anda telah tamat tempoh — sila perbaharui segera!</div>`;
+            }
+            if (bgExpiring) {
+              return `<div class="info-banner" style="background:#fffbeb;border-color:#fde68a;color:#92400e;font-size:11.5px;margin-bottom:8px;">⏳ <strong>Peringatan:</strong> Kontrak Pengawal Peribadi anda hampir tamat (baki 1 tahun). Sila bersedia untuk memperbaharui secara manual.</div>`;
+            }
+            return '';
+          })()}
           <div class="mig-head">
             <div class="mig-title">🕶️ Pengawal Peribadi (Bodyguard)</div>
             <span class="cat-badge" style="background:${bg && bg.active ? '#dcfce7' : '#f1f5f9'};color:${bg && bg.active ? '#166534' : '#475569'};">${bg && bg.active ? `Aktif (${bg.yearsLeft} Thn)` : 'Tiada'}</span>
           </div>
           ${bg && bg.active ? `
             <div style="font-size:11.5px;color:#475569;margin:6px 0;">
-              Baki Kontrak: <strong>${bg.yearsLeft} tahun</strong> • Auto-Perbaharui: <strong>${bg.autoRenew ? 'Aktif' : 'Dimatikan'}</strong>
+              Baki Kontrak: <strong>${bg.yearsLeft} tahun</strong> • Pembaharuan: <strong>Manual apabila tamat</strong>
             </div>
-            <button type="button" class="btn-sm secondary" id="btn-sec-toggle-autorenew" style="width:100%;margin-bottom:6px;">
-              ${bg.autoRenew ? '🔄 Matikan Auto-Perbaharui' : '🔄 Aktifkan Auto-Perbaharui'}
-            </button>
           ` : `
-            <div style="font-size:11.5px;color:#475569;margin:6px 0;">Pilih kontrak berbilang tahun (auto-perbaharui selagi baki mencukupi):</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
-              ${SecurityThreats.BODYGUARD_CONTRACTS.map(p => `
-                <button type="button" class="btn-sm primary btn-sec-hire-bg" data-years="${p.years}" style="flex:1;min-width:90px;">
-                  ${p.label}<br/><span style="font-size:10px;opacity:0.9;">${fmt(Utils.usdToLocal(p.annualFeeUsd, s.countryId))}/thn</span>
-                </button>
-              `).join('')}
-            </div>
+            <div style="font-size:11.5px;color:#475569;margin:6px 0;line-height:1.45;">Kontrak rasmi 5 tahun. Yuran ditolak setiap tahun dan anda perlu memperbaharui secara manual apabila tempoh tamat:</div>
+            <button type="button" class="btn-sm primary btn-sec-hire-bg" data-years="5" style="width:100%;margin-bottom:6px;">
+              🛡️ Kontrak 5 Tahun — ${fmt(Utils.usdToLocal(16000, s.countryId))}/thn
+            </button>
           `}
           <div style="border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div style="font-size:12px;">🥋 <strong>Seni Pertahankan Diri:</strong> Tahap ${maLvl}/5</div>
-            <button type="button" class="btn-sm secondary" id="btn-sec-train-ma" ${maLvl >= 5 ? 'disabled' : ''}>
-              ${maLvl >= 5 ? '✓ Tahap Maksimum' : `🥋 Latih (${fmt(maFee)})`}
-            </button>
+            ${(() => {
+              const maTrainedThisYear = s.martialArtsLastTrainedAge === s.age;
+              const maDisabled = maLvl >= 5 || maTrainedThisYear;
+              const maLabel = maLvl >= 5 ? '✓ Tahap Maksimum' : (maTrainedThisYear ? '✓ Sudah Berlatih Tahun Ini' : `🥋 Latih (${fmt(maFee)})`);
+              return `<button type="button" class="btn-sm secondary" id="btn-sec-train-ma" ${maDisabled ? 'disabled' : ''}>${maLabel}</button>`;
+            })()}
           </div>
         </div>
 
@@ -2111,16 +2145,10 @@ window.Modals = {
 
     const reopen = () => { App.renderAll(); this.showSecurityThreatsModal(onBack); };
     document.querySelectorAll('.btn-sec-hire-bg').forEach(b => b.addEventListener('click', () => {
-      const r = SecurityThreats.hireBodyguard(s, Number(b.dataset.years), true);
+      const r = SecurityThreats.hireBodyguard(s, 5);
       App.toast(r.msg, r.ok ? 'success' : 'error');
       reopen();
     }));
-    const togBtn = document.getElementById('btn-sec-toggle-autorenew');
-    if (togBtn) togBtn.addEventListener('click', () => {
-      const r = SecurityThreats.toggleBodyguardAutoRenew(s);
-      App.toast(r.msg, r.ok ? 'success' : 'error');
-      reopen();
-    });
     const maBtn = document.getElementById('btn-sec-train-ma');
     if (maBtn) maBtn.addEventListener('click', () => {
       const r = SecurityThreats.trainMartialArts(s);
