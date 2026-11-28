@@ -349,6 +349,17 @@ window.EduCareerEngine = {
         return { ok: false, reason: 'Program Matriks/Asasi hanya boleh diambil sekali seumur hidup.' };
       }
     }
+    if (level === 'high_school') {
+      if (s.age < 18) return { ok: false, reason: 'Umur minimum ialah 18 tahun.' };
+      if (s.spmUlanganTakenThisYear) {
+        return { ok: false, reason: 'Anda sudah menduduki / mendaftar SPM Ulangan pada tahun ini.' };
+      }
+      const curRank = (EducationData.LEVEL_INFO && EducationData.LEVEL_INFO[ed.educationLevel]) ? EducationData.LEVEL_INFO[ed.educationLevel].rank : 0;
+      if (curRank >= 2) {
+        return { ok: false, reason: 'Anda sudah memiliki kelayakan pengajian tinggi yang lebih tinggi daripada SPM.' };
+      }
+      return { ok: true, reason: '' };
+    }
     if (s.age < prog.minAge) return { ok: false, reason: `Umur minimum ialah ${prog.minAge} tahun.` };
     if (prog.exactLevelOnly && ed.educationLevel !== prog.exactLevelOnly) {
       return { ok: false, reason: 'Anda sudah memiliki kelayakan SPM atau lebih tinggi.' };
@@ -444,6 +455,7 @@ window.EduCareerEngine = {
 
     const baseGpa = Number(Math.max(3.0, Math.min(3.4, 3.0 + ((s.stats.smarts || 60) / 100) * 0.4)).toFixed(2));
     if (level === 'foundation') s.hasTakenFoundation = true;
+    if (level === 'high_school') s.spmUlanganTakenThisYear = true;
     s.education.activeStudy = {
       level,
       field: fieldId,
@@ -743,6 +755,9 @@ window.EduCareerEngine = {
     if (st.annualTuition > 0) {
       if (st.funding === 'cash') {
         s.money -= st.annualTuition;
+        if (st.annualTuition > 0 && window.GameState && GameState.logCashFlow) {
+          GameState.logCashFlow(s, -st.annualTuition, `Yuran Pengajian (${st.level === 'high_school' ? 'SPM Ulangan' : (st.fieldName || st.level)})`, 'gaya_hidup');
+        }
       } else if (st.funding === 'loan') {
         ed.educationLoan = (ed.educationLoan || 0) + st.annualTuition;
       }

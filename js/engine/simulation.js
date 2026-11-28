@@ -62,6 +62,7 @@ window.Sim = {
     s.yearlyActions = {};
     s.cultureVisitedThisYear = false;
     s.scholarshipIvUsedThisYear = false;
+    s.spmUlanganTakenThisYear = false;
     s.hospitalVisitedThisYear = false;
     if (window.GameState && GameState.resetAnnualCashFlow) GameState.resetAnnualCashFlow(s);
     s.collectibleAcquisitionsThisYear = 0;

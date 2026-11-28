@@ -55,12 +55,11 @@ window.EducationData = {
       icon: '📝',
       minAge: 18,
       reqLevel: 'none',
-      exactLevelOnly: 'none',
       needsField: false,
       baseYears: 1,
       tuitionFactor: 0.18,
       minSmarts: 15,
-      desc: 'Peluang kedua bagi orang dewasa tanpa kelulusan sekolah menengah untuk melayakkan diri ke pengajian tinggi.'
+      desc: 'Terbuka sepanjang hayat (18+ tanpa had umur maksimum) bagi calon dewasa yang ingin lulus atau membaiki keputusan SPM untuk ke pengajian tinggi.'
     },
     {
       id: 'foundation',
