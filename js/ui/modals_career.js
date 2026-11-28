@@ -1153,7 +1153,10 @@ window.CareerModals = {
           course: courseName,
           level: levelLabel,
           country: c ? c.name : s.countryId,
-          age: s.age
+          age: s.age,
+          smarts: (s.stats && s.stats.smarts) || 70,
+          achievements: (s.job && s.job.title) ? `Pengalaman kerja: ${s.job.title}` : `Pendidikan: ${s.education || 'Sekolah Menengah'}`,
+          avoidQuestions: Array.isArray(s.recentScholarshipIvQuestions) ? s.recentScholarshipIvQuestions.slice(0, 12) : []
         })
       : { questions: [], source: 'fallback' };
 

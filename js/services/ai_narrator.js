@@ -318,61 +318,157 @@ window.AINarrator = {
     }
   }
 ,
+  SCHOLARSHIP_IV_ANGLES: [
+    'dilema etika pelajar dan integriti akademik',
+    'kajian kes praktikal dalam bidang pengajian',
+    'sumbangan konkrit kepada negara dan komuniti setempat',
+    'pengalaman kegagalan dan strategi bangkit semula',
+    'isu semasa dan cabaran industri di negara semasa',
+    'pengurusan kewangan, disiplin, dan komitmen pengajian',
+    'kerja berpasukan, kepimpinan, dan penyelesaian konflik'
+  ],
+
+  _recentIvQuestions: [],
+
+  _getRecentIvQuestions() {
+    const s = (window.GameState && GameState.current) ? GameState.current : null;
+    if (s) {
+      if (!Array.isArray(s.recentScholarshipIvQuestions)) s.recentScholarshipIvQuestions = [];
+      return s.recentScholarshipIvQuestions;
+    }
+    return this._recentIvQuestions;
+  },
+
+  _recordRecentIvQuestions(questions = []) {
+    const texts = questions.map(q => String(q && q.soalan || '').trim()).filter(Boolean);
+    if (!texts.length) return;
+    const s = (window.GameState && GameState.current) ? GameState.current : null;
+    const prev = this._getRecentIvQuestions();
+    const merged = [...texts, ...prev.filter(t => !texts.includes(t))].slice(0, 15);
+    this._recentIvQuestions = merged;
+    if (s) s.recentScholarshipIvQuestions = merged;
+  },
+
+  _parseWorkerJson(rawText) {
+    const cleaned = String(rawText || '')
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch (_) {
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        try { return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)); } catch (__) {}
+      }
+      const firstArr = cleaned.indexOf('[');
+      const lastArr = cleaned.lastIndexOf(']');
+      if (firstArr !== -1 && lastArr > firstArr) {
+        try { return JSON.parse(cleaned.slice(firstArr, lastArr + 1)); } catch (__) {}
+      }
+      return null;
+    }
+  },
+
   SCHOLARSHIP_FALLBACK_BANK: {
     stem: [
       { soalan: 'Dalam kaedah saintifik, apakah tujuan utama kumpulan kawalan (control group) dalam sesuatu eksperimen?', pilihan: ['Mempercepatkan keputusan makmal', 'Menjadi penanda aras perbandingan bagi mengasingkan kesan pemboleh ubah', 'Menggantikan keperluan hipotesis', 'Mengurangkan bilangan sampel kajian'], jawapanBetul: 1, penjelasan: 'Kumpulan kawalan membolehkan penyelidik memastikan perubahan hasil benar-benar berpunca daripada pemboleh ubah yang diuji.' },
       { soalan: 'Apakah kelebihan utama algoritma yang mempunyai kerumitan masa O(log n) berbanding O(n²)?', pilihan: ['Ia sentiasa menggunakan memori sifar', 'Masa pemprosesannya berkembang jauh lebih perlahan apabila saiz data meningkat', 'Ia hanya berfungsi untuk data teks sahaja', 'Ia tidak memerlukan struktur data tersusun'], jawapanBetul: 1, penjelasan: 'Kerumitan logaritma kekal pantas walaupun set data membesar ke jutaan rekod.' },
-      { soalan: 'Mengapakah faktor keselamatan (factor of safety) diterapkan dalam reka bentuk kejuruteraan struktur?', pilihan: ['Untuk menaikkan kos bahan binaan', 'Untuk menampung beban luar jangka dan ketidakpastian bahan', 'Untuk memendekkan jangka hayat struktur', 'Untuk mengelakkan pemeriksaan berkala'], jawapanBetul: 1, penjelasan: 'Faktor keselamatan melindungi struktur daripada kegagalan apabila menghadapi beban atau keadaan ekstrem.' }
+      { soalan: 'Mengapakah faktor keselamatan (factor of safety) diterapkan dalam reka bentuk kejuruteraan struktur?', pilihan: ['Untuk menaikkan kos bahan binaan', 'Untuk menampung beban luar jangka dan ketidakpastian bahan', 'Untuk memendekkan jangka hayat struktur', 'Untuk mengelakkan pemeriksaan berkala'], jawapanBetul: 1, penjelasan: 'Faktor keselamatan melindungi struktur daripada kegagalan apabila menghadapi beban atau keadaan ekstrem.' },
+      { soalan: 'Apakah risiko utama apabila model kecerdasan buatan dilatih menggunakan set data yang berat sebelah?', pilihan: ['Kelajuan komputer menjadi lebih perlahan', 'Keputusan model akan mewarisi dan memperbesar ketidakadilan data asal', 'Saiz fail model menjadi terlalu kecil', 'Model tidak lagi memerlukan elektrik'], jawapanBetul: 1, penjelasan: 'Bias dalam data latihan menghasilkan ramalan yang tidak adil dan kurang tepat dalam dunia sebenar.' },
+      { soalan: 'Mengapakah ujian unit (unit testing) penting sebelum melancarkan sistem perisian berskala besar?', pilihan: ['Untuk menambah panjang kod sumber', 'Untuk mengesan ralat pada komponen kecil lebih awal sebelum digabungkan', 'Untuk mengelakkan keperluan dokumentasi', 'Untuk menggantikan peranan pengguna akhir'], jawapanBetul: 1, penjelasan: 'Ujian unit mengurangkan kos pembaikan pepijat dengan mengesahkan setiap modul berfungsi seperti dijangka.' },
+      { soalan: 'Dalam penyelidikan makmal, apakah tindakan beretika jika data eksperimen bercanggah dengan hipotesis awal anda?', pilihan: ['Memadam data yang bercanggah supaya laporan kelihatan kemas', 'Melaporkan data sebenar secara telus dan menganalisis punca perbezaan', 'Mengubah angka supaya sepadan dengan jangkaan', 'Menyembunyikan kaedah eksperimen daripada penilai'], jawapanBetul: 1, penjelasan: 'Integriti saintifik menuntut pelaporan jujur kerana hasil negatif tetap bernilai kepada ilmu.' }
     ],
     business: [
       { soalan: 'Apakah maksud prinsip kepelbagaian (diversification) dalam pengurusan portfolio pelaburan?', pilihan: ['Melabur semua modal dalam satu saham berisiko tinggi', 'Mengagihkan pelaburan merentas pelbagai aset bagi mengurangkan risiko keseluruhan', 'Menyimpan keseluruhan dana dalam bentuk tunai sahaja', 'Meminjam modal maksimum untuk setiap transaksi'], jawapanBetul: 1, penjelasan: 'Kepelbagaian mengurangkan kesan kejatuhan satu aset terhadap keseluruhan portfolio.' },
       { soalan: 'Dalam perakaunan, apakah yang digambarkan oleh penyata aliran tunai (cash flow statement)?', pilihan: ['Nilai pasaran jenama syarikat', 'Pergerakan masuk dan keluar wang tunai dalam tempoh tertentu', 'Bilangan pekerja tetap organisasi', 'Kadar cukai pendapatan peribadi pengarah'], jawapanBetul: 1, penjelasan: 'Penyata aliran tunai mengukur kecairan sebenar operasi, pelaburan, dan pembiayaan.' },
-      { soalan: 'Apakah tujuan utama kontrak bertulis yang jelas dalam urus niaga komersial?', pilihan: ['Mengelakkan pembayaran cukai jualan', 'Menetapkan hak, tanggungjawab, dan penyelesaian pertikaian secara sah', 'Menghapuskan keperluan invois rasmi', 'Memastikan harga tidak berubah selama 50 tahun'], jawapanBetul: 1, penjelasan: 'Kontrak bertulis melindungi kedua-dua pihak dengan terma yang boleh dikuatkuasakan.' }
+      { soalan: 'Apakah tujuan utama kontrak bertulis yang jelas dalam urus niaga komersial?', pilihan: ['Mengelakkan pembayaran cukai jualan', 'Menetapkan hak, tanggungjawab, dan penyelesaian pertikaian secara sah', 'Menghapuskan keperluan invois rasmi', 'Memastikan harga tidak berubah selama 50 tahun'], jawapanBetul: 1, penjelasan: 'Kontrak bertulis melindungi kedua-dua pihak dengan terma yang boleh dikuatkuasakan.' },
+      { soalan: 'Mengapakah analisis pulang modal (break-even analysis) kritikal sebelum melancarkan produk baharu?', pilihan: ['Untuk menentukan warna logo syarikat', 'Untuk mengetahui jumlah jualan minimum bagi menampung semua kos tetap dan berubah', 'Untuk menghapuskan semua kos pemasaran', 'Untuk menjamin keuntungan segera pada hari pertama'], jawapanBetul: 1, penjelasan: 'Titik pulang modal membantu pengurus menetapkan sasaran harga dan jualan yang realistik.' },
+      { soalan: 'Apakah kesan jangka panjang jika sesebuah syarikat mengabaikan tadbir urus korporat yang telus?', pilihan: ['Keyakinan pelabur dan reputasi pasaran merosot ketara', 'Kos audit luaran menjadi sifar selama-lamanya', 'Permintaan pelanggan meningkat automatik', 'Pekerja tidak lagi memerlukan kontrak kerja'], jawapanBetul: 0, penjelasan: 'Tadbir urus yang lemah mendedahkan syarikat kepada skandal, denda, dan kehilangan kepercayaan pelabur.' },
+      { soalan: 'Dalam strategi pemasaran moden, mengapakah segmentasi pelanggan penting?', pilihan: ['Untuk menyekat orang ramai membeli produk', 'Untuk menyesuaikan tawaran dan mesej mengikut keperluan kumpulan sasaran', 'Untuk menaikkan kos pengiklanan tanpa had', 'Untuk mengelakkan maklum balas pelanggan'], jawapanBetul: 1, penjelasan: 'Segmentasi memastikan sumber pemasaran tertumpu kepada kumpulan yang paling relevan.' }
     ],
     medical: [
       { soalan: 'Mengapakah rawatan antibiotik perlu dihabiskan mengikut tempoh preskripsi walaupun gejala sudah reda?', pilihan: ['Untuk menjimatkan kos farmasi', 'Untuk mencegah bakteria yang masih berbaki daripada membentuk kerintangan antibiotik', 'Untuk meningkatkan tekanan darah pesakit', 'Untuk menggantikan keperluan vaksinasi'], jawapanBetul: 1, penjelasan: 'Menghentikan antibiotik terlalu awal boleh meninggalkan bakteria tahan ubat yang lebih sukar dirawat.' },
       { soalan: 'Apakah peranan utama kajian klinikal rawak terkawal (RCT) dalam perubatan berasaskan bukti?', pilihan: ['Mengukur keberkesanan dan keselamatan rawatan dengan meminimumkan bias', 'Mempercepatkan pemasaran ubat tanpa ujian', 'Menggantikan diagnosis fizikal doktor', 'Menghapuskan keperluan rekod pesakit'], jawapanBetul: 0, penjelasan: 'RCT ialah piawaian emas bagi menilai keberkesanan intervensi perubatan secara objektif.' },
-      { soalan: 'Apakah fungsi utama sistem imun adaptif dalam tubuh manusia?', pilihan: ['Mengawal kadar pernafasan ketika tidur', 'Mengenali dan mengingati patogen spesifik untuk tindak balas lebih pantas', 'Menghasilkan tenaga daripada cahaya matahari', 'Menggantikan fungsi buah pinggang'], jawapanBetul: 1, penjelasan: 'Imuniti adaptif membina memori imunologi bagi melindungi tubuh daripada jangkitan berulang.' }
+      { soalan: 'Apakah fungsi utama sistem imun adaptif dalam tubuh manusia?', pilihan: ['Mengawal kadar pernafasan ketika tidur', 'Mengenali dan mengingati patogen spesifik untuk tindak balas lebih pantas', 'Menghasilkan tenaga daripada cahaya matahari', 'Menggantikan fungsi buah pinggang'], jawapanBetul: 1, penjelasan: 'Imuniti adaptif membina memori imunologi bagi melindungi tubuh daripada jangkitan berulang.' },
+      { soalan: 'Mengapakah persetujuan termaklum (informed consent) wajib diperoleh sebelum prosedur perubatan bukan kecemasan?', pilihan: ['Untuk mempercepatkan bil hospital', 'Untuk menghormati autonomi pesakit agar memahami risiko dan manfaat rawatan', 'Untuk mengelakkan doktor memberi penerangan', 'Untuk menggantikan ujian makmal'], jawapanBetul: 1, penjelasan: 'Persetujuan termaklum memastikan pesakit membuat keputusan kesihatan secara sedar dan sukarela.' },
+      { soalan: 'Apakah manfaat utama pencegahan primer seperti saringan awal dan gaya hidup sihat terhadap sistem kesihatan awam?', pilihan: ['Mengurangkan beban penyakit kronik dan kos rawatan jangka panjang', 'Menghapuskan keperluan hospital sepenuhnya', 'Meningkatkan kadar kemasukan wad kecemasan', 'Mengurangkan bilangan doktor pakar'], jawapanBetul: 0, penjelasan: 'Pencegahan awal mengesan risiko sebelum komplikasi serius berlaku dan menjimatkan sumber kesihatan.' },
+      { soalan: 'Apakah tindakan paling wajar jika seorang pengamal perubatan mengesan kesilapan dos ubat sebelum diberikan kepada pesakit?', pilihan: ['Meneruskan pemberian supaya tidak memalukan rakan sekerja', 'Menghentikan pemberian serta-merta, membetulkan dos, dan melaporkan mengikut protokol keselamatan', 'Mengabaikan rekod pesakit tersebut', 'Menyalahkan pesakit atas kekeliruan'], jawapanBetul: 1, penjelasan: 'Keselamatan pesakit adalah keutamaan tertinggi dan pelaporan telus mencegah kesilapan berulang.' }
     ],
     general: [
       { soalan: 'Apakah ciri utama hujah akademik yang kukuh dalam penulisan ilmiah?', pilihan: ['Bergantung sepenuhnya pada pendapat peribadi tanpa rujukan', 'Disokong oleh bukti empirikal, logik konsisten, dan sumber berwibawa', 'Menggunakan ayat yang terlalu panjang tanpa struktur', 'Mengabaikan sebarang pandangan balas'], jawapanBetul: 1, penjelasan: 'Penulisan ilmiah menuntut bukti sahih, penaakulan jelas, dan rujukan yang boleh disemak.' },
       { soalan: 'Dalam pengurusan projek, mengapakah penetapan garis masa dan pencapaian (milestones) amat penting?', pilihan: ['Untuk menambah kerja kertas pasukan', 'Untuk memantau kemajuan dan mengesan kelewatan lebih awal', 'Untuk mengelakkan perbincangan antara ahli pasukan', 'Untuk menghapuskan keperluan bajet projek'], jawapanBetul: 1, penjelasan: 'Pencapaian berkala membantu pasukan mengenal pasti risiko kelewatan sebelum menjejaskan tarikh akhir.' },
-      { soalan: 'Apakah langkah paling berkesan apabila berdepan maklumat bercanggah semasa menjalankan penyelidikan?', pilihan: ['Memilih maklumat pertama yang ditemui sahaja', 'Menyemak silang sumber primer dan menilai metodologi setiap kajian', 'Memadam semua data yang tidak menyokong jangkaan awal', 'Meneka kesimpulan tanpa analisis lanjut'], jawapanBetul: 1, penjelasan: 'Semakan silang sumber primer dan metodologi memastikan kesimpulan kajian kekal objektif.' }
+      { soalan: 'Apakah langkah paling berkesan apabila berdepan maklumat bercanggah semasa menjalankan penyelidikan?', pilihan: ['Memilih maklumat pertama yang ditemui sahaja', 'Menyemak silang sumber primer dan menilai metodologi setiap kajian', 'Memadam semua data yang tidak menyokong jangkaan awal', 'Meneka kesimpulan tanpa analisis lanjut'], jawapanBetul: 1, penjelasan: 'Semakan silang sumber primer dan metodologi memastikan kesimpulan kajian kekal objektif.' },
+      { soalan: 'Jika rakan sepasukan gagal menyiapkan tugasan penting menjelang tarikh akhir, apakah pendekatan kepimpinan terbaik?', pilihan: ['Membiarkan projek gagal tanpa komunikasi', 'Berbincang secara konstruktif, kenal pasti halangan, dan agih semula keutamaan bersama', 'Menyalahkan rakan itu di hadapan khalayak umum', 'Menarik diri daripada kumpulan serta-merta'], jawapanBetul: 1, penjelasan: 'Komunikasi terbuka dan penyelarasan semula membantu pasukan menyelesaikan masalah tanpa menjejaskan kualiti.' },
+      { soalan: 'Mengapakah kemahiran pembelajaran sepanjang hayat penting bagi penerima biasiswa moden?', pilihan: ['Kerana teknologi dan keperluan industri sentiasa berubah dengan pantas', 'Kerana sijil akademik hanya sah selama enam bulan', 'Untuk mengelakkan kerjasama dengan generasi baharu', 'Supaya tidak perlu mempraktikkan ilmu di tempat kerja'], jawapanBetul: 0, penjelasan: 'Keupayaan menyesuaikan diri dengan ilmu baharu memastikan graduan kekal relevan dan berdaya saing.' },
+      { soalan: 'Apakah prinsip utama apabila menguruskan dana biasiswa sepanjang tempoh pengajian?', pilihan: ['Membelanjakan kesemua elaun pada minggu pertama', 'Menyusun bajet berkala untuk keperluan akademik, sara hidup, dan simpanan kecemasan', 'Mengabaikan rekod perbelanjaan bulanan', 'Menggunakan dana pengajian untuk spekulasi berisiko tinggi'], jawapanBetul: 1, penjelasan: 'Disiplin kewangan memastikan fokus pengajian tidak terganggu oleh masalah tunai.' }
     ]
   },
 
-  _pickFallbackScholarshipQuestions(course = '') {
+  _pickFallbackScholarshipQuestions(course = '', avoidList = []) {
     const c = String(course || '').toLowerCase();
     let key = 'general';
     if (/(kejuruteraan|sains|komputer|it|teknologi|data|fizik|kimia|matematik)/.test(c)) key = 'stem';
     else if (/(perniagaan|kewangan|ekonomi|akaun|undang|pengurusan|pemasaran)/.test(c)) key = 'business';
     else if (/(perubatan|kesihatan|farmasi|kejururawatan|pergigian|biologi)/.test(c)) key = 'medical';
-    return this.SCHOLARSHIP_FALLBACK_BANK[key].map(q => ({ ...q, pilihan: [...q.pilihan] }));
+
+    const pool = this.SCHOLARSHIP_FALLBACK_BANK[key] || this.SCHOLARSHIP_FALLBACK_BANK.general;
+    const avoidSet = new Set((avoidList || []).map(x => String(x || '').trim()));
+    const shuffleArr = (arr) => [...arr].sort(() => Math.random() - 0.5);
+    const fresh = shuffleArr(pool.filter(q => !avoidSet.has(q.soalan)));
+    const used = shuffleArr(pool.filter(q => avoidSet.has(q.soalan)));
+    const picked = [...fresh, ...used].slice(0, 3);
+    return picked.map(q => ({ ...q, pilihan: [...q.pilihan] }));
   },
 
-  async fetchScholarshipIvQuestions({ course, level, country, age }) {
-    const fallback = this._pickFallbackScholarshipQuestions(course);
+  async fetchScholarshipIvQuestions({ course, level, country, age, smarts, achievements, avoidQuestions }) {
+    const recentAvoid = Array.isArray(avoidQuestions) && avoidQuestions.length
+      ? avoidQuestions.slice(0, 12)
+      : this._getRecentIvQuestions().slice(0, 12);
+    const fallback = this._pickFallbackScholarshipQuestions(course, recentAvoid);
+    const angle = this.SCHOLARSHIP_IV_ANGLES[Math.floor(Math.random() * this.SCHOLARSHIP_IV_ANGLES.length)];
+    const nonce = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+
     try {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
       try {
         const resp = await fetch(this.ENDPOINT, {
           method: 'POST',
+          cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'scholarship_iv',
             course: String(course || 'Pengajian Am').slice(0, 80),
             level: String(level || 'Ijazah').slice(0, 60),
             country: String(country || 'Malaysia').slice(0, 50),
-            age: Number(age) || 18
+            age: Number(age) || 18,
+            smarts: Number(smarts) || 70,
+            achievements: String(achievements || '').slice(0, 140),
+            angle,
+            nonce,
+            avoidQuestions: recentAvoid.map(q => String(q).slice(0, 120))
           }),
           signal: controller ? controller.signal : undefined
         });
         if (timer) clearTimeout(timer);
-        if (!resp || !resp.ok) return { questions: fallback, source: 'fallback' };
-        const data = await resp.json();
-        const list = Array.isArray(data && data.questions) ? data.questions : (Array.isArray(data && data.soalan) ? data.soalan : null);
-        if (!list || list.length < 3) return { questions: fallback, source: 'fallback' };
+        if (!resp || !resp.ok) {
+          console.warn('[AINarrator][scholarship_iv] Worker HTTP error, fallback digunakan:', resp ? resp.status : 'no-response');
+          this._recordRecentIvQuestions(fallback);
+          return { questions: fallback, source: 'fallback' };
+        }
+        const rawText = await resp.text();
+        const data = this._parseWorkerJson(rawText);
+        const list = Array.isArray(data)
+          ? data
+          : (Array.isArray(data && data.questions) ? data.questions : (Array.isArray(data && data.soalan) ? data.soalan : null));
+        if (!list || list.length < 3) {
+          console.warn('[AINarrator][scholarship_iv] Format JSON Worker tidak lengkap, fallback digunakan.', rawText.slice(0, 180));
+          this._recordRecentIvQuestions(fallback);
+          return { questions: fallback, source: 'fallback' };
+        }
         const valid = list.slice(0, 3).map(q => {
           const text = this._stripHtml(q.soalan || q.question || '');
           const opts = Array.isArray(q.pilihan || q.options) ? (q.pilihan || q.options).map(o => this._stripHtml(o)) : [];
@@ -381,13 +477,22 @@ window.AINarrator = {
           if (!text || opts.length !== 4 || Number.isNaN(ans) || ans < 0 || ans > 3) return null;
           return { soalan: text, pilihan: opts, jawapanBetul: ans, penjelasan: exp };
         }).filter(Boolean);
-        if (valid.length === 3) return { questions: valid, source: 'ai' };
+        if (valid.length === 3) {
+          this._recordRecentIvQuestions(valid);
+          return { questions: valid, source: 'ai' };
+        }
+        console.warn('[AINarrator][scholarship_iv] Soalan Worker gagal pengesahan struktur (valid=' + valid.length + '), fallback digunakan.');
+        this._recordRecentIvQuestions(fallback);
         return { questions: fallback, source: 'fallback' };
       } catch (e) {
         if (timer) clearTimeout(timer);
+        console.warn('[AINarrator][scholarship_iv] Panggilan Worker gagal/timeout, fallback digunakan:', e && e.message ? e.message : e);
+        this._recordRecentIvQuestions(fallback);
         return { questions: fallback, source: 'fallback' };
       }
     } catch (e) {
+      console.warn('[AINarrator][scholarship_iv] Ralat luar jangka, fallback digunakan:', e && e.message ? e.message : e);
+      this._recordRecentIvQuestions(fallback);
       return { questions: fallback, source: 'fallback' };
     }
   }
